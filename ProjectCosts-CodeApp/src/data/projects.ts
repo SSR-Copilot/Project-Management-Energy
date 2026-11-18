@@ -15,7 +15,10 @@ import { Vsb_projectstatesService } from "@/generated/services/Vsb_projectstates
 import { Vsb_basecasesService } from "@/generated/services/Vsb_basecasesService";
 import { SystemusersService } from "@/generated/services/SystemusersService";
 import { unwrap } from "@/platform/errors";
-import { countedPage, deleteRecord, fetchAll, invalidatePageTokens, type CountedPage } from "./client";
+import { loggedCall } from "@/platform/requestLog";
+import {
+  countedPage, deleteRecord, fetchAll, fetchPage, invalidatePageTokens, type CountedPage,
+} from "./client";
 import { ACTIVE, and, asc, desc, eq, guid, isNull, lookupEq, notNull, or, f } from "./odata";
 import {
   COL, PROJECT_SELECT, PAGE_SIZE, buildProjectFilter, toProjectRow,
@@ -396,11 +399,19 @@ export async function loadProjectStateOrder(
   clusterStateId: string | null,
 ): Promise<number | null> {
   if (!clusterStateId) return null;
-  const result = await Vsb_projectstatesService.get(clusterStateId, {
-    select: ["vsb_projectstateid", "vsb_order", "vsb_name"],
-  });
-  if (!result.success) return null;
-  return unwrap(result, "load project state").vsb_order ?? null;
+  // PO-006: a failed read throws (and is traced as a DATA line) instead of answering `null`, which the
+  // Simulate gate took for "no cluster order" and answered with the "Clusters 1 to 5" warning.
+  const state = await loggedCall(
+    "read", "load project state",
+    async () => unwrap(
+      await Vsb_projectstatesService.get(clusterStateId, {
+        select: ["vsb_projectstateid", "vsb_order", "vsb_name"],
+      }),
+      "load project state",
+    ),
+    () => 1,
+  );
+  return state.vsb_order ?? null;
 }
 
 /**
@@ -412,13 +423,14 @@ export async function loadProjectStateOrder(
  * this reads fresh every time too, same as `loadProjectStateOrder` above.
  */
 export async function loadHasBaseCase(projectId: string): Promise<boolean> {
-  const result = await Vsb_basecasesService.getAll({
-    select: ["vsb_basecaseid"],
-    filter: lookupEq("vsb_project", projectId),
-    top: 1,
-  });
-  if (!result.success) return false;
-  return unwrap(result, "load base case").length > 0;
+  // PO-006: unwrapped and traced; a failed read throws instead of answering `false`, which the Simulate
+  // gate took for "no Base case" and answered with "Base data missing".
+  const rows = await fetchPage(
+    "check base case",
+    (o) => Vsb_basecasesService.getAll(o),
+    { select: ["vsb_basecaseid"], filter: lookupEq("vsb_project", projectId), top: 1 },
+  );
+  return rows.length > 0;
 }
 
 /* ═══════════════════════════════════════════════════════════════ the delete */
@@ -509,6 +521,11 @@ export async function listProjectStates(): Promise<(Lookup & { order: number | n
   }));
 }
 
+/** The four `systemusers` columns the picker reads, for the typeahead and for the chip's name lookup. */
+const SYSTEMUSER_COLUMNS = [
+  "systemuserid", "fullname", "internalemailaddress", "azureactivedirectoryobjectid",
+] as const;
+
 /**
  * The Project Manager typeahead's source.
  *
@@ -532,9 +549,7 @@ export async function searchProjectManagers(term: string, limit = 25): Promise<P
     "search project managers",
     (o) => SystemusersService.getAll(o),
     {
-      select: [
-        "systemuserid", "fullname", "internalemailaddress", "azureactivedirectoryobjectid",
-      ],
+      select: [...SYSTEMUSER_COLUMNS],
       filter: and(
         or(
           `contains(fullname,'${escaped}')`,
@@ -555,6 +570,30 @@ export async function searchProjectManagers(term: string, limit = 25): Promise<P
       label: r.fullname ?? "",
       mail: r.internalemailaddress ?? null,
     }));
+}
+
+/**
+ * The person a Project Manager filter in the address stands for (PO-001): one `systemusers` row by its
+ * Entra object id, so the chip can show a name after a reload, a shared link or Back.
+ *
+ * Reads `systemusers` on purpose, the same population and the same `fullname` as the picker's own
+ * suggestions, so the chip says what picking would have shown. A disabled user is NOT filtered out:
+ * a project can still name one, and the filter is still applied. Null when nobody matches (the screen
+ * then shows a fallback caption, never a hidden filter). A failed read throws and is traced.
+ */
+export async function loadProjectManagerLabel(entraId: string): Promise<PersonOption | null> {
+  const rows = await fetchPage(
+    "look up project manager",
+    (o) => SystemusersService.getAll(o),
+    {
+      select: [...SYSTEMUSER_COLUMNS],
+      filter: `azureactivedirectoryobjectid eq ${guid(entraId)}`,
+      top: 1,
+    },
+  );
+  const row = rows[0];
+  if (!row) return null;
+  return { id: entraId, label: row.fullname ?? "", mail: row.internalemailaddress ?? null };
 }
 
 /**

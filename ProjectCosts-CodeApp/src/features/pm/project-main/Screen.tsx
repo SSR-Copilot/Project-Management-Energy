@@ -31,7 +31,8 @@
  * Every caption, dialog title and notification on this screen is transcribed in `rules.ts`
  * with the canvas control it came from; none of them are written here.
  */
-import { memo, useMemo, useState } from "react";
+import { memo, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { appTabUrl, projectAppUrl, resolvePlayAppUrl } from "@/app/deepLinks";
 import {
@@ -49,24 +50,28 @@ import {
   DismissRegular,
 } from "@fluentui/react-icons";
 import {
-  CommandBar, CommandSlot, ConfirmDialog, EmptyState, LoadingOverlay, type Command,
+  CommandBar, CommandSlot, ConfirmDialog, EmptyState, LoadingOverlay, NoticeBar, testIdPart,
+  type Command,
 } from "@/components";
 import { useSession } from "@/app/SessionContext";
 import { loadHasBaseCase } from "@/data/projects";
+import { actionLog } from "@/platform/requestLog";
+import { userErrorText, userLoadErrorText } from "@/platform/userMessage";
 import { media, palette, space } from "@/theme/tokens";
 import { approvalDecoration, TECHNOLOGY_LABEL } from "@/domain/project";
 import {
-  CAPACITY_OPERATORS, COL, COST_LOCK, DELETE_DIALOG, OPEN_FAILED, PAGE_SIZE,
-  REPORT_UNAVAILABLE, SPO_MSG,
-  capacityError, clearIconState, commandBarState, costModuleLock, deleteMessages,
-  formatCapacity, isCostModuleLocked, isFilterActive, isPagerVisible, pagerLabels,
+  CAPACITY_OPERATORS, COL, COST_LOCK, DELETE_DIALOG, HOVER_TEXT, MANAGER_MSG, OPEN_FAILED, PAGE_SIZE,
+  REPORT_UNAVAILABLE, SIMULATE_NEW_MSG, SPO_MSG,
+  capacityError, clearIconState, commandBarState, costModuleLock, deleteMessages, filterListLoadMessages,
+  formatCapacity, isCostModuleLocked, isFilterActive, isOpenableUrl, isPagerVisible, pagerLabels,
   simulateGate,
   type CapacityOperator, type CommandKey, type ProjectRow, type SelectedProject,
 } from "./rules";
 import {
-  useCountries, useCountryAreas, useCriteria, useDeleteProject, useProjectManagerSearch,
-  useProjectPage, useProjectStateOrder, useProjectStates,
+  useCountries, useCountryAreas, useCriteria, useDeleteProject, useProjectManagerLabel,
+  useProjectManagerSearch, useProjectPage, useProjectStateOrder, useProjectStates,
 } from "./hooks";
+import { projectStateOrderOptions } from "./queries";
 
 /* ────────────────────────────────────────────────────────────────── styles */
 
@@ -525,9 +530,15 @@ export default function ProjectOverviewScreen() {
   const { criteria, setFilter, clearFilter, setSort, setPage } = useCriteria();
 
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  /** A Simulate check is running: a second click while it runs does nothing (PO-006). */
+  const simulating = useRef(false);
 
   const [selectedId, setSelectedId] = useState<string>();
+  /** What is typed in the Project Manager box. Not the filter: the filter lives in the address. */
   const [managerQuery, setManagerQuery] = useState("");
+  /** The person picked from the suggestions in this session, so the chip needs no lookup for them. */
+  const [pickedManager, setPickedManager] = useState<{ id: string; label: string } | null>(null);
   /** `locPreventEditCostPopUp` — the cost-module lock. Edit Costs's own guard; Simulate has its
    * own separate validation (`simulateGate`) and does not share this dialog. */
   const [lock, setLock] = useState<{ name: string; sections: string[] } | null>(null);
@@ -550,9 +561,28 @@ export default function ProjectOverviewScreen() {
     [states.data],
   );
   const managers = useProjectManagerSearch(managerQuery);
-  // The chip shows only while a person is picked AND named: removing it clears the name at once,
-  // so the chip goes with it instead of lingering until the filter catches up.
-  const managerPicked = Boolean(criteria.filter.projectManagerId) && managerQuery !== "";
+  // PO-031: a failed read of a filter list is said, not shown as an empty list (CONVENTIONS rule 19). The failed
+  // read is already a `[VSB]` DATA line with its cause, so the wording is built without a second trace.
+  const listMessages = filterListLoadMessages(
+    { countries: countries.error, areas: areas.error, states: states.error, managers: managers.error },
+    (error, what) => userLoadErrorText(error, what, { trace: false }),
+  );
+  const listMessage = (name: "managers"): string | undefined =>
+    listMessages.find((m) => m.name === name)?.text;
+  const listRetry = {
+    countries: () => void countries.refetch(),
+    areas: () => void areas.refetch(),
+    states: () => void states.refetch(),
+  } as const;
+  // PO-001: the chip is DERIVED from the address, so a filter that arrived through a reload, a shared link
+  // or Back is shown (and can be cleared) like one picked here. It names the person from this session's pick,
+  // else from a one-row lookup, else a fallback: an applied filter is never hidden.
+  const managerId = criteria.filter.projectManagerId;
+  const managerPicked = Boolean(managerId);
+  const pickedLabel = managerId && pickedManager?.id === managerId ? pickedManager.label : null;
+  const managerLookup = useProjectManagerLabel(managerId, pickedLabel);
+  const lookedUpName = managerLookup.data ? personName(managerLookup.data.label) : "";
+  const managerLabel = pickedLabel ?? (lookedUpName || MANAGER_MSG.unknown);
 
   const rows = pageQuery.data?.rows ?? [];
   const selected = rows.find((r) => r.id === selectedId);
@@ -592,12 +622,13 @@ export default function ProjectOverviewScreen() {
   );
 
   const commands = useMemo<Command[]>(() => {
-    // The reference order: Add Project · Edit Project · Edit Costs · Delete Project ·
-    // Simulate · Dashboard, with the four conditional items after them.
+    // The canvas `Items` order (PO-015): Add Project · Edit Project · Edit Costs · Delete Project ·
+    // Simulate · View Sharepoint Site · View Teams · Dashboard. The two Croatia-only items are the
+    // conditional ones; for every other country the order is the same minus them.
     const order: CommandKey[] = [
       "addProject", "editProject", "editCosts", "deleteProject", "simulateProject",
-      "viewDashboardFunctionality",
       "viewSharepoint", "viewTeams",
+      "viewDashboardFunctionality",
     ];
     return order
       .map((key) => gates[key])
@@ -638,6 +669,8 @@ export default function ProjectOverviewScreen() {
   /** `Launch(...)` — kept synchronous with the gesture so the browser allows the tab. */
   const launch = (url: string | undefined, unavailable: string) => {
     if (!url) { setNotice({ intent: "info", text: unavailable }); return; }
+    // PO-027 (R-9): a stored link that is not an http(s) address is never opened.
+    if (!isOpenableUrl(url)) { setNotice({ intent: "error", text: OPEN_FAILED }); return; }
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
@@ -703,25 +736,42 @@ export default function ProjectOverviewScreen() {
    * the technology/cluster check is about to fail.
    */
   const handleSimulate = async (row: ProjectRow): Promise<void> => {
-    const hasBaseCase = await loadHasBaseCase(row.id);
-    const result = simulateGate({
-      technology: row.technology,
-      clusterStateOrder: stateOrder.data ?? null,
-      hasBaseCase,
-    });
-    if (!result.ok) {
-      setNotice({ intent: "warning", text: result.message });
-      return;
+    if (simulating.current) return;
+    simulating.current = true;
+    try {
+      // PO-006: both reads are unwrapped and traced as ONE action, and the click waits for the cluster
+      // order through the query cache (a render value was stale while that read was still loading). A
+      // failed read throws; it used to answer `false` / `null`, which showed "Base data missing" or the
+      // "Clusters 1 to 5" warning for a project that is fine.
+      const { hasBaseCase, clusterStateOrder } = await actionLog("simulate project", async () => {
+        const [baseCase, order] = await Promise.all([
+          loadHasBaseCase(row.id),
+          queryClient.ensureQueryData(projectStateOrderOptions(row.clusterStateId)),
+        ]);
+        return { hasBaseCase: baseCase, clusterStateOrder: order };
+      });
+      const result = simulateGate({ technology: row.technology, clusterStateOrder, hasBaseCase });
+      if (!result.ok) {
+        setNotice({ intent: "warning", text: result.message });
+        return;
+      }
+      launch(
+        analyticsAppUrl({
+          environmentId: session?.environmentId,
+          analyticsAppId: envVars.vsb_AnalyticsAppID,
+          tenantId: session?.tenantId,
+          projectId: row.id,
+        }),
+        SIMULATE_NEW_MSG.notConfigured,
+      );
+    } catch (error) {
+      setNotice({
+        intent: "error",
+        text: userErrorText(error, SIMULATE_NEW_MSG.checkFailedAction),
+      });
+    } finally {
+      simulating.current = false;
     }
-    launch(
-      analyticsAppUrl({
-        environmentId: session?.environmentId,
-        analyticsAppId: envVars.vsb_AnalyticsAppID,
-        tenantId: session?.tenantId,
-        projectId: row.id,
-      }),
-      "Simulation is not configured for this environment.",
-    );
   };
 
   const onCommand = (key: string) => {
@@ -830,6 +880,14 @@ export default function ProjectOverviewScreen() {
         ? <ArrowSortUpRegular />
         : <ArrowSortDownRegular />;
 
+  /**
+   * PO-003: a sortable heading is Fluent's own sortable header cell, so it is a real button in the
+   * tab order (Enter and Space click it) and the cell announces `aria-sort` ("none" until sorted).
+   * The existing `onClick` on the cell still does the sorting: the button's click bubbles to it.
+   * `sortIcon={null}` keeps the arrow drawn below as the only one. The focusable element is the
+   * button slot, so that is where the explicit `aria-label` and `data-testid` go (rule 16); a
+   * PowerCAT grid heading has no canvas control name, so the test id is derived from the caption.
+   */
   const header = (
     label: string,
     col?: string,
@@ -844,11 +902,18 @@ export default function ProjectOverviewScreen() {
       )}
       style={width === undefined ? undefined : { width: `${width}px` }}
       onClick={col ? () => setSort(col) : undefined}
-      aria-sort={
-        col && criteria.sort.col === col
-          ? criteria.sort.asc ? "ascending" : "descending"
-          : undefined
-      }
+      {...(col
+        ? {
+            sortable: true,
+            sortIcon: null,
+            // The spread keeps the literal clear of the slot type's excess-property check, which
+            // does not list `data-*` attributes although the element takes them.
+            button: { "aria-label": label, ...{ "data-testid": `grid-header-${testIdPart(label)}` } },
+            ...(criteria.sort.col === col
+              ? { sortDirection: criteria.sort.asc ? ("ascending" as const) : ("descending" as const) }
+              : {}),
+          }
+        : {})}
     >
       {label}
       {col ? sortIcon(col) : null}
@@ -880,7 +945,14 @@ export default function ProjectOverviewScreen() {
 
       {/* The command bar belongs to the HEADER band — see CommandSlot.tsx. */}
       <CommandSlot>
-        <CommandBar commands={commands} onCommand={onCommand} ariaLabel="Project actions" />
+        {/* `display: contents` adds no box, so the bar lays out exactly as before; the wrapper only carries the
+            canvas container's name (PO-012a), without editing the shared CommandBar. */}
+        <div
+          style={{ display: "contents" }}
+          data-testid="con_Main_Project_Overview_Header_SuitBar_CommandBar"
+        >
+          <CommandBar commands={commands} onCommand={onCommand} ariaLabel="Project actions" />
+        </div>
       </CommandSlot>
 
       {/*
@@ -897,6 +969,10 @@ export default function ProjectOverviewScreen() {
           <FilterCell
             label="Project"
             row="top"
+            labelTestId="lbl_Main_Project_Overview_Context_Filter_ProjectKeyword"
+            // `lbl_..._ProjectKeyword.Tooltip` (PO-014).
+            labelTitle={HOVER_TEXT.project}
+            clearTestId="ico_Main_Project_Overview_Context_Filter_ProjectKeyword"
             value={criteria.filter.keyword}
             onClear={() => setFilter({ keyword: "" })}
           >
@@ -917,9 +993,10 @@ export default function ProjectOverviewScreen() {
           */}
           <div className={mergeClasses(styles.filterCell, styles.filterCellBottom)}>
             <label className={styles.filterLabel} htmlFor="filter-manager-input">
-              Project Manager
+              <span data-testid="lbl_Main_Project_Overview_Context_Filter_ProjectManager">Project Manager</span>
             </label>
-            <div className={`${styles.filterPerson} canvas-person`}>
+            {/* `pcf_..._ProjectManager.Tooltip` (PO-014). */}
+            <div className={`${styles.filterPerson} canvas-person`} title={HOVER_TEXT.projectManager}>
               <Input
                 id="filter-manager-input"
                 className={styles.personInput}
@@ -931,8 +1008,8 @@ export default function ProjectOverviewScreen() {
                 contentBefore={
                   managerPicked ? (
                     <span className={styles.managerChip}>
-                      <Avatar name={managerQuery} size={20} color="colorful" aria-hidden="true" />
-                      <span className={styles.managerChipName}>{managerQuery}</span>
+                      <Avatar name={managerLabel} size={20} color="colorful" aria-hidden="true" />
+                      <span className={styles.managerChipName}>{managerLabel}</span>
                       <Button
                         appearance="transparent"
                         size="small"
@@ -942,6 +1019,7 @@ export default function ProjectOverviewScreen() {
                         data-testid="filter-manager-clear"
                         onClick={() => {
                           setManagerQuery("");
+                          setPickedManager(null);
                           setFilter({ projectManagerId: null });
                         }}
                       />
@@ -952,7 +1030,7 @@ export default function ProjectOverviewScreen() {
                 aria-label="Project Manager"
               data-testid="filter-manager"
               />
-              {managerQuery.trim().length >= 2 && !criteria.filter.projectManagerId ? (
+              {managerQuery.trim().length >= 2 && !managerId ? (
                 <ul className={styles.suggestions} aria-label="Suggested people">
                   <li className={styles.suggestionsHeader} aria-hidden="true">Suggested People</li>
                   {(managers.data ?? []).map((p, i) => (
@@ -964,7 +1042,10 @@ export default function ProjectOverviewScreen() {
                         data-testid={`filter-manager-suggestion-${p.id}`}
                         onClick={() => {
                           setFilter({ projectManagerId: p.id });
-                          setManagerQuery(personName(p.label));
+                          setPickedManager({ id: p.id, label: personName(p.label) });
+                          // The typing buffer is spent: the chip carries the name now, and the
+                          // suggestion search stops (it used to keep searching the picked name).
+                          setManagerQuery("");
                         }}
                       >
                         <Avatar name={personName(p.label)} size={24} color="colorful" aria-hidden="true" />
@@ -983,6 +1064,12 @@ export default function ProjectOverviewScreen() {
                     </li>
                   ))}
                   {managers.isFetching ? <li><Spinner size="tiny" /></li> : null}
+                  {/* PO-031: the search failed; this is the list's only row, never an empty list. */}
+                  {listMessage("managers") ? (
+                    <li role="alert" className={styles.suggestionsHeader} data-testid="filter-list-error-managers">
+                      {listMessage("managers")}
+                    </li>
+                  ) : null}
                 </ul>
               ) : null}
             </div>
@@ -993,6 +1080,8 @@ export default function ProjectOverviewScreen() {
           <FilterCell
             label="Country"
             row="top"
+            labelTestId="lbl_Main_Project_Overview_Context_Filter_Country"
+            clearTestId="ico_Main_Project_Overview_Context_Filter_Country"
             value={criteria.filter.countryId}
             onClear={() => setFilter({ countryId: null })}
           >
@@ -1017,6 +1106,8 @@ export default function ProjectOverviewScreen() {
           <FilterCell
             label="Area/State/Province"
             row="bottom"
+            labelTestId="lbl_Main_Project_Overview_Context_Filter_Area"
+            clearTestId="ico_Main_Project_Overview_Context_Filter_Area"
             value={criteria.filter.areaId}
             onClear={() => setFilter({ areaId: null })}
           >
@@ -1042,6 +1133,9 @@ export default function ProjectOverviewScreen() {
           <FilterCell
             label="Technology"
             row="top"
+            labelTestId="lbl_Main_Project_Overview_Context_Filter_Technology"
+            // The canvas control really is named `..._Texnology` (verbatim, rule 16).
+            clearTestId="ico_Main_Project_Overview_Context_Filter_Texnology"
             value={criteria.filter.technology}
             onClear={() => setFilter({ technology: null })}
           >
@@ -1079,10 +1173,11 @@ export default function ProjectOverviewScreen() {
               className={mergeClasses(styles.filterLabel, styles.capacityLabel)}
               htmlFor="filter-capacity-input"
             >
-              Capacity
+              <span data-testid="lbl_Main_Project_Overview_Context_Filter_Capacity">Capacity</span>
               {capacityMessage ? (
                 <span
                   id="filter-capacity-error"
+                  data-testid="lbl_Main_Project_Overview_Context_Filter_Capacity_ErrorMessage"
                   className={mergeClasses(styles.filterError, styles.capacityError)}
                   role="alert"
                 >
@@ -1123,6 +1218,7 @@ export default function ProjectOverviewScreen() {
               </div>
               <ClearFilterButton
                 field="Capacity"
+                clearTestId="ico_Main_Project_Overview_Context_Filter_Capacity"
                 value={criteria.filter.capacity}
                 onClear={() => setFilter({ capacity: "" })}
               />
@@ -1140,6 +1236,8 @@ export default function ProjectOverviewScreen() {
           <FilterCell
             label="Status"
             row="bottom"
+            labelTestId="lbl_Main_Project_Overview_Context_Filter_Status"
+            clearTestId="ico_Main_Project_Overview_Context_Filter_Status"
             value={criteria.filter.clusterStateId}
             onClear={() => setFilter({ clusterStateId: null })}
           >
@@ -1165,6 +1263,18 @@ export default function ProjectOverviewScreen() {
         </div>
       </div>
 
+      {/* PO-031: one warning with Retry per failed Country / Area / Status list, between the filters and the grid. */}
+      {listMessages.map((m) => (m.name === "managers" ? null : (
+        <NoticeBar
+          key={m.name}
+          intent="warning"
+          testId={`filter-list-error-${m.name}`}
+          action={{ label: "Retry", onClick: listRetry[m.name], testId: `filter-list-error-${m.name}-retry` }}
+        >
+          {m.text}
+        </NoticeBar>
+      )))}
+
       {/*
         ── the grid ──────────────────────────────────────────────────────
         Wrapped so this region, not the footer, absorbs the leftover height. Whatever is in
@@ -1178,7 +1288,7 @@ export default function ProjectOverviewScreen() {
          * dimmed ground with "Please wait...". `LoadingOverlay`'s blocking mode already is that
          * card, transcribed from `cmp_PopUp_Loading`; the overview simply was not using it.
          */
-        <LoadingOverlay label="Please wait..." />
+        <LoadingOverlay label="Please wait..." testId="cmp_MS_Spinner" />
       ) : pageQuery.isError ? (
         <div className={styles.bodyMessage}>
           <EmptyState
@@ -1200,8 +1310,15 @@ export default function ProjectOverviewScreen() {
           />
         </div>
       ) : (
-        <div className={styles.gridWrap}>
-          <Table size="small" aria-label="Projects" className={styles.table}>
+        // `psf_MainScreen_DetailList_Container_FluentDetailsList.Tooltip` (PO-014): a native title, like
+        // FormPanel's, since the canvas hover text is the browser-style one.
+        <div className={styles.gridWrap} title={HOVER_TEXT.grid}>
+          <Table
+            size="small"
+            aria-label="Projects"
+            data-testid="psf_MainScreen_DetailList_Container_FluentDetailsList"
+            className={styles.table}
+          >
             <TableHeader className={styles.stickyHeader}>
               <TableRow>
                 <TableHeaderCell
@@ -1412,9 +1529,15 @@ export default function ProjectOverviewScreen() {
  * control off its 232 px and the funnel ended up against the screen edge.
  */
 function FilterCell({
-  label, value, onClear, row, children,
+  label, labelTestId, labelTitle, clearTestId, value, onClear, row, children,
 }: {
   label: string;
+  /** The canvas caption label's control name (`lbl_..._Filter_*`). */
+  labelTestId: string;
+  /** The caption's canvas `Tooltip`, where it has one. */
+  labelTitle?: string;
+  /** The canvas funnel icon's control name (`ico_..._Filter_*`), written out where the filter is declared. */
+  clearTestId: string;
   value: unknown;
   onClear: () => void;
   /** Which of its column's two cells this is — they differ in height and control offset. */
@@ -1429,24 +1552,22 @@ function FilterCell({
         row === "top" ? styles.filterCellTop : styles.filterCellBottom,
       )}
     >
-      <Text as="span" block className={styles.filterLabel}>{label}</Text>
+      <Text
+        as="span"
+        block
+        className={styles.filterLabel}
+        data-testid={labelTestId}
+        {...(labelTitle === undefined ? {} : { title: labelTitle })}
+      >
+        {label}
+      </Text>
       <div className={styles.filterRow}>
         {children}
-        <ClearFilterButton field={label} value={value} onClear={onClear} />
+        <ClearFilterButton field={label} clearTestId={clearTestId} value={value} onClear={onClear} />
       </div>
     </div>
   );
 }
-
-/** The canvas funnel icon's control name, per filter caption. */
-const CLEAR_FILTER_TESTID: Record<string, string> = {
-  "Project": "ico_Main_Project_Overview_Context_Filter_ProjectKeyword",
-  "Country": "ico_Main_Project_Overview_Context_Filter_Country",
-  "Area/State/Province": "ico_Main_Project_Overview_Context_Filter_Area",
-  "Technology": "ico_Main_Project_Overview_Context_Filter_Texnology",
-  "Capacity": "ico_Main_Project_Overview_Context_Filter_Capacity",
-  "Status": "ico_Main_Project_Overview_Context_Filter_Status",
-};
 
 /**
  * The canvas `IconName: "Filter"` / `"ClearFilter"` — Fluent MDL2's outline funnel, which
@@ -1472,8 +1593,8 @@ function ClearFunnelIcon() {
 }
 
 function ClearFilterButton({
-  field, value, onClear,
-}: { field: string; value: unknown; onClear: () => void }) {
+  field, clearTestId, value, onClear,
+}: { field: string; clearTestId: string; value: unknown; onClear: () => void }) {
   const styles = useStyles();
   const { active, disabled } = clearIconState(value);
   return (
@@ -1492,7 +1613,7 @@ function ClearFilterButton({
          * field it clears makes it distinguishable without putting a value in the label.
          */
         aria-label={`Clear ${field} filter`}
-        data-testid={CLEAR_FILTER_TESTID[field]}
+        data-testid={clearTestId}
         onClick={onClear}
       />
     </Tooltip>
@@ -1550,7 +1671,8 @@ const ProjectGridRow = memo(function ProjectGridRow({
           checked={selected}
           onClick={toggle}
           onChange={select}
-          aria-label={`Select ${row.name}`}
+          // Named by the project's name cell (PO-029): rule 16 keeps bound data out of an aria-label.
+          aria-labelledby={`project-name-${row.id}`}
           data-testid={`select-${row.id}`}
         />
       </TableCell>
@@ -1563,7 +1685,7 @@ const ProjectGridRow = memo(function ProjectGridRow({
           />
         ) : null}
       </TableCell>
-      <TableCell>{row.name || "-"}</TableCell>
+      <TableCell id={`project-name-${row.id}`}>{row.name || "-"}</TableCell>
       <TableCell>{row.shortName || "-"}</TableCell>
       <TableCell>{row.statusName || "-"}</TableCell>
       <TableCell>{row.managerName || "-"}</TableCell>

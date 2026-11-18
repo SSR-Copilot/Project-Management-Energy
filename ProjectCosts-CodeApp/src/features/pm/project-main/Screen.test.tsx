@@ -13,8 +13,10 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { FluentProvider } from "@fluentui/react-components";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter, useLocation } from "react-router-dom";
+import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
 import { useState, type ReactNode } from "react";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 const PROJECT_ID = "33b9cc79-5b4f-f111-bec6-000d3a3855c2";
 const FV = "@OData.Community.Display.V1.FormattedValue";
@@ -144,12 +146,35 @@ let deleteSucceeds = true;
 
 /** `'Base cases'` rows for the selected project — `simulateProject`'s second OnSelect guard. */
 let baseCaseRows: Record<string, unknown>[] = [{ vsb_basecaseid: "bc1" }];
+/**
+ * PO-001: the `systemusers` table. The chip's name lookup is a filter on the Entra id with an UNQUOTED guid
+ * (the session's own current-user read quotes it); the typeahead filters on `contains(fullname ...`.
+ */
+let lookupUsers: Record<string, unknown>[] = [];
+let searchUsers: Record<string, unknown>[] = [];
+let lookupFails = false;
+/** PO-031: tables whose reads are refused (a 403), and whether the typeahead's search is refused. */
+const failTables = new Set<string>();
+let searchFails = false;
+const isManagerLookup = (c: { table: string; options: Record<string, unknown> }) =>
+  c.table === "systemusers"
+  && /azureactivedirectoryobjectid eq [0-9a-f]{8}-/.test(String(c.options.filter ?? ""));
+/** PO-006: make the Base cases read fail, or hold it open. */
+let baseCaseFails = false;
+let baseCaseGate: Promise<void> | null = null;
+/** PO-006: make the cluster-state read fail, hold it open, and count how often it ran. */
+let stateReadFails = false;
+let stateReadGate: Promise<void> | null = null;
+let stateReads = 0;
 
 vi.mock("@microsoft/power-apps/data", () => ({
   getClient: () => ({
     retrieveMultipleRecordsAsync: vi.fn(
       async (table: string, options: Record<string, unknown>) => {
         calls.push({ table, options });
+        if (failTables.has(table)) {
+          return { success: false, data: undefined, error: new Error("forbidden") };
+        }
         if (table === "environmentvariabledefinitions") {
           return {
             success: true,
@@ -193,16 +218,34 @@ vi.mock("@microsoft/power-apps/data", () => ({
             data: [{ vsb_projectstateid: "s1", vsb_name: "Cluster 4", vsb_order: 4 }],
           };
         }
+        if (table === "systemusers") {
+          const filter = String(options.filter ?? "");
+          if (isManagerLookup({ table, options })) {
+            if (lookupFails) return { success: false, data: undefined, error: new Error("forbidden") };
+            return { success: true, data: lookupUsers };
+          }
+          if (filter.includes("contains(fullname")) {
+            if (searchFails) return { success: false, data: undefined, error: new Error("forbidden") };
+            return { success: true, data: searchUsers };
+          }
+        }
         if (table === "vsb_basecases") {
+          if (baseCaseGate) await baseCaseGate;
+          if (baseCaseFails) return { success: false, data: undefined, error: new Error("forbidden") };
           return { success: true, data: baseCaseRows };
         }
         return { success: true, data: [] };
       },
     ),
-    retrieveRecordAsync: vi.fn(async () => ({
-      success: true,
-      data: { vsb_projectstateid: "s1", vsb_order: 4, vsb_name: "Cluster 4" },
-    })),
+    retrieveRecordAsync: vi.fn(async () => {
+      stateReads += 1;
+      if (stateReadGate) await stateReadGate;
+      if (stateReadFails) return { success: false, data: undefined, error: new Error("forbidden") };
+      return {
+        success: true,
+        data: { vsb_projectstateid: "s1", vsb_order: 4, vsb_name: "Cluster 4" },
+      };
+    }),
     createRecordAsync: vi.fn(),
     updateRecordAsync: vi.fn(),
     deleteRecordAsync: vi.fn(async (_table: string, id: string) => {
@@ -217,13 +260,15 @@ vi.mock("@microsoft/power-apps/data", () => ({
   }),
 }));
 
+import { testIdPart } from "@/components";
 import { resetPageTokens } from "@/data/client";
 import { vsbTheme } from "@/theme/fluent";
 import { SessionProvider } from "@/app/SessionContext";
 import { startupFlags } from "@/app/startupFlags";
 import { prefetchTarget } from "@/app/bootPrefetch";
 import ProjectOverviewScreen from "./Screen";
-import { DELETE_DIALOG } from "./rules";
+import { DELETE_DIALOG, OPEN_FAILED, parseCriteria } from "./rules";
+import { projectPageKey } from "./queries";
 
 /**
  * `gcTime: 0` by default, so no test sees another's cache. The prefetch tests pass the app's
@@ -364,6 +409,16 @@ describe("ProjectOverviewScreen", () => {
     deletes.length = 0;
     deleteSucceeds = true;
     baseCaseRows = [{ vsb_basecaseid: "bc1" }];
+    lookupUsers = [];
+    searchUsers = [];
+    lookupFails = false;
+    failTables.clear();
+    searchFails = false;
+    baseCaseFails = false;
+    baseCaseGate = null;
+    stateReadFails = false;
+    stateReadGate = null;
+    stateReads = 0;
     resetPageTokens();
   });
 
@@ -499,7 +554,7 @@ describe("ProjectOverviewScreen", () => {
     // `ItemEnabled: DataSourceInfo(Projects, CreatePermission)` — never gated on selection.
     expect(screen.getByTestId("command-addProject")).toBeEnabled();
     // Neither Dashboard nor Portfolio Overview declares ItemEnabled in the canvas source, so
-    // both stay enabled with nothing selected. See rules.ts SKELETON FIX 3 and UT-OV-057.
+    // both stay enabled with nothing selected. See rules.ts SKELETON FIX 3 and UT-OV-100.
     expect(screen.getByTestId("command-viewDashboardFunctionality")).toBeEnabled();
   });
 
@@ -635,7 +690,7 @@ describe("ProjectOverviewScreen", () => {
     // CANVAS DIVERGENCE (recorded, not resolved): GUIDE p06 reads the recording as showing
     // Dashboard greyed with nothing selected, and the harness plan says it was "corrected" to
     // a selection gate. The YAML has no such gate and the screen plan's own non-negotiable is
-    // to inspect the YAML, so the source wins here. UT-OV-057 pins the rule side.
+    // to inspect the YAML, so the source wins here. UT-OV-100 pins the rule side.
     render(<Harness><ProjectOverviewScreen /></Harness>);
     await screen.findByText("Contr. Endpoint Testproject");
     expect(screen.getByTestId("command-viewDashboardFunctionality")).toBeEnabled();
@@ -921,7 +976,7 @@ describe("ProjectOverviewScreen", () => {
     expect(screen.queryByTestId("command-viewProjectOverviewPowerBI")).toBeNull();
   });
 
-  it("UT-OVUI-033 keeps SharePoint and Teams out of a non-Croatian project", async () => {
+  it("UT-OVUI-063 keeps SharePoint and Teams out of a non-Croatian project", async () => {
     // `ItemVisible: varProjectRecord.Country.Name = "Croatia"` — a hardcoded country string.
     const user = userEvent.setup();
     render(<Harness><ProjectOverviewScreen /></Harness>);
@@ -931,7 +986,7 @@ describe("ProjectOverviewScreen", () => {
     expect(screen.queryByTestId("command-viewTeams")).toBeNull();
   });
 
-  it("UT-OVUI-034 launches the stored SharePoint and Teams urls for Croatia", async () => {
+  it("UT-OVUI-064 launches the stored SharePoint and Teams urls for Croatia", async () => {
     projectRows = [projectRow({
       [`_vsb_country_value${FV}`]: "Croatia",
       vsb_sposharepointurl: "https://vsb.sharepoint.com/sites/p1",
@@ -952,7 +1007,7 @@ describe("ProjectOverviewScreen", () => {
     );
   });
 
-  it("UT-OVUI-035 needs BOTH urls before either command is usable", async () => {
+  it("UT-OVUI-065 needs BOTH urls before either command is usable", async () => {
     // The canvas `ItemEnabled` requires both, on both commands — so a project with a
     // SharePoint site but no Teams channel offers neither.
     projectRows = [projectRow({
@@ -1233,5 +1288,702 @@ describe("ProjectOverviewScreen", () => {
     await waitFor(() => expect(screen.getByTestId(`select-${ids[2]}`)).toBeChecked());
     await waitFor(() => expect(screen.getByTestId("command-editProject")).toBeEnabled());
     expect(rowRenders.count).toBe(2);
+  });
+
+  /* ═════════ Parity fixes, batch A1 (PO-003, PO-012a, PO-013, PO-014, PO-015, PO-029) ═════════ */
+
+  /** The six headings the canvas grid lets the user sort by. */
+  const SORTABLE_HEADINGS = [
+    "Project Name", "Short Name", "Technology", "Capacity [MW(p)]", "Project ID", "Approval",
+  ] as const;
+  const gridTable = () => within(screen.getByRole("table", { name: "Projects" }));
+  const headingButton = (caption: string) =>
+    gridTable().getByTestId(`grid-header-${testIdPart(caption)}`);
+
+  it("UT-OVFIX-001 exactly the six sortable headings are focusable buttons; the others are not", async () => {
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    const headers = gridTable().getAllByRole("columnheader");
+    const withButton = headers.filter((h) => within(h).queryByRole("button") !== null);
+    expect(withButton).toHaveLength(6);
+    for (const caption of SORTABLE_HEADINGS) {
+      expect(within(headingButton(caption).closest("th") as HTMLElement).getByRole("button"))
+        .toBe(headingButton(caption));
+    }
+  });
+
+  it("UT-OVFIX-002 Project Name is in the tab order and Enter flips the sort and announces it", async () => {
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    const heading = headingButton("Project Name");
+    const cell = heading.closest("th") as HTMLElement;
+    expect(cell).toHaveAttribute("aria-sort", "ascending");
+    // In the tab order (tabIndex 0, not -1); jsdom's Tabster does not walk the whole filter card reliably,
+    // so focus it directly and press the key, which is what the keyboard user does once there.
+    expect(heading.tabIndex).toBe(0);
+    heading.focus();
+    expect(document.activeElement).toBe(heading);
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(cell).toHaveAttribute("aria-sort", "descending"));
+    await waitFor(() =>
+      expect(projectQuery()?.orderBy).toEqual(["vsb_projectname desc", "vsb_projectid asc"]));
+    expect(screen.getByTestId("current-location")).toHaveTextContent("/projects?dir=desc");
+  });
+
+  it("UT-OVFIX-003 Space on Short Name sorts by it, ascending first", async () => {
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    const heading = headingButton("Short Name");
+    heading.focus();
+    await user.keyboard(" ");
+    await waitFor(() =>
+      expect(projectQuery()?.orderBy).toEqual(["vsb_shortname asc", "vsb_projectid asc"]));
+    expect(heading.closest("th")).toHaveAttribute("aria-sort", "ascending");
+    expect(screen.getByTestId("current-location")).toHaveTextContent("sort=vsb_shortname");
+  });
+
+  it("UT-OVFIX-004 a heading that cannot be sorted has no button and no aria-sort", async () => {
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    for (const caption of ["Status", "Project Manager", "Country", "Area/State/Province/Voivodeship"]) {
+      const cell = gridTable().getByRole("columnheader", { name: caption });
+      expect(within(cell).queryByRole("button")).toBeNull();
+      expect(cell).not.toHaveAttribute("aria-sort");
+    }
+  });
+
+  it("UT-OVFIX-005 each sortable heading's button carries its caption as aria-label and a unique test id", async () => {
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    const ids = SORTABLE_HEADINGS.map((caption) => {
+      const button = headingButton(caption);
+      expect(button).toHaveAttribute("aria-label", caption);
+      return button.getAttribute("data-testid");
+    });
+    expect(new Set(ids).size).toBe(6);
+    expect(ids).toEqual([
+      "grid-header-project-name", "grid-header-short-name", "grid-header-technology",
+      "grid-header-capacity-mw-p", "grid-header-project-id", "grid-header-approval",
+    ]);
+  });
+
+  it("UT-OVFIX-006 a mouse click on a heading still sorts, once (the button's click bubbles to the cell)", async () => {
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    await user.click(headingButton("Project Name"));
+    // A double dispatch would flip it twice and leave it ascending.
+    await waitFor(() =>
+      expect(projectQuery()?.orderBy).toEqual(["vsb_projectname desc", "vsb_projectid asc"]));
+    await user.click(screen.getByText("Short Name"));
+    await waitFor(() =>
+      expect(projectQuery()?.orderBy).toEqual(["vsb_shortname asc", "vsb_projectid asc"]));
+  });
+
+  /** The canvas control names of `Project Main Screen.pa.yaml`, as the canvas-identity gate reads them. */
+  const CANVAS_NAMES = [
+    "psf_MainScreen_DetailList_Container_FluentDetailsList",
+    "con_Main_Project_Overview_Header_SuitBar_CommandBar",
+    "cmp_MS_Spinner",
+    "lbl_Main_Project_Overview_Context_Filter_ProjectKeyword",
+    "lbl_Main_Project_Overview_Context_Filter_ProjectManager",
+    "lbl_Main_Project_Overview_Context_Filter_Country",
+    "lbl_Main_Project_Overview_Context_Filter_Area",
+    "lbl_Main_Project_Overview_Context_Filter_Technology",
+    "lbl_Main_Project_Overview_Context_Filter_Capacity",
+    "lbl_Main_Project_Overview_Context_Filter_Status",
+    "lbl_Main_Project_Overview_Context_Filter_Capacity_ErrorMessage",
+    "ico_Main_Project_Overview_Context_Filter_ProjectKeyword",
+    "ico_Main_Project_Overview_Context_Filter_Country",
+    "ico_Main_Project_Overview_Context_Filter_Area",
+    "ico_Main_Project_Overview_Context_Filter_Texnology",
+    "ico_Main_Project_Overview_Context_Filter_Capacity",
+    "ico_Main_Project_Overview_Context_Filter_Status",
+  ] as const;
+
+  it("UT-OVFIX-010 the grid, the seven captions, the capacity error and the command bar carry their canvas names", async () => {
+    // Hold the first page open: while it loads the blocking spinner is `cmp_MS_Spinner`.
+    let release: () => void = () => {};
+    projectGate = new Promise<void>((resolve) => { release = resolve; });
+    render(<Harness search="?cap=12a"><ProjectOverviewScreen /></Harness>);
+    expect(await screen.findByTestId("cmp_MS_Spinner")).toBeInTheDocument();
+    projectGate = null;
+    release();
+    await screen.findByText("Contr. Endpoint Testproject");
+    expect(screen.getByRole("table", { name: "Projects" }))
+      .toHaveAttribute("data-testid", "psf_MainScreen_DetailList_Container_FluentDetailsList");
+    const caption = (id: string, text: string) => expect(screen.getByTestId(id)).toHaveTextContent(text);
+    caption("lbl_Main_Project_Overview_Context_Filter_ProjectKeyword", "Project");
+    caption("lbl_Main_Project_Overview_Context_Filter_ProjectManager", "Project Manager");
+    caption("lbl_Main_Project_Overview_Context_Filter_Country", "Country");
+    caption("lbl_Main_Project_Overview_Context_Filter_Area", "Area/State/Province");
+    caption("lbl_Main_Project_Overview_Context_Filter_Technology", "Technology");
+    caption("lbl_Main_Project_Overview_Context_Filter_Capacity", "Capacity");
+    caption("lbl_Main_Project_Overview_Context_Filter_Status", "Status");
+    caption("lbl_Main_Project_Overview_Context_Filter_Capacity_ErrorMessage", "Value must be a numeric");
+    // The error keeps the id the input's `aria-describedby` points at.
+    expect(screen.getByTestId("lbl_Main_Project_Overview_Context_Filter_Capacity_ErrorMessage"))
+      .toHaveAttribute("id", "filter-capacity-error");
+    const bar = screen.getByTestId("con_Main_Project_Overview_Header_SuitBar_CommandBar");
+    expect(bar).toContainElement(screen.getByTestId("command-addProject"));
+    // No layout box of its own.
+    expect(bar.style.display).toBe("contents");
+  });
+
+  it("UT-OVFIX-011 no test id the screen already had was changed", async () => {
+    projectTotal = 1129;
+    projectNextToken = "tok";
+    projectRows = [deletableRow()];
+    const user = userEvent.setup();
+    render(<Harness search="?cap=12"><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    await selectRow(user);
+    for (const id of [
+      "filter-keyword", "filter-manager", "filter-country", "filter-area", "filter-technology",
+      "filter-capacity", "filter-capacity-operator", "filter-status", "page-label", "total-rows",
+      `select-${PROJECT_ID}`, "command-addProject", "command-editProject", "command-editCosts",
+      "command-deleteProject", "command-simulateProject", "command-viewDashboardFunctionality",
+      "ico_Main_Project_Overview_Context_Pagination_FirstPage",
+      "ico_Main_Project_Overview_Context_Pagination_PageLeft",
+      "ico_Main_Project_Overview_Context_Pagination_PageRight",
+    ]) {
+      expect(screen.getByTestId(id), id).toBeInTheDocument();
+    }
+  });
+
+  it("UT-OVFIX-012 the six funnels carry the canvas icon names, the typo in Technology included", async () => {
+    // A value in every filter, so each funnel is enabled and shows as a funnel with a cross.
+    render(
+      <Harness search={"?q=endpoint&c=cccccccc-0000-0000-0000-000000000001&a=aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee&t=wind&cap=12&st=11111111-1111-1111-1111-111111111111"}>
+        <ProjectOverviewScreen />
+      </Harness>,
+    );
+    await screen.findByText("Contr. Endpoint Testproject");
+    const funnels = [
+      ["Project", "ico_Main_Project_Overview_Context_Filter_ProjectKeyword"],
+      ["Country", "ico_Main_Project_Overview_Context_Filter_Country"],
+      ["Area/State/Province", "ico_Main_Project_Overview_Context_Filter_Area"],
+      ["Technology", "ico_Main_Project_Overview_Context_Filter_Texnology"],
+      ["Capacity", "ico_Main_Project_Overview_Context_Filter_Capacity"],
+      ["Status", "ico_Main_Project_Overview_Context_Filter_Status"],
+    ] as const;
+    for (const [field, id] of funnels) {
+      const button = screen.getByTestId(id);
+      expect(button).toHaveAttribute("aria-label", `Clear ${field} filter`);
+      expect(button).toBeEnabled();
+    }
+  });
+
+  it("UT-OVFIX-018 every canvas name the screen writes exists in the canvas source", () => {
+    const yaml = readFileSync(join(
+      __dirname, "../../../../../ProjectDocs/_extracted/msapp/projectmanagement/Src/Project Main Screen.pa.yaml",
+    ), "utf8");
+    for (const name of CANVAS_NAMES) expect(yaml, name).toMatch(new RegExp(`- ${name}:`));
+  });
+
+  it("UT-OVFIX-013 the Project caption shows the canvas hover text", async () => {
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    expect(screen.getByTestId("lbl_Main_Project_Overview_Context_Filter_ProjectKeyword"))
+      .toHaveAttribute("title", "Search (Project name, Short Name, ID)");
+  });
+
+  it("UT-OVFIX-014 the Project Manager box shows the canvas hover text", async () => {
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    expect(screen.getByTestId("filter-manager").closest("div[title]"))
+      .toHaveAttribute("title", "Search for project manager");
+  });
+
+  it("UT-OVFIX-015 the grid shows the canvas hover text", async () => {
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    expect(screen.getByTitle("Project overview list")).toContainElement(
+      screen.getByRole("table", { name: "Projects" }));
+  });
+
+  it("UT-OVFIX-019 the other captions have no hover text, and the command-bar copy-paste text is not reproduced", async () => {
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    for (const id of [
+      "lbl_Main_Project_Overview_Context_Filter_Country", "lbl_Main_Project_Overview_Context_Filter_Area",
+      "lbl_Main_Project_Overview_Context_Filter_Technology", "lbl_Main_Project_Overview_Context_Filter_Status",
+    ]) expect(screen.getByTestId(id)).not.toHaveAttribute("title");
+    expect(screen.queryByTitle("Home screen navigation")).toBeNull();
+  });
+
+  it("UT-OVFIX-016 the funnel hover text is unchanged and the new titles do not shadow it", async () => {
+    const user = userEvent.setup();
+    render(<Harness search="?q=endpoint"><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    const funnel = screen.getByTestId("ico_Main_Project_Overview_Context_Filter_ProjectKeyword");
+    expect(funnel).not.toHaveAttribute("title");
+    await user.hover(funnel);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Filter projects details list view.");
+  });
+
+  it("UT-OVFIX-017 a row's radio is named by the project's name cell, with no aria-label of bound data", async () => {
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    const radio = screen.getByRole("radio", { name: "Contr. Endpoint Testproject" });
+    expect(radio).toHaveAttribute("data-testid", `select-${PROJECT_ID}`);
+    expect(radio).not.toHaveAttribute("aria-label");
+  });
+
+  it("UT-OVFIX-020 a Croatian project shows SharePoint and Teams before Dashboard, as the canvas Items do", async () => {
+    projectRows = [projectRow({
+      [`_vsb_country_value${FV}`]: "Croatia",
+      vsb_sposharepointurl: "https://vsb.sharepoint.com/sites/p1",
+      vsb_spoteamsurl: "https://teams.microsoft.com/l/team/p1",
+    })];
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    await selectRow(user);
+    await waitFor(() => expect(screen.getByTestId("command-viewTeams")).toBeEnabled());
+    const order = Array.from(document.querySelectorAll('[data-testid^="command-"]'))
+      .map((el) => el.getAttribute("data-testid"));
+    expect(order).toEqual([
+      "command-addProject", "command-editProject", "command-editCosts", "command-deleteProject",
+      "command-simulateProject", "command-viewSharepoint", "command-viewTeams",
+      "command-viewDashboardFunctionality",
+    ]);
+  });
+
+  it("UT-OVFIX-021 for any other country the order is unchanged: five commands, then Dashboard", async () => {
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    await selectRow(user);
+    const order = Array.from(document.querySelectorAll('[data-testid^="command-"]'))
+      .map((el) => el.getAttribute("data-testid"));
+    expect(order).toEqual([
+      "command-addProject", "command-editProject", "command-editCosts", "command-deleteProject",
+      "command-simulateProject", "command-viewDashboardFunctionality",
+    ]);
+  });
+
+  /* ═════════ Parity fixes, batch A6 (PO-027) ═════════ */
+
+  it("UT-OVFIX-081 a stored SharePoint or Teams link that is not an http(s) address is refused, not opened", async () => {
+    projectRows = [projectRow({
+      [`_vsb_country_value${FV}`]: "Croatia",
+      vsb_sposharepointurl: "javascript:alert(1)",
+      vsb_spoteamsurl: "data:text/html,<b>x</b>",
+    })];
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    await selectRow(user);
+    await clickCommand(user, "viewSharepoint");
+    expect(await screen.findByTestId("notice")).toHaveTextContent(OPEN_FAILED);
+    await clickCommand(user, "viewTeams");
+    expect(open).not.toHaveBeenCalled();
+    expect(screen.getByTestId("notice")).toHaveTextContent(OPEN_FAILED);
+  });
+
+  it("UT-OVFIX-082 the Dashboard link from the environment variable still opens when it is an https address", async () => {
+    envVarValues = { vsb_PowerBIDashboardLink: "https://app.powerbi.com/dashboards/d2" };
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    await clickCommand(user, "viewDashboardFunctionality");
+    expect(open).toHaveBeenCalledWith(
+      "https://app.powerbi.com/dashboards/d2", "_blank", "noopener,noreferrer",
+    );
+    expect(screen.queryByTestId("notice")).toBeNull();
+  });
+
+  it("UT-OVFIX-083 a Dashboard link set to a javascript: address is refused", async () => {
+    envVarValues = { vsb_PowerBIDashboardLink: "javascript:alert(1)" };
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    await clickCommand(user, "viewDashboardFunctionality");
+    expect(open).not.toHaveBeenCalled();
+    expect(await screen.findByTestId("notice")).toHaveTextContent(OPEN_FAILED);
+  });
+
+  /* ═════════ Parity fixes, batch A3 (PO-006, PO-017, X-2): Simulate hardening ═════════ */
+
+  const SIMULATE_BASE = "Could not check this project for simulation.";
+
+  it("UT-OVFIX-040 a failing Base cases read says so; it is not 'Base data missing'", async () => {
+    baseCaseFails = true;
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    await selectRow(user);
+    await clickCommand(user, "simulateProject");
+    const notice = await screen.findByTestId("notice");
+    expect(notice).toHaveTextContent(SIMULATE_BASE);
+    expect(notice).not.toHaveTextContent("Base data missing");
+    expect(notice).not.toHaveTextContent("Simulation is supported only");
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it("UT-OVFIX-041 a click before the cluster order has loaded waits for it, with no premature warning", async () => {
+    envVarValues = { vsb_AnalyticsAppID: "ana-1" };
+    let release: () => void = () => {};
+    stateReadGate = new Promise<void>((resolve) => { release = resolve; });
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    await selectRow(user);
+    await clickCommand(user, "simulateProject");
+    // Still waiting: no notice (the old code read a null order here and warned "Clusters 1 to 5").
+    await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+    expect(screen.queryByTestId("notice")).toBeNull();
+    expect(open).not.toHaveBeenCalled();
+    release();
+    await waitFor(() => expect(open).toHaveBeenCalledOnce());
+    expect(screen.queryByTestId("notice")).toBeNull();
+  });
+
+  it("UT-OVFIX-042 a failing cluster-state read says so, and the answer is not cached: the next click retries", async () => {
+    envVarValues = { vsb_AnalyticsAppID: "ana-1" };
+    stateReadFails = true;
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    await selectRow(user);
+    await clickCommand(user, "simulateProject");
+    const notice = await screen.findByTestId("notice");
+    expect(notice).toHaveTextContent(SIMULATE_BASE);
+    expect(notice).not.toHaveTextContent("Simulation is supported only");
+    expect(open).not.toHaveBeenCalled();
+    const readsAfterFailure = stateReads;
+    stateReadFails = false;
+    await clickCommand(user, "simulateProject");
+    await waitFor(() => expect(open).toHaveBeenCalledOnce());
+    expect(stateReads).toBeGreaterThan(readsAfterFailure);
+  });
+
+  it("UT-OVFIX-043 a double click opens one tab", async () => {
+    envVarValues = { vsb_AnalyticsAppID: "ana-1" };
+    let release: () => void = () => {};
+    baseCaseGate = new Promise<void>((resolve) => { release = resolve; });
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    await selectRow(user);
+    await waitFor(() => expect(screen.getByTestId("command-simulateProject")).toBeEnabled());
+    // The first check is held open, so the second click lands while it is still running.
+    await user.dblClick(screen.getByTestId("command-simulateProject"));
+    release();
+    await waitFor(() => expect(open).toHaveBeenCalledOnce());
+    await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+    expect(open).toHaveBeenCalledOnce();
+    expect(calls.filter((c) => c.table === "vsb_basecases")).toHaveLength(1);
+  });
+
+  it("UT-OVFIX-044 the check is traced as ACTION 'simulate project' with its Base cases read", async () => {
+    envVarValues = { vsb_AnalyticsAppID: "ana-1" };
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    vi.spyOn(window, "open").mockReturnValue(null);
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    await selectRow(user);
+    await clickCommand(user, "simulateProject");
+    await waitFor(() => {
+      const lines = [...info.mock.calls, ...warn.mock.calls].map((c) => String(c[0]));
+      expect(lines.some((l) => l.includes("ACTION simulate project:") && l.includes("read check base case")))
+        .toBe(true);
+    });
+  });
+
+  it("UT-OVFIX-045 an unsupported technology still reads the Base cases first, as the canvas's eager With does", async () => {
+    projectRows = [projectRow({
+      vsb_technology: 952850003, [`vsb_technology${FV}`]: "BESS",
+    })];
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    await selectRow(user);
+    await clickCommand(user, "simulateProject");
+    expect(await screen.findByTestId("notice")).toHaveTextContent("Simulation is supported only for Wind/PV");
+    expect(calls.filter((c) => c.table === "vsb_basecases")).toHaveLength(1);
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it("UT-OVFIX-046 an unconfigured Analytics app says so with the transcribed local message", async () => {
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    await selectRow(user);
+    await clickCommand(user, "simulateProject");
+    expect(await screen.findByTestId("notice"))
+      .toHaveTextContent("Simulation is not configured for this environment.");
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  /* ═════════ Parity fixes, batch A2 (PO-001): the Project Manager filter from the address ═════════ */
+
+  const MGR_ID = "bbbbbbbb-0000-0000-0000-00000000000b";
+  const MGR_ROW = {
+    systemuserid: "u-b", fullname: "# Alan Turing", internalemailaddress: "alan@vsb.energy",
+    azureactivedirectoryobjectid: MGR_ID,
+  };
+  const managerLookups = () => calls.filter(isManagerLookup);
+  const pmClause = `_vsb_projectmanager_value eq ${MGR_ID}`;
+
+  const OTHER_ID = "cccccccc-0000-0000-0000-00000000000c";
+
+  /** Changes the address from inside the router, as a Back / Forward step or a pasted link does. */
+  function GoTo() {
+    const navigate = useNavigate();
+    return (
+      <>
+        <button type="button" data-testid="goto-plain" aria-label="Go to the plain list"
+          onClick={() => navigate("/projects")} />
+        <button type="button" data-testid="goto-other" aria-label="Go to another manager"
+          onClick={() => navigate(`/projects?pm=${OTHER_ID}`)} />
+      </>
+    );
+  }
+
+  it("UT-OVFIX-030 a manager in the address is shown as a chip with its name and its clear button", async () => {
+    lookupUsers = [MGR_ROW];
+    render(<Harness search={`?pm=${MGR_ID}`}><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    // The name is cleaned of the "# " the directory puts on synced accounts, as the picker does.
+    expect(await screen.findByText("Alan Turing")).toBeInTheDocument();
+    expect(screen.getByTestId("filter-manager-clear")).toBeInTheDocument();
+    // The list really is filtered by that person: the visible chip and the request agree.
+    expect(String(projectQuery()?.filter)).toContain(pmClause);
+    expect(managerLookups()).toHaveLength(1);
+  });
+
+  it("UT-OVFIX-031 when the lookup finds nobody the chip says so, and its clear button still clears", async () => {
+    lookupUsers = [];
+    const user = userEvent.setup();
+    render(<Harness search={`?pm=${MGR_ID}`}><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    expect(await screen.findByText("Selected project manager")).toBeInTheDocument();
+    await user.click(screen.getByTestId("filter-manager-clear"));
+    await waitFor(() => expect(screen.queryByText("Selected project manager")).toBeNull());
+    expect(screen.getByTestId("current-location")).not.toHaveTextContent("pm=");
+  });
+
+  it("UT-OVFIX-032 the clear button takes pm out of the address and the list is asked again without it", async () => {
+    lookupUsers = [MGR_ROW];
+    const user = userEvent.setup();
+    render(<Harness search={`?pm=${MGR_ID}&q=endpoint`}><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Alan Turing");
+    await user.click(screen.getByTestId("filter-manager-clear"));
+    await waitFor(() =>
+      expect(screen.getByTestId("current-location")).toHaveTextContent(/^\/projects\?q=endpoint$/));
+    await waitFor(() => expect(String(projectQuery()?.filter)).not.toContain("_vsb_projectmanager_value"));
+    expect(screen.queryByTestId("filter-manager-clear")).toBeNull();
+    // The box is empty and ready for a new search.
+    expect((screen.getByTestId("filter-manager") as HTMLInputElement).value).toBe("");
+  });
+
+  it("UT-OVFIX-033 picking a suggestion names the chip at once, with no extra lookup", async () => {
+    searchUsers = [MGR_ROW];
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    await user.type(screen.getByTestId("filter-manager"), "ala");
+    await user.click(await screen.findByTestId(`filter-manager-suggestion-${MGR_ID}`));
+    expect(await screen.findByTestId("filter-manager-clear")).toBeInTheDocument();
+    expect(screen.getAllByText("Alan Turing").length).toBeGreaterThan(0);
+    expect(screen.getByTestId("current-location")).toHaveTextContent(`pm=${MGR_ID}`);
+    await waitFor(() => expect(String(projectQuery()?.filter)).toContain(pmClause));
+    expect(managerLookups()).toHaveLength(0);
+  });
+
+  it("UT-OVFIX-034 the chip follows the address: it goes when the address loses pm and is looked up again for another", async () => {
+    lookupUsers = [MGR_ROW];
+    const user = userEvent.setup();
+    render(
+      <Harness search={`?pm=${MGR_ID}`}>
+        <ProjectOverviewScreen />
+        <GoTo />
+      </Harness>,
+    );
+    await screen.findByText("Alan Turing");
+    await user.click(screen.getByTestId("goto-plain"));
+    await waitFor(() => expect(screen.queryByTestId("filter-manager-clear")).toBeNull());
+    expect(screen.queryByText("Alan Turing")).toBeNull();
+    // Another manager in a pasted link is looked up; it is not shown under the previous name.
+    lookupUsers = [{ ...MGR_ROW, fullname: "Grace Hopper", azureactivedirectoryobjectid: OTHER_ID }];
+    await user.click(screen.getByTestId("goto-other"));
+    expect(await screen.findByText("Grace Hopper")).toBeInTheDocument();
+    expect(screen.queryByText("Alan Turing")).toBeNull();
+  });
+
+  it("UT-OVFIX-035 a failing lookup shows the fallback caption and a failed read line", async () => {
+    lookupFails = true;
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    render(<Harness search={`?pm=${MGR_ID}`}><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    expect(await screen.findByText("Selected project manager")).toBeInTheDocument();
+    expect(screen.getByTestId("filter-manager-clear")).toBeInTheDocument();
+    await waitFor(() => {
+      const lines = [...info.mock.calls, ...warn.mock.calls].map((c) => String(c[0]));
+      expect(lines.some((l) => l.includes("DATA read look up project manager") && l.includes("1 FAILED")))
+        .toBe(true);
+    });
+  });
+
+  it("UT-OVFIX-036 the lookup is traced as a DATA read line", async () => {
+    lookupUsers = [MGR_ROW];
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    render(<Harness search={`?pm=${MGR_ID}`}><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Alan Turing");
+    await waitFor(() => {
+      const lines = info.mock.calls.map((c) => String(c[0]));
+      expect(lines.some((l) => l.includes("DATA read look up project manager: 1 row"))).toBe(true);
+    });
+  });
+
+  /* ═════════ Parity fixes, batch A5 (PO-031): a failed filter list is said, with Retry ═════════ */
+
+  const listErrorIds = () =>
+    Array.from(document.querySelectorAll('[data-testid^="filter-list-error-"]'))
+      .map((el) => el.getAttribute("data-testid"));
+
+  it("UT-OVFIX-070 a refused Country list shows its message and a Retry that reads it again", async () => {
+    failTables.add("vsb_countries");
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    const bar = await screen.findByTestId("filter-list-error-countries");
+    expect(bar).toHaveTextContent("The country list could not be loaded.");
+    // The list itself is empty: there is nothing to choose.
+    await user.click(screen.getByTestId("filter-country"));
+    expect(screen.queryAllByRole("option")).toHaveLength(0);
+    await user.keyboard("{Escape}");
+    const before = calls.filter((c) => c.table === "vsb_countries").length;
+    failTables.delete("vsb_countries");
+    await user.click(screen.getByTestId("filter-list-error-countries-retry"));
+    await waitFor(() => expect(screen.queryByTestId("filter-list-error-countries")).toBeNull());
+    expect(calls.filter((c) => c.table === "vsb_countries").length).toBeGreaterThan(before);
+  });
+
+  it("UT-OVFIX-071 a refused Status list shows its message and a working Retry", async () => {
+    failTables.add("vsb_projectstates");
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    expect(await screen.findByTestId("filter-list-error-states"))
+      .toHaveTextContent("The status list could not be loaded.");
+    failTables.delete("vsb_projectstates");
+    await user.click(screen.getByTestId("filter-list-error-states-retry"));
+    await waitFor(() => expect(screen.queryByTestId("filter-list-error-states")).toBeNull());
+  });
+
+  it("UT-OVFIX-072 a refused Area list (after a country is chosen) shows its message", async () => {
+    failTables.add("vsb_countryareas");
+    render(<Harness search="?c=cccccccc-0000-0000-0000-000000000001"><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    expect(await screen.findByTestId("filter-list-error-areas"))
+      .toHaveTextContent("The area list could not be loaded.");
+    expect(screen.getByTestId("filter-list-error-areas-retry")).toBeInTheDocument();
+  });
+
+  it("UT-OVFIX-073 a refused Project Manager search shows its message as the suggestion list's only row", async () => {
+    searchFails = true;
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    await user.type(screen.getByTestId("filter-manager"), "ala");
+    const row = await screen.findByTestId("filter-list-error-managers");
+    expect(row).toHaveTextContent("The project manager search could not be loaded.");
+    expect(screen.getByRole("list", { name: "Suggested people" }).querySelectorAll("button")).toHaveLength(0);
+  });
+
+  it("UT-OVFIX-074 a healthy load shows no list error", async () => {
+    searchUsers = [];
+    const user = userEvent.setup();
+    render(<Harness search="?c=cccccccc-0000-0000-0000-000000000001"><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    await user.type(screen.getByTestId("filter-manager"), "ala");
+    await act(async () => { await new Promise((r) => setTimeout(r, 450)); });
+    expect(listErrorIds()).toEqual([]);
+  });
+
+  /* ═════════ Parity fixes, batch A4 (PO-007, PO-025): capacity ═════════ */
+
+  /** The capacity clause of every named-segment request issued so far, in order (undefined: none). */
+  const capacityClauses = () => namedCalls().map((c) => {
+    const m = /vsb_totalcapacity (eq|gt|ge|lt|le) (-?[0-9.]+)/.exec(String(c.options.filter ?? ""));
+    return m ? `${m[1]} ${m[2]}` : undefined;
+  });
+
+  it("UT-OVFIX-059 a malformed ?cap= link prefetches under the key the screen reads", () => {
+    const raw = parseCriteria(new URLSearchParams("cap=12a"));
+    const sort = raw.sort;
+    const fromPrefetch = projectPageKey({ filter: raw.filter, sort, page: 1, locale: "en-GB" });
+    const fromScreen = projectPageKey({
+      filter: { ...raw.filter, capacity: "", capacityOperator: "" }, sort, page: 1, locale: "en-GB",
+    });
+    expect(fromPrefetch).toEqual(fromScreen);
+    // A valid capacity is untouched.
+    const valid = parseCriteria(new URLSearchParams("cap=12")).filter;
+    expect(projectPageKey({ filter: valid, sort, page: 1 })[1]).toEqual(valid);
+  });
+
+  it("UT-OVFIX-060 typing a letter after a valid capacity keeps the list filtered by the last one and sends nothing", async () => {
+    const user = userEvent.setup();
+    render(<Harness search="?cap=12"><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    expect(capacityClauses().every((c) => c === "eq 12")).toBe(true);
+    const before = namedCalls().length;
+    await user.type(screen.getByTestId("filter-capacity"), "a");
+    expect(screen.getByTestId("current-location")).toHaveTextContent("cap=12a");
+    expect(screen.getByTestId("lbl_Main_Project_Overview_Context_Filter_Capacity_ErrorMessage"))
+      .toHaveTextContent("Value must be a numeric");
+    // Past the debounce window: still no request, and none ever lacked the capacity clause.
+    await act(async () => { await new Promise((r) => setTimeout(r, 500)); });
+    expect(namedCalls().length).toBe(before);
+    expect(capacityClauses().every((c) => c === "eq 12")).toBe(true);
+    expect(screen.getByText("Contr. Endpoint Testproject")).toBeInTheDocument();
+  });
+
+  it("UT-OVFIX-061 typing 125.5 sends one request for the finished number, none for the keystrokes", async () => {
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    await user.type(screen.getByTestId("filter-capacity"), "125.5");
+    // Inside the debounce window nothing has been asked yet.
+    expect(capacityClauses().filter((c) => c !== undefined)).toEqual([]);
+    await waitFor(() => expect(capacityClauses()).toContain("eq 125.5"), { timeout: 3000 });
+    expect(capacityClauses().filter((c) => c !== undefined)).toEqual(["eq 125.5"]);
+  });
+
+  it("UT-OVFIX-062 emptying the box clears the filter once the debounce has passed", async () => {
+    const user = userEvent.setup();
+    render(<Harness search="?cap=12"><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    await user.clear(screen.getByTestId("filter-capacity"));
+    await waitFor(() => expect(capacityClauses().at(-1)).toBeUndefined(), { timeout: 3000 });
+    expect(capacityClauses()[0]).toBe("eq 12");
+    expect(screen.getByTestId("current-location")).not.toHaveTextContent("cap=");
+  });
+
+  it("UT-OVFIX-063 picking an operator with a valid capacity asks at once, not after a debounce", async () => {
+    const user = userEvent.setup();
+    render(<Harness search="?cap=12"><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    await user.click(screen.getByTestId("filter-capacity-operator"));
+    await user.click(await screen.findByRole("option", { name: "Greater than" }));
+    await waitFor(() => expect(capacityClauses()).toContain("gt 12"), { timeout: 1500 });
   });
 });

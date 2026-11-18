@@ -30,6 +30,8 @@ canvas `AccessibleLabel`. C5 (the label is an expression) is advisory. It runs a
 `src/test/canvasIdentities.test.ts` (UT-CANVASID-001..003). A new feature folder needs a
 `MODULES` entry.
 
+**Canvas drift check (D134).** The identity gate reads `ProjectDocs/_extracted/msapp` (solution 1.21.709), so changes made in the live canvas since then are invisible to it. Before a parity run, download and unpack the live app (`pac canvas download`; confirm the flags with `--help`), then from `ProjectCosts-CodeApp/` run `npm run check:canvas:drift -- <dir>`. There is no default folder and no private path is read; a missing folder prints `SKIPPED` and exits 0. Exit 1 means a control was added or removed or an `AccessibleLabel` changed; `--strict` also fails on control version and live-formula changes. To run the identity gate itself against the live tree: `node scripts/check-canvas-identities.mjs --msapp <dir>`. Tests UT-CANVASDRIFT-001..005. Refresh `_extracted` only with the lead's approval.
+
 The label gate does not cover controls created through the DOM API in the vendored PCF renderer
 (`features/cost/capex-costs/pcf/ui/GridRenderer.js`). That file's identities are documented in
 `ProjectDocs/migration-plans/09-tosca-automation-conventions.md`; check them by hand when it changes.

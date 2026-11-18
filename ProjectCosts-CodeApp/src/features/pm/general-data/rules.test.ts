@@ -7,6 +7,8 @@ import { describe, it, expect } from "vitest";
 import { ES, CHOICE } from "@/data/dataverseNames";
 import { formatInteger, isSixDecimal } from "@/domain/powerFxNumeric";
 import { terrainSizeText } from "./rules";
+import { CLUSTER_PANEL_WIDTH } from "./rules";
+import { formPanelWidth } from "@/components/formPanelContext";
 import { TECHNOLOGY_LABEL } from "@/domain/technology";
 // The pac-generated choice enums, imported as VALUES in the test only (D25, PO answer 9).
 import {
@@ -719,7 +721,8 @@ describe("UT-GDATA the save plan", () => {
     expect(planGeneralDataSaveHead({ ...ctx, form: form({ managerEntraRowId: null, managerName: null }) }).refusedReason).toBeTruthy();
   });
 
-  it("UT-GDATA-083 the Draft cancellation record (step 1, Y:236-322): the gate of the state before the old start cluster, the next state, blanks as null", () => {
+  // Renumbered from UT-GDATA-083 to make the ids unique (rule 13); 083 stays with the footer stamp split below. No behaviour change.
+  it("UT-GDATA-090 the Draft cancellation record (step 1, Y:236-322): the gate of the state before the old start cluster, the next state, blanks as null", () => {
     const draft: TrackingRow = { id: "t-draft", clusterStateId: "s-draft", approvalClusterState: CHOICE.approvalClusterState.inProgress, flowRunId: "run-1", flowApprovalId: "ap-1" };
     const gates = [
       { id: "g-c2", clusterStateId: "s-c2", portfolioManagerMail: "pm@x" },
@@ -1001,5 +1004,40 @@ describe("D117 General Data: Terrain Size, Tax Factor and the Acquisition Price 
         .toBe(acquisitionPriceShapeMessage(language));
     }
     expect(fieldErrors(ctx({ f: { ...acq, acquisitionPrice: "1.000" }, r: { language: "de-DE" } })).acquisitionPrice).toBeUndefined();
+  });
+});
+
+/* ═════════════════════════════════════════════════════════════ panel widths */
+
+describe("UT-GDATA panel widths", () => {
+  it("UT-GDATA-108 the Start-Cluster change panel is 400 px wide, as the canvas (A:6990), not the 450 px preset", () => {
+    expect(CLUSTER_PANEL_WIDTH).toBe(400);
+    expect(formPanelWidth(CLUSTER_PANEL_WIDTH)).toBe("min(400px, 100vw)");
+    expect(formPanelWidth("narrow")).not.toBe(formPanelWidth(CLUSTER_PANEL_WIDTH));
+  });
+});
+
+/* ══════════════════════════════════════════════════════ validation runs once */
+
+describe("UT-GDATA validation computed once per render (GD-022)", () => {
+  it("UT-GDATA-091 handing a precomputed fieldErrors to validationMessages, requiredFieldsContent and canSave changes nothing", () => {
+    const contexts = [
+      ctx(),
+      ctx({ f: { projectName: "" } }),
+      ctx({ f: { countryId: "c-de", areaId: null, municipality: "" } }),
+      ctx({ f: { countryId: "c-de", terrainSize: "abc" }, p: project({ countryId: "c-de", countryName: "Germany", countryKey: "25" }) }),
+      ctx({ entities: [entity({ ownership: 0.5 })] }),
+      ctx({ entities: [entity({ key: "a", ownership: 0.6 }), entity({ key: "b", ownership: 0.4 })] }),
+    ];
+    for (const c of contexts) {
+      const errors = fieldErrors(c);
+      expect(validationMessages(c, errors)).toEqual(validationMessages(c));
+      expect(requiredFieldsContent(c, errors)).toEqual(requiredFieldsContent(c));
+      const full = { ...c, perms: allowAll, isDirty: true };
+      expect(canSave(full, errors)).toBe(canSave(full));
+    }
+    // The contexts above really differ: at least one has errors and at least one is saveable.
+    expect(contexts.some((c) => Object.keys(fieldErrors(c)).length > 0)).toBe(true);
+    expect(contexts.some((c) => canSave({ ...c, perms: allowAll, isDirty: true }))).toBe(true);
   });
 });

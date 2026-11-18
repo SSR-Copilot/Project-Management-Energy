@@ -212,6 +212,40 @@ export function capacityError(capacity: string, locale?: string): string | null 
     : "Value must be a numeric";
 }
 
+/** The capacity the list is actually filtered by: what was last applied, as typed. */
+export interface AppliedCapacity {
+  capacity: string;
+  capacityOperator: CapacityOperator | "";
+}
+
+export const EMPTY_APPLIED_CAPACITY: AppliedCapacity = { capacity: "", capacityOperator: "" };
+
+/**
+ * Which capacity filter the list should carry, given what is in the box (PO-007).
+ *
+ * Canvas `txt_..._Capacity.OnChange` (`Project Main Screen.pa.yaml` 1504-1518) changes the stored filter only
+ * when `IsTwoDecimal(Self.Value)` holds: a text that is not a number leaves the list filtered by the LAST
+ * applied capacity while the red message shows. The first build dropped the clause instead, so a typo such as
+ * "12a" listed every project under the red label. So:
+ *   - blank: no capacity filter, and no operator. DIVERGENCE (kept, as before): the canvas also leaves a blank
+ *     box alone until the funnel is pressed (`IsTwoDecimal("")` is false); here an emptied box clears the filter.
+ *   - a valid number: that number, with the operator defaulted to "Equals" as the canvas does.
+ *   - anything else: `lastApplied`, unchanged.
+ * Pure: the caller keeps `lastApplied` (it is state, not a rule).
+ */
+export function resolveAppliedCapacity(
+  input: AppliedCapacity,
+  lastApplied: AppliedCapacity,
+  locale?: string,
+): AppliedCapacity {
+  if (!input.capacity.trim()) return EMPTY_APPLIED_CAPACITY;
+  if (capacityError(input.capacity, locale)) return lastApplied;
+  return {
+    capacity: input.capacity,
+    capacityOperator: resolveCapacityOperator(input.capacity, input.capacityOperator) ?? "",
+  };
+}
+
 export function capacityClause(
   capacity: string,
   operator: CapacityOperator | "",
@@ -261,6 +295,10 @@ export function applyFilterPatch(
 ): ProjectFilter {
   const next: ProjectFilter = { ...cur, ...patch };
 
+  // DIVERGENCE (PO-022, proposed, not approved): changing the Country clears the Area filter at once.
+  // The canvas `cbx_Main_Project_Overview_Context_Filter_Country.OnChange` sets only `Country`
+  // (`Project Main Screen.pa.yaml` 1138-1144); the Area is cleared only by the Country funnel, so a
+  // stale Area from the other country stays applied. To reproduce the canvas, drop this line.
   if ("countryId" in patch && patch.countryId !== cur.countryId) next.areaId = null;
 
   if ("capacity" in patch) {
@@ -603,6 +641,17 @@ export const SIMULATE_MSG = {
     "financial result before using the simulation functionality.",
 } as const;
 
+/**
+ * NEW — no canvas equivalent (rule 7). The canvas `Launch(gblAnalyticsAppLaunchUrl, …)` could not fail in a
+ * way the user saw, and its two lookups could not fail visibly either.
+ */
+export const SIMULATE_NEW_MSG = {
+  /** The Analytics app url could not be built (the environment variable or the session is missing). */
+  notConfigured: "Simulation is not configured for this environment.",
+  /** Completes "Could not …." through `userErrorText` when the Base cases or cluster state read fails. */
+  checkFailedAction: "check this project for simulation",
+} as const;
+
 export type SimulateGateResult = { ok: true } | { ok: false; message: string };
 
 /**
@@ -728,6 +777,78 @@ export const REPORT_UNAVAILABLE =
  */
 export const OPEN_FAILED =
   "This could not be opened in a new tab. Please select the project again and retry.";
+
+/**
+ * NEW, no canvas equivalent (rule 7). What the Project Manager chip says while the person's name is
+ * being looked up, or when the lookup finds nobody or fails: the filter is applied either way, so it
+ * is always visible.
+ */
+export const MANAGER_MSG = {
+  unknown: "Selected project manager",
+} as const;
+
+/**
+ * NEW, no canvas equivalent (rule 7, CONVENTIONS rule 19). The four lists the filters draw from. A failed
+ * read of one of them used to look like an empty list; these name which list failed.
+ */
+export const FILTER_LIST_WHAT = {
+  countries: "The country list",
+  areas: "The area list",
+  states: "The status list",
+  managers: "The project manager search",
+} as const;
+
+export type FilterListName = keyof typeof FILTER_LIST_WHAT;
+
+/**
+ * The messages for the filter lists whose read failed, in a fixed order. `describe` turns an error and the
+ * list's name into the user's sentence (the screen passes `userLoadErrorText`), so this stays pure.
+ * A list with no error (`null` / `undefined`) has no message.
+ */
+export function filterListLoadMessages(
+  errors: Partial<Record<FilterListName, unknown>>,
+  describe: (error: unknown, what: string) => string,
+): { name: FilterListName; text: string }[] {
+  const order: FilterListName[] = ["countries", "areas", "states", "managers"];
+  return order
+    .filter((name) => errors[name] !== null && errors[name] !== undefined)
+    .map((name) => ({ name, text: describe(errors[name], FILTER_LIST_WHAT[name]) }));
+}
+
+/**
+ * Canvas hover texts that the first build left out (PO-014), verbatim from the live canvas
+ * `Project Main Screen.pa.yaml` (solution published 2026-10-15). Shown as a native `title`.
+ *
+ * Deliberately NOT carried: the command bar's `Tooltip: ="Home screen navigation"` is a copy-paste
+ * from another screen (SOURCE DEFECT: the same text sits on the Revenues grid), and the logo's
+ * `VSB Cloud` belongs to the shared header.
+ */
+export const HOVER_TEXT = {
+  /** `lbl_Main_Project_Overview_Context_Filter_ProjectKeyword.Tooltip` — verbatim. */
+  project: "Search (Project name, Short Name, ID)",
+  /** `pcf_Main_Project_Overview_Context_Filter_ProjectManager.Tooltip` — verbatim. */
+  projectManager: "Search for project manager",
+  /** `psf_MainScreen_DetailList_Container_FluentDetailsList.Tooltip` — verbatim. */
+  grid: "Project overview list",
+} as const;
+
+/**
+ * Whether a stored address may be handed to `window.open` (PO-027, R-9).
+ *
+ * The SharePoint and Teams links are free text on the project row, so a value such as
+ * `javascript:...` must not reach `window.open`. Only `http:` and `https:` addresses pass; an
+ * empty, scheme-less or unparseable value does not (a scheme-less value opened a wrong relative
+ * address before, so refusing it is no regression). NEW: the canvas `Launch()` took any text.
+ * Never throws.
+ */
+export function isOpenableUrl(url: string): boolean {
+  try {
+    const { protocol } = new URL(url);
+    return protocol === "https:" || protocol === "http:";
+  } catch {
+    return false;
+  }
+}
 
 /* ══════════════════════════════════════════════════════════════════ paging ══ */
 

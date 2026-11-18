@@ -4,8 +4,10 @@
  *
  * Canvas screen: `Project General Data Screen.pa.yaml` (PM app). Routed at `/project/general`;
  * with no `projectId` it is the canvas `addProject` path (a blank form under "New Project").
- * Creating a project is left out (it fires the Teams/SharePoint site-creation flow), so on that
- * path Save stays disabled with the reason shown (D25).
+ * Creating a project is in scope since the product owner's decision of 20 Oct 2026 (D25): Save on
+ * that path runs `runCreate` (Patch #1 creates the row, a second job re-reads it and writes the
+ * follow-ups, then the screen switches to the new project). The Teams/SharePoint site creation is
+ * triggered on the server and needs nothing from this screen; the approval flows stay out of scope.
  *
  * Structure, following the canvas containers:
  *   `lbl_…_Content_Label`                              "General"
@@ -40,15 +42,16 @@ import {
 import {
   ChoiceField, ConfirmDialog, DateField, DateInput, EmptyState, ErrorBoundary, FIELD_APPEARANCE, FormPanel, LoadingOverlay, PanelButtons, PeoplePicker,
   ReadOnlyField, TextField, UnsavedChangesGuard, WriteFeedback, type PickerPerson, useFieldControlClass,
-  useCanvasRequiredMark, useFieldSkin, useNoInvalidOutline, HINTS,
+  useCanvasRequiredMark, useFieldSkin, useNoInvalidOutline, HINTS, PM_POPUP_IDS,
 } from "@/components";
 import { useSession } from "@/app/SessionContext";
 import { MODERN_DATE_PICKER_FORMAT } from "@/domain/canvasDate";
 import { useCurrentUser } from "@/app/useCurrentUser";
 import { palette, space } from "@/theme/tokens";
 import { CANVAS_TEXT, usePmLayout } from "./pmLayout";
+import { ClusterChangeInfo } from "./ClusterChangeInfo";
 import {
-  CALENDAR_ADD_SOURCE, CLUSTER_PANEL_FIELDS, CLUSTER_STATE_LABEL, DELETE_SHAREHOLDER_DIALOG,
+  CALENDAR_ADD_SOURCE, CLUSTER_PANEL_FIELDS, CLUSTER_PANEL_WIDTH, CLUSTER_STATE_LABEL, DELETE_SHAREHOLDER_DIALOG,
   DEVELOPMENT_TYPE_LABEL, GD_LABELS, MSG, PROJECT_TYPE_LABEL, SHAREHOLDER_ENTITY_TYPE_LABEL,
   SPV_LEGAL_STRUCTURE_LABEL, START_CLUSTER_OPTIONS, TECHNOLOGY_OPTIONS,
   acquisitionPriceLabel, applyCalendarAdd, applyFrenchMunicipality, applyGermanMunicipality,
@@ -152,6 +155,13 @@ const useStyles = makeStyles({
    */
   acquisitionPriceError: {
     "&.fui-Field__validationMessage.fui-Field__validationMessage": { whiteSpace: "normal", overflow: "visible", lineHeight: "13px" },
+  },
+  /**
+   * GD-012: `lbl_…_TerrainSize_ErrorMessage` (A:3992) and `lbl_…_Manager_ErrMessage` (A:2095) are `Size: =9` (12 px); the
+   * other body error labels are ExtraExtraSmall (10.67 px). The doubled class outranks the 10.67 px rule on `body`.
+   */
+  errorTwelve: {
+    "&.fui-Field__validationMessage.fui-Field__validationMessage": { fontSize: "12px" },
   },
   placement: {
     display: "flex", flexWrap: "wrap", alignItems: "stretch",
@@ -428,12 +438,13 @@ export default function GeneralDataScreen() {
   const trackings = trackingsQ.data;
   const ctx = { form: live, ref, project: snapshot, entities, hasPersistedShareholders: shareholdersQ.data.length > 0 };
   const errors = fieldErrors(ctx);
-  const required = requiredFieldsContent(ctx);
+  // GD-022: `errors` is computed once and handed to the two functions that used to compute it again.
+  const required = requiredFieldsContent(ctx, errors);
   const isDirty = isFormDirty(live, baseline) || shareholdersDirty || deletedAny;
   // `DataSourceInfo` / `RecordInfo` have no SDK equivalent: Dataverse decides (D1, serverEnforcedProvider).
   const perms = { canCreate: true, canEdit: true };
   const saving = writes.progress !== null;
-  const saveEnabled = !saving && canSave({ ...ctx, perms, isDirty });
+  const saveEnabled = !saving && canSave({ ...ctx, perms, isDirty }, errors);
 
   const locks = formLocks(live, snapshot);
   const modes = fieldModes({ clusterStateOrder: snapshot?.clusterStateOrder ?? null, environmentName: ref.environmentName });
@@ -605,7 +616,7 @@ export default function GeneralDataScreen() {
   }
 
   /*
-   * The municipality combobox, as the canvas `ModernCombobox@1.1.1` (`cmb_…_Municipality_Germany` /
+   * The municipality combobox, as the canvas `ModernCombobox@1.1.2` (live canvas A:3625 and A:3662; the on-disk 1.21.709 copy says 1.1.1) (`cmb_…_Municipality_Germany` /
    * `_France_1`, Y:3622-3715):
    *  - the chosen municipality (`DefaultSelectedItems: LookUp(…, municipality = locMunicipality)`) is
    *    the box's value; a click (or focus) does NOT put a caret into it to edit or delete — the box
@@ -769,7 +780,7 @@ export default function GeneralDataScreen() {
             onChange={(next) => patch({ managerEntraRowId: next[0]?.id ?? null, managerName: next[0]?.displayName ?? null })}
             onPick={(p) => { remember(p); return [p]; }}
             maxPeople={1} term={managerSearch} onTermChange={setManagerSearch}
-            suggestions={managers.data} required errorMessage={errors.manager} disabled={saving}
+            suggestions={managers.data} required errorMessage={errors.manager} errorClassName={s.errorTwelve} disabled={saving}
           />
           <PeoplePicker
             label={GD_LABELS.deputyProjectManager} placeholder={GD_LABELS.deputyProjectManagerHint}
@@ -811,7 +822,7 @@ export default function GeneralDataScreen() {
                 options={START_CLUSTER_OPTIONS.map((n) => ({ value: String(n), label: CLUSTER_STATE_LABEL[n]! }))}
                 onSelect={(v) => patch({ startCluster: v ? Number(v) : null })}
               />
-              {/* `ModernDatePicker@1.0.1`, no `Format`: the long date (modern controls sweep). */}
+              {/* `ModernDatePicker@1.0.2` (live canvas A:2786 / A:7389 ff.; the on-disk 1.21.709 copy says 1.0.1), no `Format`: the long date (modern controls sweep). */}
               <DateField
                 label={GD_LABELS.acquisitionDate} required
                 error={errors.acquisitionDate}
@@ -875,7 +886,7 @@ export default function GeneralDataScreen() {
                 />
               ) : (
                 <div>
-                  {/* `cmb_…_Municipality_Germany` / `_France_1` are `ModernCombobox@1.1.1`: a searchable list. */}
+                  {/* `cmb_…_Municipality_Germany` / `_France_1` are `ModernCombobox@1.1.2` (live canvas A:3625, A:3662; 1.21.709 says 1.1.1): a searchable list. */}
                   <Field
                     className={skin.field}
                     label={GD_LABELS.municipality} required={muniRequired}
@@ -923,7 +934,7 @@ export default function GeneralDataScreen() {
                 <TextField
                   label={GD_LABELS.terrainSize} required value={live.terrainSize} disabled={saving}
                   onChange={(v) => patch({ terrainSize: v })}
-                  error={errors.terrainSize}
+                  error={errors.terrainSize} errorClassName={s.errorTwelve}
                   ariaLabel="txt_GeneralData_DisplayProject_Body_General_Content_TerrainSize"
                   testId="txt_GeneralData_DisplayProject_Body_General_Content_TerrainSize"
                 />
@@ -949,6 +960,8 @@ export default function GeneralDataScreen() {
           <div className={s.mapCell}>
             <div
               className={s.map}
+              // GD-025: a bare `div` with an `aria-label` is not exposed to assistive technology; the role makes it a named region.
+              role="region"
               aria-label="map_con_GeneralData_DisplayProject_Body_General_Content_Map"
               data-testid="map_con_GeneralData_DisplayProject_Body_General_Content_Map"
             >
@@ -1095,6 +1108,10 @@ export default function GeneralDataScreen() {
         open={draft !== null}
         title={GD_LABELS.shareholderPanelTitle}
         width="narrow"
+        // GD-017: `con_GeneralData_RightPanel_ShareholdingEntity_CommandBar` (A:6226-6253), a PowerCAT CommandBar whose
+        // single item is `ItemKey: "closeKey"` (ChromeClose); the id is `<control>-<ItemKey>`. Its DisplayName "Home" is a
+        // copy-paste, so the label stays the shared "Close panel".
+        closeTestId="con_GeneralData_RightPanel_ShareholdingEntity_CommandBar-closeKey"
         onDismiss={() => setDraft(null)}
         footer={<PanelButtons
           onSave={saveDraft} onCancel={() => setDraft(null)}
@@ -1128,6 +1145,8 @@ export default function GeneralDataScreen() {
                   <TextField
                     label={GD_LABELS.customShareholderEntity} required value={draft.customName}
                     maxLength={DEFAULT_MAX_LENGTH} error={panelErrors.customName}
+                    // GD-010: A:6504 `Len(Trim(txt_…_CustomName.Text))`; every other counter on this screen is plain `Len(Text)`.
+                    countMode="powerFxTrim"
                     onChange={(v) => setDraft({ ...draft, customName: v, dirty: true })}
                     testId="txt_GeneralData_RightPanel_ShareholdingEntity_InpForm_BodyForm_CustomName"
                   />
@@ -1149,7 +1168,8 @@ export default function GeneralDataScreen() {
       <FormPanel
         open={clusterPanel !== null}
         title={GD_LABELS.clusterChange}
-        width="narrow"
+        // GD-014: `con_ClusterChange_RightPanel Width: =400` (A:6990); "narrow" would be 450.
+        width={CLUSTER_PANEL_WIDTH}
         closeTestId="ico_ClusterChange_RightPanel_Header_Close"
         closeLabel={GD_LABELS.closeClusterChange}
         // `ico_ClusterChange_RightPanel_Header_Close.Tooltip: ="Close"` (the other panels say "Cancel").
@@ -1167,7 +1187,8 @@ export default function GeneralDataScreen() {
       >
         {clusterPanel ? (
           <div className={s.panelFields}>
-            <Text data-testid="lbl_ClusterChange_RightPanel_Info">{clusterPanelInfo(clusterPanel)}</Text>
+            {/* GD-015: the canvas info box (fill, radius 3, icon), A:7271-7332. */}
+            <ClusterChangeInfo text={clusterPanelInfo(clusterPanel)} />
             {CLUSTER_PANEL_FIELDS.filter((f) => clusterPanelVisible(f, clusterPanel)).map((field) => (
               <Field
                 key={field} label={clusterLabel(field)} required
@@ -1184,7 +1205,7 @@ export default function GeneralDataScreen() {
                       onClick={() => setClusterPanel(applyCalendarAdd(clusterPanel, field, durations))}
                     />
                   ) : null}
-                  {/* `ModernDatePicker@1.0.1`, no `Format`: the long date (modern controls sweep). */}
+                  {/* `ModernDatePicker@1.0.2` (live canvas A:2786 / A:7389 ff.; the on-disk 1.21.709 copy says 1.0.1), no `Format`: the long date (modern controls sweep). */}
                   <DateInput
                     className={s.panelDate}
                     format={MODERN_DATE_PICKER_FORMAT}
@@ -1220,6 +1241,8 @@ export default function GeneralDataScreen() {
         // renders), `Width: =128`. Not red. Cancel (:221-246) is ConfirmDialog's default: white, themePrimary outline.
         confirmIcon="checkmark"
         confirmWidth={128}
+        // GD-016: the three pop-ups are instances of the PM `cmp_PopUp_Confirmation`, whose inner controls carry these names.
+        testIds={PM_POPUP_IDS}
         onConfirm={() => void confirmDelete()}
         onCancel={() => setDeleteTarget(null)}
       />
@@ -1230,6 +1253,7 @@ export default function GeneralDataScreen() {
         description={LOCATION_DIALOG.description}
         confirmText={LOCATION_DIALOG.confirm}
         cancelText={LOCATION_DIALOG.cancel}
+        testIds={PM_POPUP_IDS}
         onConfirm={() => {
           const p = pendingLocation;
           setPendingLocation(null);
@@ -1238,7 +1262,7 @@ export default function GeneralDataScreen() {
         onCancel={() => setPendingLocation(null)}
       />
       {/* `cmp_PopUp_Leave_…_Confirmation` — the shared leave guard (D35, PO X1). */}
-      <UnsavedChangesGuard when={shouldConfirmLeave(isDirty)} dialog={LEAVE_DIALOG} />
+      <UnsavedChangesGuard when={shouldConfirmLeave(isDirty)} dialog={LEAVE_DIALOG} testIds={PM_POPUP_IDS} />
     </div>
   );
 }

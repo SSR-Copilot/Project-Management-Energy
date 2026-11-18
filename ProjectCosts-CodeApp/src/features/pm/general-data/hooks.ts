@@ -35,6 +35,7 @@ import { ES, ES_ADMIN } from "@/data/dataverseNames";
 import { qk } from "@/data/keys";
 import type { ScreenData } from "@/data/notConnected";
 import { usePlanWrite } from "@/data/usePlanWrite";
+import { useDebouncedValue } from "@/features/shared/useDebouncedValue";
 import { searchEntraPeople, getEntraPeople } from "@/data/adminGatesApprovals";
 import { listChecklistGates } from "@/data/checklist";
 import { loadMilestoneDurations } from "@/data/costBook";
@@ -129,12 +130,19 @@ export function useStateTrackings(projectId: string | undefined): ScreenData<Tra
   return out(q, NONE as TrackingRow[]);
 }
 
+/** How long the Manager / Deputy search waits for a pause in typing (GD-024). */
+export const ENTRA_SEARCH_DEBOUNCE_MS = 250;
+
 /**
  * `pcf_…_PeoplePicker.OnSearch` — `Search(Filter('Microsoft Entra IDs', 'Account Enabled' = Yes),
  * Trim(text), …)`, the shared query. Blank text searches nothing (`IsBlankOrError(Trim(text))`).
  */
 export function useEntraSearch(search: string): ScreenData<Persona[]> {
-  const term = search.trim();
+  // GD-024: wait for a pause in typing instead of one query per keystroke (the canvas PCF searches per call).
+  // A blank box is not delayed: it searches nothing at once.
+  const typed = search.trim();
+  const settled = useDebouncedValue(typed, ENTRA_SEARCH_DEBOUNCE_MS);
+  const term = typed === "" ? "" : settled;
   const q = useQuery({
     queryKey: qk.entraPeopleSearch(term),
     queryFn: () => searchEntraPeople(term),

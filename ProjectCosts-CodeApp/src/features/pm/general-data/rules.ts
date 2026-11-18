@@ -1192,6 +1192,12 @@ export function mapMarker(
 /**
  * `OnMapClick`: `If(Or(locChangedLatitude <> Self.ClickedLocation.Latitude, locChangedLongitude <> …Longitude),
  * UpdateContext({locLocationChanged: true}))` (Y:4423-4433) — a click on a different point opens the confirmation.
+ *
+ * DIVERGENCE: the canvas compares the click with `locChangedLatitude` / `locChangedLongitude`, the project's
+ * position as loaded, then the last CONFIRMED click or the saved value (live canvas A:4412, A:8773, A:8778; typing
+ * only updates `locChangedLatitude2`, A:4187). This function compares the click with the TYPED Latitude / Longitude.
+ * Only one case differs: type a new coordinate, then click the project's original point. The canvas shows no
+ * dialog; this app shows one. Recorded in file 13 (proposed, not approved); no behaviour is changed here.
  */
 export function shouldConfirmMapLocation(
   clicked: { lat: number; lng: number },
@@ -1375,9 +1381,11 @@ const groupedIntegerShape = (text: string, lang: Lang): boolean => {
   return new RegExp(`^[+-]?\\d+(?:[${cls}]\\d+)*$`).test(text.trim());
 };
 
-/** Every visible error label's text, in the canvas `ibtn` order. */
-export function validationMessages(ctx: ValidationContext): string[] {
-  const errors = fieldErrors(ctx);
+/**
+ * Every visible error label's text, in the canvas `ibtn` order. `errors` is `fieldErrors(ctx)` when the caller
+ * has already computed it for the same context (GD-022: the screen validates once per render); the result is the same.
+ */
+export function validationMessages(ctx: ValidationContext, errors: Partial<Record<FieldKey, string>> = fieldErrors(ctx)): string[] {
   return REQUIRED_FIELDS_ORDER.flatMap((k) => (errors[k] ? [errors[k]!] : []));
 }
 
@@ -1385,8 +1393,7 @@ export function validationMessages(ctx: ValidationContext): string[] {
  * `ibtn_…_Requered_Fileds.Content` (Y:5850-5945): the same list, with the terrain row's own text
  * and the 100 % row after Longitude. Empty → the "Required fields" hint is hidden.
  */
-export function requiredFieldsContent(ctx: ValidationContext): string[] {
-  const errors = fieldErrors(ctx);
+export function requiredFieldsContent(ctx: ValidationContext, errors: Partial<Record<FieldKey, string>> = fieldErrors(ctx)): string[] {
   const out: string[] = [];
   for (const k of REQUIRED_FIELDS_ORDER) {
     if (errors[k]) out.push(k === "terrainSize" ? MSG.terrainRequiredFields : errors[k]!);
@@ -1411,7 +1418,7 @@ export interface SavePermissions {
 export function canSave(ctx: ValidationContext & {
   perms: SavePermissions;
   isDirty: boolean;
-}): boolean {
+}, errors?: Partial<Record<FieldKey, string>>): boolean {
   const { perms, isDirty, project, entities, form } = ctx;
   const permitted = project?.id ? perms.canEdit : perms.canCreate;
   if (!permitted || !isDirty) return false;
@@ -1420,7 +1427,7 @@ export function canSave(ctx: ValidationContext & {
   if (isBlank(form.latitude.trim()) || isBlank(form.longitude.trim())) return false;
   if (entities.length === 0 && !ctx.hasPersistedShareholders) return false;
   if (!isShareholdingComplete(entities)) return false;
-  return validationMessages(ctx).length === 0;
+  return validationMessages(ctx, errors).length === 0;
 }
 
 /* ══════════════════════════════════════════════ start-cluster classification ════ */
@@ -2206,6 +2213,9 @@ export const recordStatusLabel = (statecode: number | null | undefined): string 
   statecode === 0 || statecode === null || statecode === undefined ? "Active" : "Inactive";
 
 /* ═══════════════════════════════════════════════════════ screen captions ════ */
+
+/** `con_ClusterChange_RightPanel.Width` (live canvas A:6990): the Start-Cluster change panel is 400 px wide. */
+export const CLUSTER_PANEL_WIDTH = 400;
 
 /**
  * Every caption the screen renders, transcribed from `Project General Data Screen.pa.yaml` (and,

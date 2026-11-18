@@ -285,6 +285,30 @@ const ICONS: Record<ConfirmDialogIcon, ReactNode> = {
   none: null,
 };
 
+/**
+ * The `data-testid` of the three controls every confirmation shares. The defaults below are the ids this dialog
+ * has always carried (a Project Costs name for the ✕); a caller whose canvas component names them differently
+ * passes `testIds` (GD-016) and everything else keeps its ids.
+ */
+export interface ConfirmDialogTestIds {
+  /** The header ✕. Default `ico_PopUpConfirmation_BodyHeader_3`. */
+  close?: string;
+  /** The Confirm button. Default `confirm-dialog-confirm`. */
+  confirm?: string;
+  /** The Cancel button. Default `confirm-dialog-cancel`. */
+  cancel?: string;
+}
+
+/**
+ * The control names of the PM app's `cmp_PopUp_Confirmation` (`Components/cmp_PopUp_Confirmation.pa.yaml`, lines
+ * 122, 193, 221), shared by every PM instance (General Data's delete, location and leave pop-ups among them).
+ */
+export const PM_POPUP_IDS = {
+  close: "ico_PopUpConfirmation_BodyHeader",
+  confirm: "pcf_PopUpConfirmation_BodyButtons_Confirm",
+  cancel: "pcf_PopUpConfirmation_BodyButtons_Cancel",
+} as const satisfies ConfirmDialogTestIds;
+
 export interface ConfirmDialogProps {
   open: boolean;
   title: string;
@@ -349,6 +373,8 @@ export interface ConfirmDialogProps {
    * Semibold title, and no focus ring on the ✕ (the canvas icon has none). Off by default.
    */
   classicPopUp?: boolean;
+  /** Optional: the canvas names of the ✕, Confirm and Cancel (`PM_POPUP_IDS` for the PM pop-ups). Omitted, the ids are unchanged. */
+  testIds?: ConfirmDialogTestIds;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -362,7 +388,7 @@ export function ConfirmDialog({
   confirmWidth = 96,
   boxHeight, textHeight,
   error, lockWhileBusy = false, canvasFooter = false, footerDivider = true, darkScrim = false, compact = false,
-  classicPopUp = false, onConfirm, onCancel,
+  classicPopUp = false, testIds, onConfirm, onCancel,
 }: ConfirmDialogProps) {
   const styles = useStyles();
   const locked = lockWhileBusy && busy;
@@ -414,7 +440,7 @@ export function ConfirmDialog({
           <h2 className={mergeClasses(styles.title, pmHeader && styles.titleClassic)}>{title}</h2>
           {/* `ico_PopUpConfirmation_BodyHeader_3.OnSelect: =…OnCancel()` — the ✕ cancels. */}
           <button type="button" className={mergeClasses(styles.close, pmHeader && styles.closeClassic)} aria-label="Close" title={HINTS.cancel}
-            data-testid="ico_PopUpConfirmation_BodyHeader_3" onClick={onCancel} disabled={locked}>
+            data-testid={testIds?.close ?? "ico_PopUpConfirmation_BodyHeader_3"} onClick={onCancel} disabled={locked}>
             <DismissRegular className={styles.closeIcon} />
           </button>
         </div>
@@ -458,7 +484,7 @@ export function ConfirmDialog({
              * name, which is what it carries everywhere else in this app.
              */
             aria-label={confirmText}
-            data-testid="confirm-dialog-confirm"
+            data-testid={testIds?.confirm ?? "confirm-dialog-confirm"}
           >
             {canvasFooter && confirmIcon === "delete" ? <DeleteFilled /> : ICONS[confirmIcon]}
             {confirmText}
@@ -474,7 +500,7 @@ export function ConfirmDialog({
               onClick={onCancel}
               disabled={busy}
               aria-label={cancelText}
-              data-testid="confirm-dialog-cancel"
+              data-testid={testIds?.cancel ?? "confirm-dialog-cancel"}
             >
               {ICONS[cancelIcon]}
               {cancelText}

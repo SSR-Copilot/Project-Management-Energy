@@ -8,7 +8,8 @@ import {
   costModuleLock, isCostModuleLocked, commandBarState, simulateGate, SIMULATE_MSG,
   totalPages, clampPage, pagerLabels, parseCriteria, serialiseCriteria, filterPeople,
   COST_LOCK, DELETE_DIALOG, SPO_MSG, applyOptimisticDelete, deleteMessages,
-  deleteMessagesCanvasParity, isPagerVisible,
+  deleteMessagesCanvasParity, isPagerVisible, isOpenableUrl, filterListLoadMessages,
+  FILTER_LIST_WHAT, resolveAppliedCapacity, EMPTY_APPLIED_CAPACITY,
   type ProjectFilter, type SelectedProject, type PersonOption,
 } from "./rules";
 import { APPROVAL_STATE, TECHNOLOGY } from "@/domain/project";
@@ -511,7 +512,7 @@ describe("commandBarState", () => {
     expect(hr.viewTeams.icon).toBe("View");
   });
 
-  it("UT-OV-054 needs BOTH SPO urls, not either", () => {
+  it("UT-OV-099 needs BOTH SPO urls, not either", () => {
     const one = commandBarState({
       ...base,
       selected: { ...selected, countryName: "Croatia", spoSharepointUrl: "https://x", spoTeamsUrl: null },
@@ -519,7 +520,7 @@ describe("commandBarState", () => {
     expect(one.viewSharepoint.enabled).toBe(false);
   });
 
-  it("UT-OV-057 SKELETON FIX 3: Dashboard ignores the selection", () => {
+  it("UT-OV-100 SKELETON FIX 3: Dashboard ignores the selection", () => {
     // The canvas item declares no ItemEnabled, so PowerCAT leaves it enabled.
     const s = commandBarState({ ...base, selected: null });
     expect(s.viewDashboardFunctionality.enabled).toBe(true);
@@ -832,5 +833,94 @@ describe("clampPage, as it actually behaves", () => {
       totalRows: "Total Rows: 0",
       page: "Page: 1 from 1",
     });
+  });
+});
+
+/* ═══════ Parity fixes, batch A6 (PO-027) ═══════ */
+
+describe("isOpenableUrl", () => {
+  it("UT-OVFIX-080 accepts http and https, refuses every other scheme, empty and garbage", () => {
+    expect(isOpenableUrl("https://vsb.sharepoint.com/sites/p1")).toBe(true);
+    expect(isOpenableUrl("http://intranet/site")).toBe(true);
+    expect(isOpenableUrl("HTTPS://VSB.example")).toBe(true);
+    for (const bad of [
+      "javascript:alert(1)", "JavaScript:alert(1)", " javascript:alert(1)", "data:text/html,<b>x</b>",
+      "vbscript:msgbox(1)", "file:///c:/x", "mailto:a@b.c", "ftp://host/x", "",
+      "not a url", "sharepoint.com/sites/p1", "//host/path",
+    ]) {
+      expect(isOpenableUrl(bad), bad).toBe(false);
+    }
+  });
+});
+
+/* ═══════ Parity fixes, batch A5 (PO-031) ═══════ */
+
+describe("filterListLoadMessages", () => {
+  const describeError = (_error: unknown, what: string) => `${what} could not be loaded.`;
+
+  it("UT-OVFIX-075 names exactly the lists that failed, in a fixed order, and says nothing for the rest", () => {
+    expect(filterListLoadMessages({ countries: null, areas: undefined, states: null, managers: null }, describeError))
+      .toEqual([]);
+    expect(filterListLoadMessages(
+      { managers: new Error("m"), states: new Error("s"), countries: new Error("c") }, describeError,
+    )).toEqual([
+      { name: "countries", text: "The country list could not be loaded." },
+      { name: "states", text: "The status list could not be loaded." },
+      { name: "managers", text: "The project manager search could not be loaded." },
+    ]);
+    // The error itself reaches the describer, so the screen can derive the hint from it.
+    const seen: unknown[] = [];
+    const boom = new Error("boom");
+    filterListLoadMessages({ areas: boom }, (e, what) => { seen.push(e); return what; });
+    expect(seen).toEqual([boom]);
+    expect(Object.values(FILTER_LIST_WHAT)).toEqual([
+      "The country list", "The area list", "The status list", "The project manager search",
+    ]);
+  });
+});
+
+/* ═══════ Parity fixes, batch A4 (PO-007, PO-025) ═══════ */
+
+describe("resolveAppliedCapacity", () => {
+  const last = { capacity: "12", capacityOperator: "Greater than" } as const;
+  const none = EMPTY_APPLIED_CAPACITY;
+
+  it("UT-OVFIX-050 a valid number is applied as typed", () => {
+    expect(resolveAppliedCapacity({ capacity: "125.5", capacityOperator: "Less than" }, last))
+      .toEqual({ capacity: "125.5", capacityOperator: "Less than" });
+  });
+
+  it("UT-OVFIX-051 a text that is not a number leaves the last applied capacity in force (the canvas OnChange)", () => {
+    for (const bad of ["12a", "abc", "1.234", "1,2,3", "--1"]) {
+      expect(resolveAppliedCapacity({ capacity: bad, capacityOperator: "Equals" }, last), bad).toBe(last);
+    }
+    // With nothing applied before, nothing is applied: not "every project under a red label" by accident of omission.
+    expect(resolveAppliedCapacity({ capacity: "12a", capacityOperator: "" }, none)).toBe(none);
+  });
+
+  it("UT-OVFIX-052 a blank box clears the filter and its operator, whatever was applied", () => {
+    expect(resolveAppliedCapacity({ capacity: "", capacityOperator: "Greater than" }, last)).toEqual(none);
+    expect(resolveAppliedCapacity({ capacity: "   ", capacityOperator: "" }, last)).toEqual(none);
+  });
+
+  it("UT-OVFIX-053 a valid number with no operator gets the canvas default, Equals", () => {
+    expect(resolveAppliedCapacity({ capacity: "7", capacityOperator: "" }, none))
+      .toEqual({ capacity: "7", capacityOperator: "Equals" });
+  });
+
+  it("UT-OVFIX-054 a negative number is valid, as in the canvas (B-2)", () => {
+    expect(resolveAppliedCapacity({ capacity: "-3.5", capacityOperator: "Equals" }, last))
+      .toEqual({ capacity: "-3.5", capacityOperator: "Equals" });
+  });
+
+  it("UT-OVFIX-055 three decimals are not a number, as IsTwoDecimal says", () => {
+    expect(resolveAppliedCapacity({ capacity: "1.234", capacityOperator: "Equals" }, last)).toBe(last);
+    expect(resolveAppliedCapacity({ capacity: "1.23", capacityOperator: "Equals" }, last).capacity).toBe("1.23");
+  });
+
+  it("UT-OVFIX-056 the locale decides the decimal separator", () => {
+    const input = { capacity: "12,5", capacityOperator: "Equals" } as const;
+    expect(resolveAppliedCapacity(input, last, "de-DE").capacity).toBe("12,5");
+    expect(resolveAppliedCapacity(input, last, "en-GB")).toBe(last);
   });
 });

@@ -6,7 +6,7 @@ export { CommandBar, useCommandBarStyles } from "./CommandBar";
 export { useCommandRowStyles } from "./commandRow";
 export { CommandSlot, CommandSlotProvider } from "./CommandSlot";
 export type { Command, CommandIcon } from "./CommandBar";
-export { ConfirmDialog } from "./ConfirmDialog";
+export { ConfirmDialog, PM_POPUP_IDS, type ConfirmDialogTestIds } from "./ConfirmDialog";
 export { InformationPopUp } from "./InformationPopUp";
 export type { InformationPopUpProps } from "./InformationPopUp";
 export { EmptyState } from "./EmptyState";

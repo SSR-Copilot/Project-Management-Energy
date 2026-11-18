@@ -1,5 +1,7 @@
 # Gap analysis — Project General Data Screen (also New Project)
 
+> **SUPERSEDED (state as of 18 Nov 2026).** This analysis was written when the screen was "UI built, not connected (D14)". The screen is connected and creates projects (D25, 19-20 Oct 2026); the status columns below are historical. Current state: `ProjectDocs/app-docs/02-OPEN-DECISIONS.md` (D25, D133) and `13-CODE-APP-IMPROVEMENTS-OVER-CANVAS.md` (Project General Data).
+
 - Canvas: `ProjectDocs/_extracted/msapp/projectmanagement/Src/Project General Data Screen.pa.yaml` (8 815 lines, solution 1.21.709; Y:n = YAML line). App globals `Src/App.pa.yaml` (A:n): `gblAppConstants.DefaultMaxLength = 55` (A:1184), `gblAppResx.InputBlank = "Input must not be blank"` (A:1633), `NumericOneDecimals` (A:1629), `colCustomChoiceValues` (A:612), `colMilestonesAssumptions` (A:1503). `colAssumptionsGermanyTaxSQL` / `colAssumptionsFranceSQL` are built on `App Loading Screen` from Dataverse `'Assumptions Local Tax Germanies'` / `'… Frances'` (batched by `vsb_row_num`).
 - Components used: `cmp_Header`, `cmp_Left_Navigation`, `cmp_PopUp_Confirmation` ×3, `cmp_PopUp_Information`, `cmp_PopUp_Loading` ×3, `cmp_ReportErrorRightPanel`, `fn_Numeric`, `fn_Numeric_With_Separtors`, `fn_Common`; PCFs `cat_PowerCAT.PeoplePicker` ×2, `cat_PowerCAT.CommandBar`, `cat_PowerCAT.Icon`; `Map@1.8.27`.
 - Code: `ProjectCosts-CodeApp/src/features/pm/general-data/` — `Screen.tsx` (S:n), `rules.ts` (R:n), `hooks.ts` (H:n). Route `/project/general[?projectId=]` (`src/app/routes.tsx:94-128`); no `projectId` = New Project.

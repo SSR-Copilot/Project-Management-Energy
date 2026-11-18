@@ -1,0 +1,9 @@
+ComponentDefinitions:
+  cmp_Demo:
+    Properties:
+      Height: =40
+    Children:
+      - lbl_Demo:
+          Control: Label@2.5.1
+          Properties:
+            Text: ="Demo"

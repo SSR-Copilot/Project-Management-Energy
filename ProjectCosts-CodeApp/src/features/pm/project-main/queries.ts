@@ -9,8 +9,10 @@
  * No React in this file: it is imported by the entry bundle's prefetch step.
  */
 import { queryOptions } from "@tanstack/react-query";
-import { listCountries, listProjectStates, loadProjectPage } from "@/data/projects";
-import type { ProjectFilter, SortState } from "./rules";
+import {
+  listCountries, listProjectStates, loadProjectPage, loadProjectStateOrder,
+} from "@/data/projects";
+import { EMPTY_APPLIED_CAPACITY, resolveAppliedCapacity, type ProjectFilter, type SortState } from "./rules";
 
 /** How long a fetched page counts as fresh — for the page on screen AND the prefetched next one. */
 export const PROJECT_PAGE_STALE_MS = 30 * 1000;
@@ -25,6 +27,17 @@ export interface ProjectPageArgs {
 }
 
 /**
+ * The filter as the REQUEST carries it (PO-007): a capacity that is not a number is dropped, the same way the
+ * screen resolves it on first load. The screen hands in a filter it has already resolved (which this leaves
+ * as it is), the boot prefetch hands in the raw one from the address, so a malformed `?cap=` link prefetches
+ * under the key the screen then reads.
+ */
+const requestedFilter = (args: ProjectPageArgs): ProjectFilter => ({
+  ...args.filter,
+  ...resolveAppliedCapacity(args.filter, EMPTY_APPLIED_CAPACITY, args.locale),
+});
+
+/**
  * The one definition of a project page's cache key.
  *
  * The query on screen and the next-page prefetch both build their key here. A prefetch whose
@@ -34,7 +47,7 @@ export interface ProjectPageArgs {
 export function projectPageKey(args: ProjectPageArgs) {
   return [
     "projectPage",
-    args.filter, args.sort.col, args.sort.asc, args.page, args.scopeFilter ?? "",
+    requestedFilter(args), args.sort.col, args.sort.asc, args.page, args.scopeFilter ?? "",
   ] as const;
 }
 
@@ -43,7 +56,7 @@ export function projectPageOptions(args: ProjectPageArgs) {
   return queryOptions({
     queryKey: projectPageKey(args),
     queryFn: () => loadProjectPage({
-      filter: args.filter, sort: args.sort, page: args.page,
+      filter: requestedFilter(args), sort: args.sort, page: args.page,
       scopeFilter: args.scopeFilter, locale: args.locale,
     }),
     staleTime: PROJECT_PAGE_STALE_MS,
@@ -60,5 +73,16 @@ export const countriesQueryOptions = () => queryOptions({
 export const projectStatesQueryOptions = () => queryOptions({
   queryKey: ["projectStates"] as const,
   queryFn: listProjectStates,
+  staleTime: 30 * 60 * 1000,
+});
+
+/**
+ * The selected project's cluster-state `Order`, for the Simulate gate. One definition for the hook
+ * that reads it when a row is selected AND for the Simulate click, which awaits it through the query
+ * cache (`ensureQueryData`) instead of reading a possibly stale render value.
+ */
+export const projectStateOrderOptions = (clusterStateId: string | null) => queryOptions({
+  queryKey: ["projectStateOrder", clusterStateId ?? "none"] as const,
+  queryFn: () => loadProjectStateOrder(clusterStateId),
   staleTime: 30 * 60 * 1000,
 });

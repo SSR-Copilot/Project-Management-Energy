@@ -99,6 +99,34 @@ afterEach(() => { cleanup(); state.run.mockReset(); state.run.mockImplementation
 
 const SAVE = "pcf_btn_GeneralData_DisplayProject_Body_Buttons_Save";
 
+/**
+ * The declarations the cascade gives an element in jsdom: every Griffel rule whose selector matches it, the most
+ * specific (most classes) winning, later rules winning a tie. The shared `appliedRules` reads single-class selectors
+ * only, so it cannot see the doubled-class rules these error labels use.
+ */
+function declarationsFor(el: Element): Record<string, string> {
+  const best = new Map<string, { weight: number; value: string }>();
+  const visit = (rules: CSSRuleList) => {
+    for (const rule of Array.from(rules)) {
+      if (rule instanceof CSSStyleRule) {
+        let hit = false;
+        try { hit = el.matches(rule.selectorText); } catch { hit = false; }
+        if (!hit) continue;
+        const weight = (rule.selectorText.match(/[.#[:]/g) ?? []).length;
+        for (let i = 0; i < rule.style.length; i++) {
+          const prop = rule.style[i]!;
+          const prev = best.get(prop);
+          if (!prev || weight >= prev.weight) best.set(prop, { weight, value: rule.style.getPropertyValue(prop) });
+        }
+      } else if ("cssRules" in rule && !(rule instanceof CSSMediaRule)) {
+        visit((rule as CSSGroupingRule).cssRules);
+      }
+    }
+  };
+  for (const sheet of Array.from(document.styleSheets)) visit(sheet.cssRules);
+  return Object.fromEntries([...best].map(([k, v]) => [k, v.value]));
+}
+
 describe("UT-GDATA General Data screen (connected)", () => {
   it("UT-GDATA-901 renders the canvas captions and the record's values", () => {
     renderScreen("edit");
@@ -293,5 +321,74 @@ describe("UT-GDATA General Data screen (connected)", () => {
     expect(screen.getByTestId("drp_GeneralData_RightPanel_ShareholdingEntity_InpForm_BodyForm_EntityName").getAttribute("aria-label")).toBe("Shareholder Entity");
     // Not dirty yet → Save disabled.
     expect(screen.getByTestId("pcf_btn_GeneralData_RightPanel_ShareholdingEntity_Form_Buttons_Save").hasAttribute("disabled")).toBe(true);
+  });
+
+  it("UT-GDATA-106 the Custom Shareholder Entity counter counts Len(Trim(text)) (A:6504)", async () => {
+    renderScreen("edit");
+    fireEvent.click(screen.getByRole("button", { name: "btn_general_data_shareholding_entity_Edit" }));
+    fireEvent.click(await screen.findByTestId("drp_GeneralData_RightPanel_ShareholdingEntity_InpForm_BodyForm_EntityName"));
+    fireEvent.click(await screen.findByRole("option", { name: "Third Party" }));
+    const custom = await screen.findByTestId("txt_GeneralData_RightPanel_ShareholdingEntity_InpForm_BodyForm_CustomName");
+    // The counter is a sibling of the Field, inside the wrapper `TextField` renders.
+    const counter = () => (custom.closest(".fui-Field")!.parentElement as HTMLElement).textContent ?? "";
+    fireEvent.change(custom, { target: { value: "abc " } });
+    await waitFor(() => expect(counter()).toContain("3/55"));
+    // Power Fx Trim also collapses runs of inner spaces: "  a   b " is "a b", 3 characters.
+    fireEvent.change(custom, { target: { value: "  a   b " } });
+    await waitFor(() => expect(counter()).toContain("3/55"));
+  });
+
+  it("UT-GDATA-111 the shareholding panel's close button carries the canvas CommandBar identity (A:6226-6253)", async () => {
+    renderScreen("edit");
+    fireEvent.click(screen.getByRole("button", { name: "btn_general_data_shareholding_entity_Edit" }));
+    await screen.findByTestId("txt_GeneralData_RightPanel_ShareholdingEntity_InpForm_BodyForm_Percentage");
+    const close = screen.getByTestId("con_GeneralData_RightPanel_ShareholdingEntity_CommandBar-closeKey");
+    expect(close.getAttribute("aria-label")).toBe("Close panel");
+    expect(screen.queryByTestId("panel-close")).toBeNull();
+    fireEvent.click(close);
+    await waitFor(() => expect(screen.queryByTestId("txt_GeneralData_RightPanel_ShareholdingEntity_InpForm_BodyForm_Percentage")).toBeNull());
+  });
+
+  it("UT-GDATA-112 the map area is a named region for screen readers", () => {
+    renderScreen("edit");
+    const name = "map_con_GeneralData_DisplayProject_Body_General_Content_Map";
+    const region = screen.getByRole("region", { name });
+    expect(region).toBe(screen.getByTestId(name));
+    expect(region.getAttribute("aria-label")).toBe(name);
+  });
+
+  it("UT-GDATA-107 the Manager error label is 12 px (A:2095, Size 9), the Latitude one (more than six decimals) stays 10.67 px", async () => {
+    renderScreen("edit");
+    fireEvent.click(await screen.findByTestId("pcf_GeneralData_DisplayProject_Body_General_Content_Manager_PeoplePicker-remove-e-1"));
+    fireEvent.change(screen.getByTestId("txt_GeneralData_DisplayProject_Body_General_Content_Latitude"), { target: { value: "26.9197741" } });
+    const messageOf = (testId: string) =>
+      screen.getByTestId(testId).closest(".fui-Field")!.querySelector(".fui-Field__validationMessage") as HTMLElement;
+    await waitFor(() => expect(messageOf("pcf_GeneralData_DisplayProject_Body_General_Content_Manager_PeoplePicker").textContent).toContain(MSG.manager));
+    await waitFor(() => expect(messageOf("txt_GeneralData_DisplayProject_Body_General_Content_Latitude").textContent).not.toBe(""));
+    expect(declarationsFor(messageOf("pcf_GeneralData_DisplayProject_Body_General_Content_Manager_PeoplePicker"))["font-size"]).toBe("12px");
+    expect(declarationsFor(messageOf("txt_GeneralData_DisplayProject_Body_General_Content_Latitude"))["font-size"]).toBe("10.67px");
+  });
+
+  it("UT-GDATA-110 the delete and location pop-ups carry the PM cmp_PopUp_Confirmation control names", async () => {
+    renderScreen("edit");
+    const idsOfOpenDialog = () => ({
+      close: document.querySelector(".fui-DialogSurface h2 + button")?.getAttribute("data-testid"),
+      // `hidden: true`: in jsdom tabster marks an open Fluent dialog `aria-hidden` 250 ms after it opens.
+      confirm: screen.getByRole("button", { name: "Confirm", hidden: true }).getAttribute("data-testid"),
+      cancel: screen.getByRole("button", { name: "Cancel", hidden: true }).getAttribute("data-testid"),
+    });
+    const PM = {
+      close: "ico_PopUpConfirmation_BodyHeader",
+      confirm: "pcf_PopUpConfirmation_BodyButtons_Confirm",
+      cancel: "pcf_PopUpConfirmation_BodyButtons_Cancel",
+    };
+    fireEvent.click(screen.getByRole("button", { name: "btn_general_data_shareholding_entity_Delete" }));
+    await screen.findByText("Are you sure that you want to delete 'VSB Holding GmbH'?");
+    expect(idsOfOpenDialog()).toEqual(PM);
+    fireEvent.click(screen.getByTestId(PM.cancel));
+    await waitFor(() => expect(screen.queryByText("Are you sure that you want to delete 'VSB Holding GmbH'?")).toBeNull());
+    fireEvent.click(await screen.findByTestId("map-stub"));
+    await screen.findByText("Project Location Confirmation");
+    expect(idsOfOpenDialog()).toEqual(PM);
   });
 });

@@ -7850,3 +7850,45 @@ Tests: UT-MSTONE-081 (all eleven keys LongAbbreviated), 082 (the canvas twin: Lo
 **Code app before:** every rule #e0e0e0 (D90 had sampled it from a WTG card, shadow included); Active before Height Limitation; both tags at least 100 wide; the Height Limitation label and border the plain chip's.
 **Now:** the rules are rgb(0, 120, 212); WTG and inverter cards carry `tokens.shadow4` (the `DropShadow.Light` the other screens use); Height Limitation, then the permission chip / Cancel, then Active (rightmost, ending 50 px from the edge); 80 / 120 px tags 10 px apart; the Height Limitation label and border as the canvas. Supersedes D90's grey rule.
 **Tests:** UT-GEN-916 (the order). The colours and the shadow are not pixel-tested; not seen in a browser.
+## D132 — Project Overview: parity pass, bucket A (18 Nov 2026)
+
+**Status:** implemented in the worktree `parity-pm-main-gendata`, uncommitted until approved; NOT product-approved; not run against DEV; not seen in a browser. Source: the Project Overview parity report and fix plan (PO-001 ... PO-031). Canvas reference = the LIVE `Project Main Screen.pa.yaml` (app "Project Management", published 2026-10-15), which differs from `_extracted` (1.21.709) in the command bar `Items`/`OnSelect` (the Simulate gate) and two trace lines.
+
+**1. What changed:** the table in file 13, section "Project Overview: parity pass, bucket A". Files: `features/pm/project-main/{Screen.tsx, hooks.ts, queries.ts, rules.ts, Screen.test.tsx, rules.test.ts}`, `data/projects.ts` (`loadHasBaseCase`, `loadProjectStateOrder`, new `loadProjectManagerLabel`), new `src/test/testIdUniqueness.test.ts`.
+
+**2. Divergences and decisions to confirm**
+- PO-022 (a Country change clears the Area filter at once): this behaviour was already in the code; it is now marked `DIVERGENCE:`. Proposed, not approved; revert = drop one line in `applyFilterPatch`.
+- PO-007 (a blank Capacity clears the filter after the 300 ms debounce): the canvas leaves a blank box alone until the funnel is pressed. Kept as before; the debounce is new (PO-025).
+- PO-014: the command-bar text "Home screen navigation" is a canvas copy-paste (the same text is on the Revenues grid): deliberately NOT reproduced (SOURCE DEFECT).
+- PO-013 (method): the funnel and caption ids are passed as `clearTestId` / `labelTestId` so the canvas-identity gate does not report C3 on wrapper tags; UT-OVFIX-018 checks every canvas name the screen writes against the extracted YAML. project-main canvas-named ids verified: 8 (was 4).
+- New wording (no canvas equivalent, rule 7): "Selected project manager"; the four list-load messages; "Could not check this project for simulation."
+
+**3. Not done (waiting for decisions or a rendered check):** the bucket B and C items (PO-002, PO-005, PO-010, PO-012 (the derived ids), PO-020, PO-021, PO-024, PO-007b, PO-004, PO-008, PO-009, PO-011, PO-016, PO-018, PO-023), A7 (dead code), and X-1 (a non-GUID `?pm=` / `?c=` / `?a=` / `?st=` makes the whole list fail; the manager chip now shows a fallback name while the list still fails, as before). Section 14b (duplicate ids in the Project Overview suites) is resolved for the five remaining ids: the second occurrences became UT-OV-099, UT-OV-100, UT-OVUI-063..065, and UT-OVFIX-100 fails on any repeated id in those two files.
+
+**4. Tests:** UT-OVFIX-001..006, 010..021, 030..036, 040..046, 050..056, 059..063, 070..075, 080..083, 100, 101.
+
+**5. Verification:** npm run verify on the combined Project Overview + General Data worktree (18 Nov 2026): exit 0; check:power 96 registered, 0 problems; control labels 0 missing, 0 duplicate; canvas identities C1..C5 all 0; 299 test files, 6,435 tests passed (3 todo); build OK. NOT run: the E2E parity suite, any DEV run, any browser check.
+
+## D133 — Project General Data: parity pass, bucket A (18 Nov 2026)
+
+**Status:** implemented in the worktree `parity-pm-main-gendata`, uncommitted until approved; NOT product-approved; not run against DEV; not seen in a browser. Source: the General Data parity report and fix plan (GD-001 ... GD-031). Canvas reference = the LIVE `Project General Data Screen.pa.yaml` (published 2026-10-15). Compared with `_extracted` it has 25 Modern control version bumps and two `DisplayMode` formulas; the code already follows the live formulas (Project and Short Name editability).
+
+**1. What changed (file 13, section "Project General Data and the canvas-identity gate")**
+- GD-010: the Custom Shareholder Entity counter counts `Len(Trim(text))`.
+- GD-012 / 014 / 015 (visual): the Manager and Terrain Size error labels are 12 px; the Start-Cluster change panel is 400 px wide; its explanation sits in the canvas info box (`ClusterChangeInfo.tsx`). Not yet compared in a render (checks R-06, R-07).
+- GD-016 / 017: the delete, location and leave pop-ups carry the PM component's control names; the shareholding panel's close button carries the canvas CommandBar id. Shared additions are optional props with unchanged defaults (`ConfirmDialog.testIds`, `UnsavedChangesGuard.testIds`, `PM_POPUP_IDS`, `PeoplePicker.errorClassName`). One gate side effect: `src/components` now counts 7 canvas-named ids (was 8) because `ico_PopUpConfirmation_BodyHeader_3` is written `testIds?.close ?? "..."`, an expression the gate does not read; UT-CONFIRMIDS-001 pins the default.
+- GD-025: the map area is a named region. GD-022: validation runs once per render. GD-024: the Manager and Deputy search waits 250 ms (the Gates admin search uses 300 ms; either is acceptable).
+- GD-008: **DIVERGENCE (proposed, not approved):** the map-click confirmation compares the click with the typed Latitude / Longitude; the canvas compares with the last confirmed or saved position. Reversible: pass a `confirmedPin` reference to `shouldConfirmMapLocation` (not built).
+- GD-026 / 027: direct tests for 27 `rules.ts` exports; the second `UT-GDATA-083` became `UT-GDATA-090`. GD-028: `gap-analysis/pm-general-data.md` marked superseded.
+
+**2. Not done:** GD-005 (the CalendarAdd buttons; needs a live canvas check), GD-003, 009, 011, 018 (optional ids on error labels), 019, 023, 030, 031, and the D items. Optional step 6c was skipped.
+
+**3. Tests:** UT-GDATA-091..113 (090 renumbered), UT-CONFIRMIDS-001..003, UT-UNSAVED-008, UT-PPICK-001.
+
+**4. Verification:** npm run verify on the combined Project Overview + General Data worktree (18 Nov 2026): exit 0; check:power 96 registered, 0 problems; control labels 0 missing, 0 duplicate; canvas identities C1..C5 all 0; 299 test files, 6,435 tests passed (3 todo); build OK. NOT run: the E2E parity suite, any DEV run, any browser check.
+
+## D134 — the canvas-identity gate can compare against the live canvas (18 Nov 2026)
+
+**Status:** new tooling (GD-004), NOT product-approved. `ProjectDocs/_extracted` was NOT refreshed (it is documented read-only). It is the solution 1.21.709 copy; the live "Project Management" canvas (published 2026-10-15) differs from it (25 control version bumps on General Data, 2 `DisplayMode` formulas, the Project Overview command bar), so `check:canvas` and `canvasIdentities.test.ts` validate against stale source. **Decision needed:** refresh `_extracted` from the live app in a separate commit (`pac canvas download`), with a `SOURCE.json` stamp?
+
+**Procedure** (also in `TESTING-AND-HARNESS.md`): download and unpack the live app, then `npm run check:canvas:drift -- <dir>` from `ProjectCosts-CodeApp/`; `node scripts/check-canvas-identities.mjs --msapp <dir>` runs the identity gate itself against that tree. Tests UT-CANVASDRIFT-001..005 (fixtures in `src/test/fixtures/canvas-drift`). The tool needs a directory argument and reads no private path; a missing folder prints SKIPPED and exits 0.

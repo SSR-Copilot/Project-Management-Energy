@@ -25,8 +25,12 @@
  * `cancelTestId`, `closeTestId`, `toggleTestId`, and `name` on the NAME_PRIMITIVES.
  * Exempt an element with `// canvas-identity-ignore: <reason>` on its line or up to two above.
  *
- * Usage (from app/): node scripts/check-canvas-identities.mjs [--json] [--module <path-fragment>]
+ * Usage (from app/): node scripts/check-canvas-identities.mjs [--json] [--module <path-fragment>] [--msapp <dir>]
  *   exit 1 when any C1–C4 finding exists.
+ *
+ * `--msapp <dir>` (or the env var `CANVAS_MSAPP_DIR`, CLI only) reads the canvas from another tree laid out like
+ * `ProjectDocs/_extracted/msapp` (`<dir>/<app>/Src/*.pa.yaml`), for instance a freshly downloaded live app, instead of the
+ * default. Nothing else changes. `scripts/check-canvas-drift.mjs` reports what changed between two such trees.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -111,12 +115,18 @@ const CONTAINER = /^(GroupContainer|Gallery|Group|Container|Screen|Component|Dat
 const parseCanvasFile = readCanvasIndex;
 
 const canvasCache = new Map();
-function canvasIndex(app) {
-  if (canvasCache.has(app)) return canvasCache.get(app);
+function canvasIndex(app, msapp = MSAPP) {
+  const cacheKey = `${msapp}|${app}`;
+  if (canvasCache.has(cacheKey)) return canvasCache.get(cacheKey);
   const screens = new Map(); // screen -> Map(name -> ctl)
   const all = new Map();      // name -> ctl[]
   for (const a of app === "both" ? ["projectcosts", "projectmanagement"] : [app]) {
-    const src = path.join(MSAPP, a, "Src");
+    const src = path.join(msapp, a, "Src");
+    // An override tree may hold one app only (a live download of the PM app): "both" then reads what exists.
+    if (!fs.existsSync(src)) {
+      if (app === "both" && msapp !== MSAPP) continue;
+      throw new Error(`canvas source not found: ${src} (expected <msapp>/<app>/Src/*.pa.yaml)`);
+    }
     const files = [
       ...fs.readdirSync(src).filter((f) => f.endsWith(".pa.yaml")).map((f) => [path.join(src, f), f.replace(/\.pa\.yaml$/, "")]),
       ...fs.readdirSync(path.join(src, "Components")).map((f) => [path.join(src, "Components", f), `Components/${f.replace(/\.pa\.yaml$/, "")}`]),
@@ -128,7 +138,7 @@ function canvasIndex(app) {
     }
   }
   const r = { screens, all };
-  canvasCache.set(app, r);
+  canvasCache.set(cacheKey, r);
   return r;
 }
 
@@ -165,7 +175,8 @@ function moduleFor(rel) {
   return MODULES.find(([frag]) => rel.startsWith(frag));
 }
 
-export function validate({ only } = {}) {
+export function validate({ only, msapp } = {}) {
+  const msappDir = msapp ? path.resolve(msapp) : MSAPP;
   const files = [];
   const walk = (d) => {
     for (const n of fs.readdirSync(d)) {
@@ -183,7 +194,9 @@ export function validate({ only } = {}) {
     const mod = moduleFor(rel);
     if (!mod) continue;
     const [frag, app, screenNames] = mod;
-    const { screens, all } = canvasIndex(app);
+    // An override tree may hold one app only: a module of an app it lacks is not checked (and not reported).
+    if (msappDir !== MSAPP && app !== "both" && !fs.existsSync(path.join(msappDir, app, "Src"))) continue;
+    const { screens, all } = canvasIndex(app, msappDir);
     const own = screenNames.length
       ? screenNames.map((s) => screens.get(`${app}/${s}`)).filter(Boolean)
       : [...screens.entries()].filter(([k]) => k.includes("/Components/") || k.endsWith("/App")).map(([, v]) => v);
@@ -255,7 +268,13 @@ export function validate({ only } = {}) {
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   const i = process.argv.indexOf("--module");
-  const { findings, stats } = validate({ only: i > 0 ? process.argv[i + 1] : undefined });
+  const m = process.argv.indexOf("--msapp");
+  const msapp = m > 0 ? process.argv[m + 1] : process.env.CANVAS_MSAPP_DIR || undefined;
+  if (m > 0 && !msapp) { console.error("--msapp needs a directory"); process.exit(2); }
+  let result;
+  try { result = validate({ only: i > 0 ? process.argv[i + 1] : undefined, ...(msapp ? { msapp } : {}) }); }
+  catch (e) { console.error(`check-canvas-identities: ${e instanceof Error ? e.message : String(e)}`); process.exit(2); }
+  const { findings, stats } = result;
   if (process.argv.includes("--json")) { console.log(JSON.stringify({ findings, stats: Object.fromEntries(stats) }, null, 2)); }
   else {
     for (const f of findings) console.log(`${f.code} ${f.at}  <${f.tag}>  ${f.msg}`);

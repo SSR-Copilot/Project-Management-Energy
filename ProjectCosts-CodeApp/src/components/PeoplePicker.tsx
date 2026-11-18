@@ -40,6 +40,8 @@ export interface PeoplePickerProps {
   required?: boolean;
   /** The validation message shown under the field, when set. */
   errorMessage?: string;
+  /** Optional: a class for the validation message (a canvas label whose size differs from the form's, GD-012). */
+  errorClassName?: string;
   disabled?: boolean;
   /** Accessible name of the remove buttons. */
   removeLabel?: string;
@@ -203,7 +205,7 @@ const initialOf = (name: string): string => name.trim().charAt(0).toUpperCase();
 
 export function PeoplePicker({
   label, placeholder, tooltip, testId, value, onChange, onPick, maxPeople, term, onTermChange,
-  suggestions, required, errorMessage, disabled, removeLabel = "Remove", ariaLabel,
+  suggestions, required, errorMessage, errorClassName, disabled, removeLabel = "Remove", ariaLabel,
 }: PeoplePickerProps) {
   const s = useStyles();
   const skin = useFieldSkin();
@@ -226,7 +228,7 @@ export function PeoplePicker({
         label={label}
         required={required}
         validationState={errorMessage ? "error" : "none"}
-        validationMessage={errorMessage}
+        validationMessage={errorMessage && errorClassName ? { children: errorMessage, className: errorClassName } : errorMessage}
       >
         <div className={s.anchor}>
         {/* The PCF keeps its dark outline when invalid: only the message below shows the error. */}

@@ -1,0 +1,24 @@
+Screens:
+  Test Screen:
+    Properties:
+      OnVisible: =Set(gblX, 1)
+    Children:
+      - btn_Save:
+          Control: Button@2.2.0
+          Properties:
+            AccessibleLabel: ="Save changes"
+            DisplayMode: =If(gblDirty, DisplayMode.Edit, DisplayMode.Disabled)
+            Text: ="Save"
+      - txt_Name:
+          Control: ModernTextInput@1.1.2
+          Properties:
+            AccessibleLabel: ="Name"
+            Default: =Coalesce(gblName, "")
+      - btn_New:
+          Control: Button@2.2.0
+          Properties:
+            AccessibleLabel: ="New"
+      - drp_Kind:
+          Control: ModernDropdown@1.0.0
+          Properties:
+            Items: =Filter(Kinds, Value <> "Hybrid", Value <> "BESS")

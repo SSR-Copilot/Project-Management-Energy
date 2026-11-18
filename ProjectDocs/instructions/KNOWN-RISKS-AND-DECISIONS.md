@@ -139,6 +139,8 @@ this is a snapshot, not a live sync):
 
 - **R-9** — URLs read from a project row (SharePoint/Teams links) are opened without scheme
   validation before `window.open`.
+  **Mitigated on the Project Overview (D132, 18 Nov 2026):** `isOpenableUrl` refuses anything that is not
+  http(s) before `window.open`; other screens that open stored links are unchanged.
 - **R-10** — row/volume ceilings are untested at scale: `fetchAll` caps at 50 pages × 500 rows,
   `@odata.count` is capped at 5000 by the platform itself, there are no server-side aggregates.
   Fine today; revisit if a project's row counts grow materially.

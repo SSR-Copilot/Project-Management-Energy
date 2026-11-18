@@ -7,24 +7,26 @@
  * change. `parseCriteria` validates everything it reads, so a hand-edited link renders the
  * default list rather than reaching `$filter` unchecked.
  */
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   keepPreviousData, useMutation, useQuery, useQueryClient,
 } from "@tanstack/react-query";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
-  deleteProject, listCountryAreas,
-  loadProjectStateOrder, searchProjectManagers, type ProjectPage,
+  deleteProject, listCountryAreas, loadProjectManagerLabel,
+  searchProjectManagers, type ProjectPage,
 } from "@/data/projects";
 import { startupFlags } from "@/app/startupFlags";
 import { trace } from "@/platform/telemetry";
 import { useDebouncedValue } from "@/features/shared/useDebouncedValue";
 import {
-  applyFilterPatch, applyOptimisticDelete, nextSortState, parseCriteria, serialiseCriteria,
-  type Criteria, type ProjectFilter, type SortState,
+  applyFilterPatch, applyOptimisticDelete, EMPTY_APPLIED_CAPACITY, nextSortState, parseCriteria,
+  resolveAppliedCapacity, serialiseCriteria,
+  type AppliedCapacity, type Criteria, type ProjectFilter, type SortState,
 } from "./rules";
 import {
-  countriesQueryOptions, projectPageKey, projectPageOptions, projectStatesQueryOptions,
+  countriesQueryOptions, projectPageKey, projectPageOptions, projectStateOrderOptions,
+  projectStatesQueryOptions,
 } from "./queries";
 
 /* ═════════════════════════════════════════════════════ criteria in the URL */
@@ -113,6 +115,9 @@ export interface ProjectPageQuery {
  * prefetch (`app/bootPrefetch.ts`) builds the first page's query from them too.
  */
 
+/** How long the Capacity box waits after the last keystroke before the list is asked again. */
+const CAPACITY_DEBOUNCE_MS = 300;
+
 export function useProjectPage(args: {
   criteria: Criteria;
   scopeFilter?: string | undefined;
@@ -120,11 +125,26 @@ export function useProjectPage(args: {
 }): ProjectPageQuery {
   const { criteria, scopeFilter, locale } = args;
   const qc = useQueryClient();
-  // The keyword is the only field typed a character at a time.
+  // The keyword and the capacity are the fields typed a character at a time.
   const keyword = useDebouncedValue(criteria.filter.keyword, 350);
+  // PO-025: the capacity box is debounced too (300 ms), so "125.5" is one request, not five.
+  const capacity = useDebouncedValue(criteria.filter.capacity, CAPACITY_DEBOUNCE_MS);
+  const capacityOperator = criteria.filter.capacityOperator;
+  // PO-007: a capacity that is not a number leaves the list filtered by the last applied one (the canvas
+  // behaviour). The address keeps the raw text; only the request carries the applied value.
+  const [lastApplied, setLastApplied] = useState<AppliedCapacity>(EMPTY_APPLIED_CAPACITY);
+  const applied = resolveAppliedCapacity({ capacity, capacityOperator }, lastApplied, locale);
+  // "Remember the last applied value": adjusting state while rendering, the documented pattern for state
+  // derived from props (React re-renders at once, before anything is committed), so no effect and no extra paint.
+  if (applied.capacity !== lastApplied.capacity || applied.capacityOperator !== lastApplied.capacityOperator) {
+    setLastApplied(applied);
+  }
   const filter = useMemo<ProjectFilter>(
-    () => ({ ...criteria.filter, keyword }),
-    [criteria.filter, keyword],
+    () => ({
+      ...criteria.filter, keyword,
+      capacity: applied.capacity, capacityOperator: applied.capacityOperator,
+    }),
+    [criteria.filter, keyword, applied.capacity, applied.capacityOperator],
   );
 
   // `criteria.sort` is a new object on every URL parse; its two fields are what the key carries.
@@ -133,8 +153,8 @@ export function useProjectPage(args: {
   const page = criteria.page;
 
   const pageKey = useMemo(
-    () => projectPageKey({ filter, sort, page, scopeFilter }),
-    [filter, sort, page, scopeFilter],
+    () => projectPageKey({ filter, sort, page, scopeFilter, locale }),
+    [filter, sort, page, scopeFilter, locale],
   );
 
   const query = useQuery({
@@ -224,6 +244,20 @@ export function useProjectManagerSearch(term: string) {
 }
 
 /**
+ * The name of the project manager the address filters by (PO-001). Only looked up when the filter
+ * arrived through the address: a person picked from the suggestions is already named
+ * (`pickedLabel`), so picking costs no extra read.
+ */
+export function useProjectManagerLabel(id: string | null, pickedLabel: string | null) {
+  return useQuery({
+    queryKey: ["projectManagerLabel", id ?? "none"] as const,
+    queryFn: () => loadProjectManagerLabel(id as string),
+    enabled: Boolean(id) && !pickedLabel,
+    staleTime: 30 * 60 * 1000,
+  });
+}
+
+/**
  * The selected project's cluster-state `Order`, which the Simulate gate needs and the grid
  * row does not carry.
  *
@@ -232,10 +266,8 @@ export function useProjectManagerSearch(term: string) {
  */
 export function useProjectStateOrder(clusterStateId: string | null) {
   return useQuery({
-    queryKey: ["projectStateOrder", clusterStateId ?? "none"] as const,
-    queryFn: () => loadProjectStateOrder(clusterStateId),
+    ...projectStateOrderOptions(clusterStateId),
     enabled: Boolean(clusterStateId),
-    staleTime: 30 * 60 * 1000,
   });
 }
 

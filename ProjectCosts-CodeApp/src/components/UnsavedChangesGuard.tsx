@@ -21,15 +21,17 @@
  */
 import { useCallback, useEffect } from "react";
 import { useBlocker, type BlockerFunction } from "react-router-dom";
-import { ConfirmDialog } from "./ConfirmDialog";
+import { ConfirmDialog, type ConfirmDialogTestIds } from "./ConfirmDialog";
 import { isLeaving, type LeaveDialogText } from "./leaveGuard";
 
-export function UnsavedChangesGuard({ when, dialog, canvasLook = false }: {
+export function UnsavedChangesGuard({ when, dialog, canvasLook = false, testIds }: {
   /** The screen's dirty condition — the canvas `If(<dirty>, <dialog>, <navigate>)` test. */
   when: boolean;
   dialog: LeaveDialogText;
   /** Opt-in: the canvas pop-up's look (dark scrim, flat 459 x 242 card, 120 px Yes, no footer rule). */
   canvasLook?: boolean;
+  /** Optional: the canvas names of the dialog's ✕, Confirm and Cancel (`PM_POPUP_IDS`). Omitted, the ids are unchanged. */
+  testIds?: ConfirmDialogTestIds;
 }) {
   const shouldBlock = useCallback<BlockerFunction>(
     ({ currentLocation, nextLocation }) => when && isLeaving(currentLocation, nextLocation),
@@ -65,6 +67,7 @@ export function UnsavedChangesGuard({ when, dialog, canvasLook = false }: {
       darkScrim={canvasLook}
       compact={canvasLook}
       {...(canvasLook ? { confirmWidth: 120 } : {})}
+      {...(testIds ? { testIds } : {})}
       onConfirm={() => blocker.proceed?.()}
       onCancel={() => blocker.reset?.()}
     />
