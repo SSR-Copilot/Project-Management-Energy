@@ -181,17 +181,7 @@ export default function AddCostsFromTableScreen() {
     setCurrentRows(loaded.roundTripped);
   }, [loaded]);
 
-  const payerDefaultsKeyed = useMemo(() => {
-    const map: Record<string, Record<string, unknown>> = {};
-    for (const sub of subaccounts) {
-      const payer = sheetQuery.data?.payerDefaults.get(sub.id);
-      if (payer) {
-        map[sub.number] = { vsb_devcospv: payer === "SPV" ? "952850002" : "952850001" };
-      }
-    }
-    return [map];
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sheetQuery.data]);
+
 
   const permissions = useMemo(() => ({
     canCreateCost: serverEnforcedProvider.forTable("vsb_capexcosts").canCreate,
@@ -435,7 +425,6 @@ export default function AddCostsFromTableScreen() {
           <SpreadSheetComp
             data={initialGrid}
             onDataChange={handleDataChange}
-            subaccountDataIn={payerDefaultsKeyed}
             addRowToken={addRowToken}
             deleteRowToken={deleteRowToken}
             copyTableToken={copyTableToken}

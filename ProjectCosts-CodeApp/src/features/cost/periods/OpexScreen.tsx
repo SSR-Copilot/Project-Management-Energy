@@ -396,7 +396,11 @@ const useStyles = makeStyles({
   canvasListbox: {
     // 17 rows of 27 px plus the 1 px outline top and bottom; longer lists scroll. Fluent's list
     // puts a 2 px `rowGap` between options, which made the rows 29 px apart.
-    minWidth: 0, maxHeight: "461px", overflowX: "hidden", rowGap: 0,
+    // The box's width as the MINIMUM (`width: max-content` on the slot): at 100 % zoom the list
+    // stays exactly as wide as the box, as the canvas list is; zoomed in, the scrollbar (which
+    // does not scale) left "10 years" too little room, so it wrapped inside the fixed 27-px row
+    // and overlapped the rows around it (18 Nov 2026). Now the list widens instead.
+    minWidth: "var(--fui-match-target-size)", maxHeight: "461px", overflowX: "hidden", rowGap: 0,
     paddingTop: 0, paddingBottom: 0, paddingLeft: 0, paddingRight: 0,
     backgroundColor: "#f5f5f5", boxShadow: "none",
     borderTopWidth: "1px", borderRightWidth: "1px", borderBottomWidth: "1px", borderLeftWidth: "1px",
@@ -410,6 +414,8 @@ const useStyles = makeStyles({
       boxSizing: "border-box", height: "27px", minHeight: "27px", alignItems: "center",
       columnGap: 0, fontSize: "14px", lineHeight: "19px", color: palette.black,
       paddingTop: 0, paddingBottom: 0, paddingLeft: "12px", paddingRight: "12px",
+      // One line per option whatever the zoom; the list grows rather than the row wrapping.
+      whiteSpace: "nowrap",
       borderTopLeftRadius: 0, borderTopRightRadius: 0,
       borderBottomLeftRadius: 0, borderBottomRightRadius: 0,
       ":hover": { backgroundColor: "#e1dfdd" },
@@ -1716,7 +1722,9 @@ function OpexPanel({
   // The canvas list opens flush under its box; Fluent leaves a 2 px gap. `autoSize` off: Fluent
   // otherwise writes its own inline `max-height` (the space left on screen) over the 17-row cap.
   const canvasList = {
-    listbox: { className: styles.canvasListbox },
+    // `width: max-content` replaces Fluent's match-the-box width; `canvasListbox` keeps the box's
+    // width as the minimum, so the list only grows when an option would otherwise wrap (zoom).
+    listbox: { className: styles.canvasListbox, style: { width: "max-content" } },
     positioning: { offset: { crossAxis: 0, mainAxis: 0 }, autoSize: false },
   };
 

@@ -18,7 +18,6 @@ import Spreadsheet, { type CellBase, type DataEditorComponent, type Matrix } fro
 import "./MySpreadsheet.css";
 import DropdownEditor from "./CostPaidBy";
 import YesNoEditor from "./YesNoDropDown";
-import { findNearestAccountHeaderRow } from "./util_dataset";
 import { fromView, toView, viewColumns } from "./viewColumns";
 import { useTrimmedGridPaste } from "./pasteTrim";
 
@@ -29,13 +28,9 @@ export interface SheetCell extends CellBase<string> {
 }
 export type SheetGrid = SheetCell[][];
 
-type KeyedMap = Record<string, Record<string, unknown>>;
-
 export interface ISpreadSheetProps {
   data: SheetGrid;
   onDataChange: (grid: SheetGrid) => void;
-  /** Sub-account id (or account number) -> { vsb_devcospv } — used only to default a new row's Cost Paid By. */
-  subaccountDataIn: KeyedMap[];
   onAddRow?: () => void;
   onDeleteRow?: () => void;
   onCopyTable?: () => void;
@@ -244,7 +239,6 @@ export function gridToJson(grid: SheetGrid, startYear: string): SpreadsheetOutpu
 export const SpreadSheetComp: React.FC<ISpreadSheetProps> = ({
   data: initialData,
   onDataChange,
-  subaccountDataIn,
   onAddRow, onDeleteRow, onCopyTable,
   addRowToken, deleteRowToken, copyTableToken, visibleYearIndex = null,
 }) => {
@@ -425,8 +419,11 @@ export const SpreadSheetComp: React.FC<ISpreadSheetProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [copyTableToken]);
 
-  // Add Row: insert after the currently-selected row, prefilled Cost Paid By from the nearest
-  // account's DevCo/SPV mapping, Depreciation/Apply VAT defaulted "Yes".
+  // Add Row: insert after the currently-selected row, with Depreciation / Apply VAT "Yes" and Cost Paid By BLANK.
+  // The PCF source looks the nearest account up in the DevCo/SPV mapping; the user's canvas screenshot shows new
+  // rows with Cost Paid By empty, and the user wants it so (18 Nov 2026: "SPV should not be selected by default
+  // when adding a new row"). Save's missing-information check (`validateMissingMetadata`, as the canvas) makes
+  // them pick one.
   React.useEffect(() => {
     if (!hasMountedRef.current.add) {
       hasMountedRef.current.add = true;
@@ -434,14 +431,6 @@ export const SpreadSheetComp: React.FC<ISpreadSheetProps> = ({
     }
 
     const selectedRowIndex = selectedRowIndexRef.current !== null ? selectedRowIndexRef.current : data.length - 1;
-    const header = findNearestAccountHeaderRow(data, selectedRowIndex);
-    const accountNumberKey = (header?.row?.[0]?.value ?? "").toString().trim();
-    const devcoSpvStr = (subaccountDataIn?.[0]?.[accountNumberKey] as { vsb_devcospv?: unknown } | undefined)
-      ?.vsb_devcospv?.toString().trim() ?? "";
-
-    let costPaidBy = "";
-    if (devcoSpvStr === "952850002") costPaidBy = "SPV";
-    else if (devcoSpvStr === "952850001") costPaidBy = "DevCo";
 
     const newRowId = generateRowID(data.length);
     const columnCount = data[0]?.length ?? 0;
@@ -449,8 +438,7 @@ export const SpreadSheetComp: React.FC<ISpreadSheetProps> = ({
       .fill(null)
       .map((_, colIndex) => {
         let v = "";
-        if (colIndex === 3) v = costPaidBy;
-        else if (colIndex === 4 || colIndex === 5) v = "Yes";
+        if (colIndex === 4 || colIndex === 5) v = "Yes";
         if (colIndex === 0 || colIndex === 1 || colIndex === 6) v = "";
 
         const cell: SheetCell = { value: v, Row_ID: newRowId, readOnly: false };
