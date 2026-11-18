@@ -86,7 +86,11 @@ const radius = (r: string) => ({ borderTopLeftRadius: r, borderTopRightRadius: r
 
 const useStyles = makeStyles({
   // The right content: a white vertical autolayout, no padding and no gap.
-  page: { display: "flex", flexDirection: "column", flex: "1 0 auto", minWidth: 0, backgroundColor: palette.white },
+  /*
+   * The page is held to the shell's content column (it used to grow past it, so the shell scrolled the stepper and
+   * the buttons away with the rows). Only `scroll` scrolls, as on the canvas (user, 18 Nov 2026).
+   */
+  page: { display: "flex", flexDirection: "column", flex: "1 1 auto", minHeight: 0, minWidth: 0, backgroundColor: palette.white },
   /** `con_Milestones_Page_LockMessage_3.Fill` RGBA(89, 89, 89, 1), white text — transcribed (Y:907, Y:1063). */
   // Canvas pair (3 Nov 2026): a 20-px lock, the lines 20 px apart with no extra gap.
   lock: {
@@ -109,7 +113,16 @@ const useStyles = makeStyles({
     "& > .fui-Text": { paddingTop: "4px", fontSize: "13px" },
   },
   // `con_Checklist_DisplayProject_Body_Content`: vertical, padding 10 left/right, scrolls both ways.
-  scroll: { overflowX: "auto", paddingLeft: "10px", paddingRight: "10px", paddingBottom: "10px" },
+  /*
+   * `con_Checklist_DisplayProject_Body_Content` (Y:2677-2701): the column header and the rows in one box that scrolls both
+   * ways (`LayoutOverflowX/Y: Scroll`), `Height: Min(its content, what is left under the stepper, the buttons and the
+   * title)`. The stepper, the buttons and the title stay put (`con_…_Content_Title` is outside the box, Y:2273).
+   * `flex: 0 1 auto` is that `Min`: the content's own height, shrinking to the space left.
+   */
+  scroll: {
+    flex: "0 1 auto", minHeight: 0, overflowX: "auto", overflowY: "auto",
+    paddingLeft: "10px", paddingRight: "10px", paddingBottom: "10px",
+  },
   // Columns sized to their content (PO, 20 Oct 2026: "the width between header columns is more
   // than required"): Gate Relevance 120 · Holding ~390 · Country ~540 · Completion Date 230 ·
   // Status 240 = 1520 at most. Holding is a share of the table and Country takes the rest, so both

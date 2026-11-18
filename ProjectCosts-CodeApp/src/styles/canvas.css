@@ -112,7 +112,10 @@
    through `.canvas-project-heading`'s padding, so it needs none of its own. */
 .canvas-pm-project-title { padding: 0; }
 .canvas-project-status { display: inline-flex; align-items: center; gap: 4px; margin-top: -2px; }
-.canvas-project-status-icon { font-size: 18px; width: 18px; height: 18px; flex-shrink: 0; }
+/* `ico_cmp_Header_ProjectStatus` is an 18 x 18 classic Icon whose glyph fills the box (the canvas Blocked circle measures
+   16 px). Fluent draws its glyphs in 16 of 20 units, so at 18 px the circle was 14.4 px and read small (user, 18 Nov 2026):
+   drawn at 20 px (circle 16, lock 17 high) inside the same 18-px footprint, so the status text does not move. */
+.canvas-project-status-icon { font-size: 20px; width: 20px; height: 20px; margin: -1px; flex-shrink: 0; }
 .canvas-project-status-text { color: rgb(50, 49, 48); font-size: 13.33px; font-weight: 300; line-height: 18px; }
 /* `pcf_Left_Navigation_Menu` first, `con_Left_Navigation_Header` (45 high) pinned below it. */
 .canvas-rail-pm { overflow-x: hidden; }

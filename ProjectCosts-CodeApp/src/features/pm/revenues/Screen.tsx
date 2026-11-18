@@ -261,6 +261,22 @@ const useStyles = makeStyles({
     fontSize: "14px", textAlign: "left", color: tokens.colorNeutralForeground1, fontFamily: "inherit",
     outlineStyle: "none",
   },
+  /*
+   * The page blocked (Draft / lock banner): `gal_…_GridContracts_1.DisplayMode: Disabled` (Y:795) greys every child in its
+   * own disabled colours (user screenshot, 18 Nov 2026). Labels and the chevron take `gblAppColors.Label` / `.Icon`
+   * `.DisabledColor` = Grayscale10 (#6C6C6C, App.pa.yaml:1283, 1323), the header rule `Divider.DisabledColor` (the same,
+   * Y:2944), and each `TextInput@0.0.54` value box the disabled box the Revenues panel draws: white, a 1-px #E0E0E0 outline,
+   * the value in the disabled grey (only a standard value's italic survives, see `TextInputField`).
+   */
+  cardHeaderBlocked: { borderBottomColor: palette.Grayscale10, ":hover": { backgroundImage: "none" } },
+  cardTextBlocked: { color: palette.Grayscale10 },
+  chevronBlocked: { "& .fui-Button__icon": { color: palette.Grayscale10 } },
+  cardValueBlocked: {
+    backgroundColor: palette.white, color: tokens.colorNeutralForegroundDisabled,
+    borderTopWidth: "1px", borderRightWidth: "1px", borderBottomWidth: "1px", borderLeftWidth: "1px",
+    borderTopStyle: "solid", borderRightStyle: "solid", borderBottomStyle: "solid", borderLeftStyle: "solid",
+    borderTopColor: "#e0e0e0", borderRightColor: "#e0e0e0", borderBottomColor: "#e0e0e0", borderLeftColor: "#e0e0e0",
+  },
   // `con_ProjectRevenue_Balancing_Price_VisibilityMessage`: Fill RGBA(0,0,0,0.75), 50 high, the white
   // 20 px lock at X 20 and white text 10 px after it.
   info: {
@@ -835,8 +851,10 @@ export default function ProjectRevenuesScreen() {
   const standardClass = useStandardValueClass();
   /* Rule 20 — the panel fields that carry the canvas standard-assumption pair. */
   const panelStd = form ? revenuePanelStandard(form) : null;
-  const toneClass = (t: CardTone): string | undefined =>
-    standardClass(t === "standard" ? true : t === "blue" ? "blue" : false);
+  // Blocked, a value box is Disabled: the standard blue goes, the italic stays (as `TextInputField`).
+  const toneClass = (t: CardTone): string | undefined => blocked
+    ? standardClass(t === "standard" ? "italic" : false)
+    : standardClass(t === "standard" ? true : t === "blue" ? "blue" : false);
 
   const balancingHeaders: string[] = [
     SCREEN_LABEL.name,
@@ -923,12 +941,12 @@ export default function ProjectRevenuesScreen() {
               return (
                 <div key={c.id} className={s.card} role="listitem" data-selected={c.id === selectedContractId ? true : undefined}
                   data-testid={`${CONTRACT_CARD_CONTROL.card}-${c.id}`}>
-                  <div className={s.cardHeader} data-testid={`${CONTRACT_CARD_CONTROL.header}-${c.id}`}>
-                    <Text className={s.cardTitle} title={contractCardTitle(c)}
+                  <div className={mergeClasses(s.cardHeader, blocked && s.cardHeaderBlocked)} data-testid={`${CONTRACT_CARD_CONTROL.header}-${c.id}`}>
+                    <Text className={mergeClasses(s.cardTitle, blocked && s.cardTextBlocked)} title={contractCardTitle(c)}
                       data-testid={`${CONTRACT_CARD_CONTROL.headerLabel}-${c.id}`}>{contractCardTitle(c)}</Text>
                     {isFolded ? (
                       <Button
-                        className={s.chevron}
+                        className={mergeClasses(s.chevron, blocked && s.chevronBlocked)}
                         appearance="transparent"
                         icon={<ExpandChevron open={false} />}
                         disabled={blocked}
@@ -939,7 +957,7 @@ export default function ProjectRevenuesScreen() {
                       />
                     ) : (
                       <Button
-                        className={s.chevron}
+                        className={mergeClasses(s.chevron, blocked && s.chevronBlocked)}
                         appearance="transparent"
                         icon={<ExpandChevron open />}
                         disabled={blocked}
@@ -960,7 +978,7 @@ export default function ProjectRevenuesScreen() {
                       <div className={s.cardFields} data-testid={`${CONTRACT_CARD_CONTROL.body}-${c.id}`}>
                         {contractCardFields(c, cardCtx).map((f) => (
                           <div key={f.key} className={s.cardField} data-testid={`${f.container}-${c.id}`}>
-                            <Text className={s.cardCaption} title={f.caption}
+                            <Text className={mergeClasses(s.cardCaption, blocked && s.cardTextBlocked)} title={f.caption}
                               data-testid={`${f.labelControl}-${c.id}`}>{f.caption}</Text>
                             <div className={s.cardValues}>
                               {f.values.map((v) => (
@@ -968,7 +986,8 @@ export default function ProjectRevenuesScreen() {
                                   key={v.control}
                                   readOnly
                                   tabIndex={-1}
-                                  className={mergeClasses(s.cardValue, toneClass(v.tone))}
+                                  className={mergeClasses(s.cardValue, toneClass(v.tone), blocked && s.cardValueBlocked)}
+                                  data-blocked={blocked || undefined}
                                   value={v.text}
                                   aria-label={v.accessibleLabel}
                                   data-testid={`${v.control}-${c.id}`}
