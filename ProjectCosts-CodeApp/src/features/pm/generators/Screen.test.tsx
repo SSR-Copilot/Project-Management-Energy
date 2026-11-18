@@ -63,6 +63,8 @@ const state = vi.hoisted(() => ({
   project: null as unknown,
   error: undefined as unknown,
   types: null as unknown,
+  /** `useProjectPlanning`'s row; null = no height limitation. */
+  planning: null as unknown,
   // Builds the job's plan, then runs its `then` step (D97: a cloud flow), as `usePlanWrite` does.
   run: vi.fn(async (job: unknown) => {
     const created = ["new-type", "nw1", "nw2"];
@@ -92,7 +94,7 @@ vi.mock("./hooks", () => ({
     deletePermission: { wtg: true, pv: true, inverter: true, substructure: true, storage: true, hydrogen: true, substation: true },
   },
   useGeneratorsProject: () => ({ ...ok(state.project), error: state.error }),
-  useProjectPlanning: () => ok({ isHeightLimitationForWtg: false, heightLimitation: null }),
+  useProjectPlanning: () => ok(state.planning ?? { isHeightLimitationForWtg: false, heightLimitation: null }),
   useGeneratorTypes: () => ok((state.types as GeneratorTypeRow[] | null) ?? [TYPE]),
   useModulePermissionFlows: () => state.flows,
   useGeneratorModels: () => ok([MODEL]),
@@ -413,5 +415,21 @@ describe("UT-GEN Screen (connected, D27)", () => {
     ]);
     // The device-type row, the unit and the PV totals one by one; the O&M re-links as one parallel run.
     expect(follow!.writes.map((w) => Boolean(w.concurrent))).toEqual([false, false, false, true]);
+  });
+});
+
+describe("UT-GEN WTG card header (canvas, 18 Nov 2026)", () => {
+  it("UT-GEN-916 the Height Limitation tag sits BEFORE the Active tag (canvas: HL.X = Status.X - Width - 10)", () => {
+    // The turbines are 223 m high (`turbine`); a 100-m limit puts the card over it.
+    state.planning = { isHeightLimitationForWtg: true, heightLimitation: 100 };
+    try {
+      renderScreen();
+      const title = screen.getByTestId("txt_Generators_DisplayProject_Body_Form_GeneratorType");
+      const tag = within(title).getByText("Height Limitation");
+      const status = within(title).getByTestId("lbl_Generator_GeneratorStatus");
+      expect(tag.compareDocumentPosition(status) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    } finally {
+      state.planning = null;
+    }
   });
 });
