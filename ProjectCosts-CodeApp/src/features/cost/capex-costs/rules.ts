@@ -115,7 +115,10 @@ export function newCostLine(accountId: string, id: string, defaultPayer?: CostLi
   id, accountId, description: "", payer: defaultPayer ?? "SPV",
     depreciation: true, vat: true, standard: false,
     distribution: "equal", equalMode: "cluster", distributionScheme: "absolute",
-    startDate: "2025-04-01", endDate: "2027-07-31",
+    // Blank, as the canvas Add trigger sets `locDistributionDatesRecord: Blank()` (`Capex Costs Screen.pa.yaml:19679`),
+    // so the two `MM/YYYY` boxes open on their placeholder. They opened on sample dates (04/2025, 07/2027) before
+    // (user, 18 Nov 2026).
+    startDate: "", endDate: "",
     frequency: 1, clusters: [], payments: [], comments: [],
   };
 }

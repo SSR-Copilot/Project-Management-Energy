@@ -245,7 +245,15 @@ export const SpreadSheetComp: React.FC<ISpreadSheetProps> = ({
   const [data, setData] = React.useState<SheetGrid>(() => decorateGrid(initialData));
   const selectedRowIndexRef = React.useRef<number | null>(null);
   const selectedCtorRef = React.useRef<string>("");
-  const hasMountedRef = React.useRef({ add: false, del: false, copy: false });
+  /*
+   * The Add Row / Delete Row / Copy Table token each effect last acted on: an effect acts only when its token
+   * CHANGED (a button press). The PCF's "skip the first run" flags (`hasMountedRef`) failed under React
+   * StrictMode, which runs every effect twice when the sheet mounts in development: the second run found the
+   * flag set and fired a phantom Add Row (a blank "Yes / Yes" row after the last one), a phantom Delete Row
+   * (nothing selected, so the sheet's original LAST row went: 84001_0, 85002 *Account*, user screenshots
+   * 18 Nov 2026) and a phantom Copy Table (the whole sheet on the clipboard).
+   */
+  const handledTokensRef = React.useRef({ add: addRowToken, del: deleteRowToken, copy: copyTableToken });
   // Bug 15333: an Excel row pasted as one row, not as that row plus an empty one.
   const gridRef = React.useRef<HTMLDivElement>(null);
   useTrimmedGridPaste(gridRef);
@@ -409,10 +417,8 @@ export const SpreadSheetComp: React.FC<ISpreadSheetProps> = ({
 
   // Copy Table: whole grid as tab/newline-separated text to the clipboard.
   React.useEffect(() => {
-    if (!hasMountedRef.current.copy) {
-      hasMountedRef.current.copy = true;
-      return;
-    }
+    if (copyTableToken === handledTokensRef.current.copy) return;
+    handledTokensRef.current.copy = copyTableToken;
     const text = data.map((row) => row.map((cell) => cell.value).join("\t")).join("\n");
     navigator.clipboard.writeText(text).then(() => "").catch(() => "");
     onCopyTable?.();
@@ -425,10 +431,8 @@ export const SpreadSheetComp: React.FC<ISpreadSheetProps> = ({
   // when adding a new row"). Save's missing-information check (`validateMissingMetadata`, as the canvas) makes
   // them pick one.
   React.useEffect(() => {
-    if (!hasMountedRef.current.add) {
-      hasMountedRef.current.add = true;
-      return;
-    }
+    if (addRowToken === handledTokensRef.current.add) return;
+    handledTokensRef.current.add = addRowToken;
 
     const selectedRowIndex = selectedRowIndexRef.current !== null ? selectedRowIndexRef.current : data.length - 1;
 
@@ -459,10 +463,8 @@ export const SpreadSheetComp: React.FC<ISpreadSheetProps> = ({
 
   // Delete Row: remove the currently-selected row.
   React.useEffect(() => {
-    if (!hasMountedRef.current.del) {
-      hasMountedRef.current.del = true;
-      return;
-    }
+    if (deleteRowToken === handledTokensRef.current.del) return;
+    handledTokensRef.current.del = deleteRowToken;
     if (data.length > 1) {
       const selectedRowIndex = selectedRowIndexRef.current !== null ? selectedRowIndexRef.current : data.length - 1;
       setData((prevData): SheetGrid => [

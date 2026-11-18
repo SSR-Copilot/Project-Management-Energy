@@ -7806,3 +7806,11 @@ The cancel flow was called with `appId ?? ""` after the tracking had already bee
 **Now:** a new row's Cost Paid By starts blank; Depreciation and Apply VAT stay "Yes". The mapping input (`subaccountDataIn`), its builder in `Screen.tsx` and `util_dataset.ts` (`findNearestAccountHeaderRow`, used only there) are gone. A row saved without a payer is refused by Validation 4, "Please fill out the missing cost information." (`validateMissingMetadata`; canvas `locMissingValues`), as in the canvas.
 **Not changed:** `buildInitialSheet` still seeds the empty row of a sub-account with no contract from the mapping; that row is never drawn (`sheetRowsToGrid` drops rows with no description; the canvas has no such row).
 **Tests:** UT-ADDCOST-109.
+
+## D130 — Add Costs from Table: opening the sheet lost its last row and showed a blank "Yes / Yes" row (18 Nov 2026)
+
+**Status:** uncommitted (working tree), not on DEV.
+**Report:** "canvas showing more rows where as cost app not" (Substation / Grid Connection: the canvas lists 84001_0 Grid Connection Costs under 84001; the code app showed a blank row with Depreciation and Apply VAT "Yes" instead). The earlier Other CAPEX screenshots (D129) show the same pattern: 85002 Other Construction Costs, the sheet's last row, missing and a blank "Yes / Yes" row in its place.
+**Cause:** not the data (accounts and sub-accounts are read active-only in both apps: canvas `App.OnStart` builds `colCapexAccountsNew` / `colCapexSubaccountsNew` with `Status = Active`). The grid's Add Row, Delete Row and Copy Table effects skipped their first run with "has mounted" flags ported from the PCF (`hasMountedRef`). The app runs under `<StrictMode>` (`main.tsx`), which in development runs every effect twice on mount; the second run found the flags set and fired all three: Add Row appended a blank row, Delete Row (nothing selected) removed the original last row, Copy Table put the sheet on the clipboard. A production build runs effects once, so the deployed app is not expected to show it.
+**Now:** each effect acts only when its token changes (`handledTokensRef`), so mounting (once or twice) does nothing and each button press acts exactly once.
+**Tests:** UT-ADDCOST-110 (renders under `StrictMode`).

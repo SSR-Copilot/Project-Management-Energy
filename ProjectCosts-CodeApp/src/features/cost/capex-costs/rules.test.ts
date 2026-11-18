@@ -315,6 +315,9 @@ describe("labels and helpers", () => {
       distribution: "equal", equalMode: "cluster", frequency: 1,
     });
     expect(fresh.payments).toEqual([]);
+    // The Add trigger sets `locDistributionDatesRecord: Blank()`: both MM/YYYY boxes open empty.
+    expect(fresh.startDate).toBe("");
+    expect(fresh.endDate).toBe("");
   });
 });
 

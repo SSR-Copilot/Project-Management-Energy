@@ -63,17 +63,23 @@ const clearOutline = {
  * Put on a screen root: no red outline on an invalid control. The canvas shows only the error
  * label under a field (`lbl_…_ErrorMessage`); the box itself never turns red, while Fluent's
  * invalid state (`:not(:focus-within)`) paints the border red.
+ *
+ * A DISABLED control is left alone (`:not(:has(:disabled))`): the canvas draws a disabled modern
+ * dropdown / input as a white box with a light grey outline, which `ChoiceField`'s `disabledOutline`
+ * paints — and these three-class rules out-ranked it, so Development Type lost its border (user
+ * screenshot pair, 18 Nov 2026). A disabled control is never invalid, so nothing is lost.
  */
+const enabled = ":not(:has(:disabled))";
 export const useNoInvalidOutline = makeStyles({
   root: {
-    "& .fui-Input:not(:focus-within)": clearOutline,
-    "& .fui-Input:hover:not(:focus-within)": clearOutline,
-    "& .fui-Dropdown:not(:focus-within)": clearOutline,
-    "& .fui-Dropdown:hover:not(:focus-within)": clearOutline,
-    "& .fui-Combobox:not(:focus-within)": clearOutline,
-    "& .fui-Combobox:hover:not(:focus-within)": clearOutline,
-    "& .fui-Textarea:not(:focus-within)": clearOutline,
-    "& .fui-Textarea:hover:not(:focus-within)": clearOutline,
+    [`& .fui-Input:not(:focus-within)${enabled}`]: clearOutline,
+    [`& .fui-Input:hover:not(:focus-within)${enabled}`]: clearOutline,
+    [`& .fui-Dropdown:not(:focus-within)${enabled}`]: clearOutline,
+    [`& .fui-Dropdown:hover:not(:focus-within)${enabled}`]: clearOutline,
+    [`& .fui-Combobox:not(:focus-within)${enabled}`]: clearOutline,
+    [`& .fui-Combobox:hover:not(:focus-within)${enabled}`]: clearOutline,
+    [`& .fui-Textarea:not(:focus-within)${enabled}`]: clearOutline,
+    [`& .fui-Textarea:hover:not(:focus-within)${enabled}`]: clearOutline,
   },
 });
 
