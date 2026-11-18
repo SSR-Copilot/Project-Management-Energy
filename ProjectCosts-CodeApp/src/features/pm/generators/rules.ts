@@ -2731,6 +2731,8 @@ export const WTG_CARD_LABELS = {
   editIconColumn: "EditIcon",
   /** `…_GeneratorsList.columns_Items` — the delete column's `ColName` (it has no `ColDisplayName`). */
   deleteIconColumn: "DeleteIcon",
+  /** `…_GeneratorsList.columns_Items` — the over-height-limit info column's `ColName`, after Delete (`Y:2382`). */
+  infoIconColumn: "InformationIcon",
 } as const;
 
 /**

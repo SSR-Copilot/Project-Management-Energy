@@ -343,6 +343,23 @@ describe("OpexScreen", () => {
     expect(heading.textContent).not.toContain("Insurance");
   });
 
+  it("UT-OPEXUI-062 clicking the alignment info icon shows its text without selecting the row", () => {
+    // Aligned, and the 5-year period ends 2032 while the project runs to 2057: the icon shows.
+    book = makeBook([
+      period({ id: "other-1", mode: "other", group: "Insurance",
+        description: "All-Risk Insurance", periodIndex: 1, contractId: "other-1", align: true }),
+    ]);
+    render(<Harness><OpexScreen mode="other" /></Harness>);
+    open("Insurance");
+    const warn = screen.getByTestId("opex-warn-other-1");
+    expect(warn).toHaveAttribute("aria-label", OPEX_MSG.doesNotAlign);
+    fireEvent.click(warn);
+    // The canvas InfoButton's click never reaches the row's transparent button.
+    expect(screen.getByTestId("opex-select-other-1")).not.toBeChecked();
+    fireEvent.click(screen.getByTestId("opex-select-other-1"));
+    expect(screen.getByTestId("opex-select-other-1")).toBeChecked();
+  });
+
   it("UT-OPEXUI-040 keeps the Area dropdown hidden on an Italian project", () => {
     const original = project.countryName;
     project.countryName = "Italy";

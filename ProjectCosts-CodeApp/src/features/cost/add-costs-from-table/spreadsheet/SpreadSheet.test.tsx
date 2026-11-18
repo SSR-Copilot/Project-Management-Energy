@@ -8,6 +8,7 @@
  * content never differed, so the second pass was pure cost. A genuinely new grid from the
  * caller must still re-hydrate.
  */
+import { StrictMode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { render } from "@testing-library/react";
 import { SpreadSheetComp, type SheetGrid } from "./SpreadSheet";
@@ -98,5 +99,46 @@ describe("SpreadSheetComp Add Row", () => {
     const last = onDataChange.mock.calls.at(-1)?.[0] as SheetGrid;
     expect(last).toHaveLength(4);
     expect(last[3]?.slice(0, 6).map((c) => c.value)).toEqual(["", "", "", "", "Yes", "Yes"]);
+  });
+});
+
+describe("SpreadSheetComp under StrictMode (18 Nov 2026)", () => {
+  /** Header, an account, its sub-account, a contract, then a second account and its sub-account LAST. */
+  const sheet = (): SheetGrid => {
+    const blank = () => Array.from({ length: 4 }, () => ({ value: "" }));
+    return [
+      [{ value: "Account Number" }, { value: "Account Name" }, { value: "Cost Description" }, ...blank()],
+      [{ value: "84000" }, { value: "Substation" }, { value: "*Account*" }, ...blank()],
+      [{ value: "84000_0" }, { value: "Substation" }, { value: "" }, ...blank()],
+      [{ value: "" }, { value: "" }, { value: "test" }, { value: "DevCo" }, { value: "Yes" }, { value: "Yes" }, { value: "" }],
+      [{ value: "84001" }, { value: "Grid Connection Costs" }, { value: "*Account*" }, ...blank()],
+      [{ value: "84001_0" }, { value: "Grid Connection Costs" }, { value: "" }, ...blank()],
+    ];
+  };
+  const firstCells = (g: SheetGrid) => g.map((r) => r[0]?.value);
+
+  it("UT-ADDCOST-110 opening the sheet adds, deletes and copies nothing: the last row stays; a press acts once", () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    const onDataChange = vi.fn();
+    const g = sheet();
+    const view = (tokens: { addRowToken: number; deleteRowToken: number; copyTableToken: number }) => (
+      <StrictMode><SpreadSheetComp data={g} onDataChange={onDataChange} {...tokens} /></StrictMode>
+    );
+    const { rerender } = render(view({ addRowToken: 0, deleteRowToken: 0, copyTableToken: 0 }));
+    const opened = onDataChange.mock.calls.at(-1)?.[0] as SheetGrid;
+    expect(firstCells(opened)).toEqual(["Account Number", "84000", "84000_0", "", "84001", "84001_0"]);
+    expect(writeText).not.toHaveBeenCalled();
+
+    rerender(view({ addRowToken: 1, deleteRowToken: 0, copyTableToken: 0 }));
+    const added = onDataChange.mock.calls.at(-1)?.[0] as SheetGrid;
+    expect(added).toHaveLength(7);
+    expect(firstCells(added).slice(0, 6)).toEqual(["Account Number", "84000", "84000_0", "", "84001", "84001_0"]);
+
+    rerender(view({ addRowToken: 1, deleteRowToken: 1, copyTableToken: 0 }));
+    expect(onDataChange.mock.calls.at(-1)?.[0] as SheetGrid).toHaveLength(6);
+
+    rerender(view({ addRowToken: 1, deleteRowToken: 1, copyTableToken: 1 }));
+    expect(writeText).toHaveBeenCalledTimes(1);
   });
 });

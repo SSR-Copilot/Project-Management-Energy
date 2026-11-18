@@ -1642,6 +1642,10 @@ function OpexCardView({
                                     icon={<InfoRegular />}
                                     aria-label={OPEX_MSG.doesNotAlign}
                                     data-testid={`opex-warn-${row.id}`}
+                                    // The canvas `InfoButton` only shows its text; its click never reaches the row
+                                    // (the gallery's `OnSelect` fires for the row, not the icon). Here the click
+                                    // bubbled to the `<tr>` and selected the row too (user, 18 Nov 2026).
+                                    onClick={(e) => e.stopPropagation()}
                                   />
                                 </Tooltip>
                               ) : null}

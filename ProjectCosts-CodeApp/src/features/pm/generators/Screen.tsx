@@ -122,11 +122,13 @@ import {
 /* ────────────────────────────────────────────────────────────────── styles */
 
 /**
- * The 1-px rule under every card header. The extracted source gives `rec_…_Separator.Fill`
- * RGBA(0, 120, 212, 1), but the live canvas draws it light grey: #e0e0e0, sampled from the canvas
- * Generators screenshot (17 Nov 2026). Follow the canvas as it renders (D90).
+ * The 1-px rule under every card header: `rec_…_Separator.Fill: RGBA(0, 120, 212, 1)` (Y:2435, and the same on
+ * every type's header), not the app's themePrimary (#006eb9). It was #e0e0e0, sampled on 17 Nov 2026 (D90) from
+ * a WTG card, whose container keeps the `GroupContainer` default `DropShadow.Light` and so draws the blue rule
+ * with a grey shadow over it; the PV, substructure, storage, hydrogen and substation rules are plainly blue on
+ * the canvas (user screenshot pair, 18 Nov 2026). The WTG / inverter shadow is `cardShadow`.
  */
-const CARD_RULE = "#e0e0e0";
+const CARD_RULE = "rgb(0, 120, 212)";
 /** `ColorFade(ColorValue(gblAppTheme.palette.Warning), 60%)` — the Height Limitation tag. */
 const HEIGHT_TAG_FILL = "rgb(248, 212, 158)";
 /** `con_Milestones_Page_LockMessage_1.Fill` and its icon / text colour. */
@@ -152,7 +154,16 @@ const useStyles = makeStyles({
   /** The expanded card's "Add Generator" bar: over "Supplier" (the detail grid's 20 px inset). */
   // The first detail column is flush with the card padding (see `detailCellFirst`), so no inset of its own.
   cardCommandBar: {},
-  page: { display: "flex", flexDirection: "column", flex: "1 0 auto", minWidth: 0, paddingBottom: "15px" },
+  /*
+   * The page fills the shell's content column and does not grow past it: the command bar and Total Capacity stay
+   * put and only `scrollBody` scrolls, as `con_Generators_DisplayProject_Body_Form_FirstColumn` does in the canvas
+   * (`Height: Parent.Height - 155`, `LayoutOverflowY: Scroll`, Y:1302-1314; user, 18 Nov 2026).
+   */
+  page: { display: "flex", flexDirection: "column", flex: "1 1 auto", minHeight: 0, minWidth: 0 },
+  scrollBody: {
+    display: "flex", flexDirection: "column", flex: "1 1 auto", minHeight: 0, minWidth: 0,
+    overflowY: "auto", overflowX: "hidden", paddingBottom: "15px",
+  },
   /** `con_…_PlantWtgCapacity` — 280 wide, 70 high, the caption and input inset 20. */
   capacity: {
     boxSizing: "border-box", width: "280px", maxWidth: "100%", minHeight: "70px",
@@ -176,6 +187,12 @@ const useStyles = makeStyles({
   gallery: { display: "flex", flexDirection: "column", minWidth: 0 },
   /** `con_…_Card` — the canvas `Width: Parent.Width - 10` gap is dropped so the rule runs end to end. */
   card: { display: "flex", flexDirection: "column", minWidth: 0 },
+  /**
+   * `con_…_GeneratorType_Card` (Y:1344) and `con_…_Invertors_Card` (Y:3963) leave `DropShadow` at the
+   * `GroupContainer@1.5.0` default, `DropShadow.Light` (every other card container sets `DropShadow.None`): the
+   * WTG and inverter cards carry the light shadow the other screens draw as `shadow4`.
+   */
+  cardShadow: { boxShadow: tokens.shadow4 },
   /** `con_…_CardHeader` — Height 42, the separator 1 px at Y 41. */
   cardHeader: {
     display: "flex", alignItems: "center", columnGap: space.s, minHeight: "42px",
@@ -300,6 +317,19 @@ const useStyles = makeStyles({
   /** The turbine grid (`FluentDetailsList`, Width 850): Semibold header captions. */
   turbineHead: { fontWeight: tokens.fontWeightSemibold },
   turbineTable: { tableLayout: "fixed", width: "850px", maxWidth: "100%" },
+  /*
+   * `…_GeneratorsList.Height: If(TotalRows < PageSize, TotalRows * 35 + 50, PageSize * 35 + 50)` (Y:2085-2098),
+   * while the PowerCAT DetailsList inside draws a 42-px header and 42-px rows, so the canvas grid overflows its
+   * box and scrolls (last row cut, vertical scrollbar; user screenshot pair, 18 Nov 2026). The box is the
+   * `maxHeight` set inline per card; the table keeps the 42-px rows.
+   */
+  turbineScroll: { overflowY: "auto", overflowX: "hidden", maxWidth: "100%", scrollbarGutter: "stable" },
+  turbineHeadRow: { height: "42px" },
+  /**
+   * The over-height-limit icon, 16 px (Y:2382-2391). The column sets `TagColor: "rgb(255, 140, 0)"` and a per-row
+   * `ImageColor` of `rgb(255, 172, 28)` (Y:2147-2148); the live grid draws the darker orange (user, 18 Nov 2026).
+   */
+  turbineInfo: { color: "rgb(255, 140, 0)", fontSize: "16px", display: "block" },
   /**
    * `columns_Items` `ColWidth` plus the list's cell padding: the name `Max(850 - 570, 40)`, Total
    * Height 155, Effective Capacity 255, then the 18- / 16-px edit and delete icons side by side.
@@ -308,11 +338,12 @@ const useStyles = makeStyles({
   turbineColHeight: { width: "171px" },
   turbineColCapacity: { width: "279px" },
   turbineColIcon: { width: "34px" },
-  /** `AlternateRowColor: gblAppTheme.palette.Grayscale30` — every other row, starting with the first. */
-  turbineRow: { "&:nth-child(odd)": { backgroundColor: palette.Grayscale30 } },
+  /** `AlternateRowColor: gblAppTheme.palette.Grayscale30` — every other row, starting with the first. 42-px rows (see `turbineScroll`). */
+  turbineRow: { height: "42px", "&:nth-child(odd)": { backgroundColor: palette.Grayscale30 } },
   /** Numbers are right-aligned in the canvas card boxes (`Align.Right`). */
   detailValueNumeric: { justifyContent: "flex-end" },
-  title: { display: "flex", alignItems: "center", flexWrap: "wrap", gap: space.s },
+  // 10 px between the tags: `con_Generator_GeneratorHeightLimitationTag.X = con_Generator_GeneratorStatus.X - Self.Width - 10`.
+  title: { display: "flex", alignItems: "center", flexWrap: "wrap", gap: "10px" },
   /** `txt_…_GeneratorType` takes the header's width; the chips sit right of it. */
   /** `txt_…_GeneratorType` is a `Text@0.0.51` with no `Weight`: regular. */
   titleText: { flex: "1 1 auto", fontWeight: tokens.fontWeightRegular },
@@ -370,8 +401,27 @@ const useStyles = makeStyles({
     backgroundColor: palette.SuccessLight,
   },
   /** `con_Generator_GeneratorHeightLimitationTag` */
-  heightTag: { backgroundColor: HEIGHT_TAG_FILL },
-  expanded: { display: "flex", flexDirection: "column", gap: space.s, maxWidth: "850px", minWidth: 0, overflowX: "auto" },
+  /**
+   * `con_Generator_GeneratorHeightLimitationTag` (Y:2779): 120 wide (`Max(lbl.Width = 120, 50)`), the label
+   * `ColorFade(Warning, -60%)` on `ColorFade(Warning, 60%)`, the border the status tag's (Green while Active).
+   */
+  heightTag: {
+    backgroundColor: HEIGHT_TAG_FILL, color: "rgb(95, 59, 5)",
+    width: "120px", minWidth: 0, paddingLeft: 0, paddingRight: 0, flexShrink: 0,
+  },
+  heightTagActive: {
+    borderTopColor: palette.Green, borderRightColor: palette.Green,
+    borderBottomColor: palette.Green, borderLeftColor: palette.Green,
+  },
+  /**
+   * `con_Generator_GeneratorStatus` (Y:2538): 80 wide (`Max(lbl.Width = 80, 50)`) at `X = Parent.Width -
+   * Padding.Page (10) - Self.Width - 40`, so it ends 50 px from the header's right edge, 18 px before the
+   * chevron's 20-px box at `Parent.Width - 32`; the 28-px fold button starts 36 from the edge, hence 6 + gap 8.
+   */
+  chipStatus: { width: "80px", minWidth: 0, paddingLeft: 0, paddingRight: 0, flexShrink: 0, marginRight: "6px" },
+  // 850 for the turbine grid plus room for the scroll box's vertical scrollbar (`turbineScroll`,
+  // `scrollbar-gutter: stable`), which otherwise ate the last (info) column (user screenshot, 18 Nov 2026).
+  expanded: { display: "flex", flexDirection: "column", gap: space.s, maxWidth: "870px", minWidth: 0, overflowX: "auto" },
   warning: { fontSize: tokens.fontSizeBase200, color: palette.Warning },
   /**
    * The turbine panel's "Apply to all" warning as the canvas draws it (canvas pair, 17 Nov 2026): an
@@ -435,7 +485,15 @@ const useStyles = makeStyles({
   /** `txt_…_GeneratorName`: `Width: 80`. */
   nameIndex: { flex: "0 0 80px", width: "80px" },
   dropdown: { minWidth: "0px", width: "100%" },
-  pmError: { color: palette.Error, fontSize: tokens.fontSizeBase200 },
+  /**
+   * `lbl_…_Generator_ErrorMessageProjectManager(_1)` (Y:11541-11569, Y:15132): a `Size: 8` (10.67 px) label in
+   * `gblAppColors.Error`, INSIDE the button container at the panel's foot, left of Save / Cancel, from the fields' X.
+   * First child of the footer: `canvas.css` pushes the first child right (`margin-left: auto`), hence the override.
+   */
+  footerHint: {
+    flexGrow: 1, flexShrink: 1, flexBasis: "auto", minWidth: 0, marginLeft: "0 !important",
+    alignSelf: "flex-end", textAlign: "left", color: palette.Error, fontSize: "10.67px", lineHeight: "14px",
+  },
   footerPrimary: { height: "32px", minWidth: "96px", fontSize: "15px" },
   footerCancel: {
     height: "32px", minWidth: "96px", fontSize: "15px",
@@ -569,16 +627,21 @@ const choiceOptions = (labels: Readonly<Record<number, string>>): SelectOption[]
 
 /** The panel footer: primary (Save / Request permission) and Cancel. */
 function PanelFooter({
-  primary, primaryName, onPrimary, disabled, onCancel, cancelName, primaryTooltip, cancelTooltip, reason,
+  primary, primaryName, onPrimary, disabled, onCancel, cancelName, primaryTooltip, cancelTooltip, reason, hint,
 }: {
   primary: string; primaryName: string; onPrimary: () => void; disabled: boolean;
   onCancel: () => void; cancelName: string; primaryTooltip?: string; cancelTooltip?: string;
   /** Why the primary button is disabled when an excluded action is behind it (D27). */
   reason?: string;
+  /** The red footer label left of the buttons (`lbl_…_ErrorMessageProjectManager`), when it shows. */
+  hint?: string;
 }) {
   const s = useStyles();
   return (
     <>
+      {hint ? (
+        <Text className={s.footerHint} aria-live="polite" data-testid={`${primaryName}-hint`}>{hint}</Text>
+      ) : null}
       <Button
         className={s.footerPrimary} appearance="primary" icon={<CheckmarkRegular />}
         aria-label={primary} data-testid={primaryName} disabled={disabled} onClick={onPrimary}
@@ -623,7 +686,7 @@ const detailColumn = (i: number, count: number, rowFlow: boolean): number =>
 
 /** A gallery: one card per row; an expanded card shows its detail captions and values. */
 function Gallery({
-  name, columns, rows, disabled, selectLabel, rowFlow = false, layout,
+  name, columns, rows, disabled, selectLabel, rowFlow = false, layout, shadow = false,
 }: {
   /**
    * The canvas auto-layout cards, where every cell is flush in its column and every value is
@@ -635,6 +698,8 @@ function Gallery({
   name: string; columns: readonly (string | null)[]; rows: GalleryRow[]; disabled: boolean;
   /** Fill the detail grid row by row (the WTG card's 2 × 4 layout) instead of column by column. */
   rowFlow?: boolean;
+  /** The card container keeps the default `DropShadow.Light` (WTG and inverter cards; `cardShadow`). */
+  shadow?: boolean;
   /** The card's selection dot `AccessibleLabel` (`img_…_CardHeader_RowSelectionDot`). */
   selectLabel: string;
 }) {
@@ -643,7 +708,7 @@ function Gallery({
   return (
     <div className={s.gallery} data-testid={name} role="list" aria-label={name}>
       {rows.map((r) => (
-        <div key={r.id} className={s.card} role="listitem" data-selected={r.selected || undefined}>
+        <div key={r.id} className={mergeClasses(s.card, shadow && s.cardShadow)} role="listitem" data-selected={r.selected || undefined}>
           <div className={s.cardHeader}>
             <Radio
               className={s.cardDot}
@@ -1987,7 +2052,12 @@ function GeneratorsScreenBody() {
   /* ── galleries ── */
   const iso = project?.isoCurrencyCode;
   const PERM_TONE_CLASS = { success: s.permSuccess, error: s.permError, warning: s.permWarning, disabled: s.permDisabled };
-  const titleOf = (family: PlantFamily, label: string, row: SimpleTypeRow | GeneratorTypeRow, extra?: ReactNode) => {
+  /**
+   * The header's tags, left to right as the canvas places them from the right edge: `extra` (the Height
+   * Limitation tag), the request-permission chip and its Cancel button, then `trailing` (the status tag,
+   * rightmost: `con_Generator_GeneratorStatus.X = Parent.Width - 10 - Self.Width - 40`).
+   */
+  const titleOf = (family: PlantFamily, label: string, row: SimpleTypeRow | GeneratorTypeRow, extra?: ReactNode, trailing?: ReactNode) => {
     const chip = showsPermissionChip(family) ? permissionStateLabel(row.requestPermissionState) : null;
     const cancelName = CANCEL_BUTTON[family];
     return (
@@ -2012,6 +2082,7 @@ function GeneratorsScreenBody() {
             {CANCEL_REQUEST.text}
           </Button>
         ) : null}
+        {trailing}
       </span>
     );
   };
@@ -2051,12 +2122,11 @@ function GeneratorsScreenBody() {
         <Tooltip relationship="description" withArrow content={model?.displayName ?? ""}>
           <span data-testid="txt_Generators_DisplayProject_Body_Form_GeneratorType">
             {titleOf("wtg", label, type, (
-              <>
-                <span className={mergeClasses(s.chip, isActive(type.status) && s.chipActive)} data-testid="lbl_Generator_GeneratorStatus">{statusLabel(type.status)}</span>
-                {rows.some((r) => overHeightLimit(planning, r.totalHeight))
-                  ? <span className={mergeClasses(s.chip, s.heightTag)}>{WTG_CARD_LABELS.heightLimitationTag}</span>
-                  : null}
-              </>
+              rows.some((r) => overHeightLimit(planning, r.totalHeight))
+                ? <span className={mergeClasses(s.chip, s.heightTag, isActive(type.status) && s.heightTagActive)}>{WTG_CARD_LABELS.heightLimitationTag}</span>
+                : null
+            ), (
+              <span className={mergeClasses(s.chip, s.chipStatus, isActive(type.status) && s.chipActive)} data-testid="lbl_Generator_GeneratorStatus">{statusLabel(type.status)}</span>
             ))}
           </span>
         </Tooltip>
@@ -2119,12 +2189,18 @@ function GeneratorsScreenBody() {
               />
             </div>
           ) : null}
+          <div
+            className={s.turbineScroll}
+            // The canvas box: `min(rows, PageSize) * 35 + 50`.
+            style={{ maxHeight: `${Math.min(pageRows.length, GENERATORS_PAGE_SIZE) * 35 + 50}px` }}
+            data-testid={`generators-turbine-scroll-${type.id}`}
+          >
           <Table
             size="small" aria-label={WTG_CARD_LABELS.turbineGrid} className={s.turbineTable}
             data-testid="pcf_Generators_DisplayProject_Body_Form_GeneratorType_CardDetails_GeneratorsList"
           >
             <TableHeader>
-              <TableRow>
+              <TableRow className={s.turbineHeadRow}>
                 {/* As the canvas (28 Oct 2026): the name and the icon columns have no header
                     (`ColDisplayName: ""`); the PO's "Generator Name" / "Actions" captions are withdrawn. */}
                 <TableHeaderCell className={mergeClasses(s.turbineHead, s.turbineColName)}>{WTG_CARD_LABELS.turbineNameColumn}</TableHeaderCell>
@@ -2132,17 +2208,13 @@ function GeneratorsScreenBody() {
                 <TableHeaderCell className={mergeClasses(s.turbineHead, s.turbineColCapacity)}>{TURBINE_TABLE_LABELS.effectiveCapacity}</TableHeaderCell>
                 <TableHeaderCell className={s.turbineColIcon} aria-label={WTG_CARD_LABELS.editIconColumn} />
                 <TableHeaderCell className={s.turbineColIcon} aria-label={WTG_CARD_LABELS.deleteIconColumn} />
+                <TableHeaderCell className={s.turbineColIcon} aria-label={WTG_CARD_LABELS.infoIconColumn} />
               </TableRow>
             </TableHeader>
             <TableBody>
               {pageRows.map((t) => (
                 <TableRow key={t.id} className={s.turbineRow}>
-                  <TableCell>
-                    {t.name ?? ""}
-                    {overHeightLimit(planning, t.totalHeight)
-                      ? <InfoRegular aria-hidden="true" color={palette.Warning} />
-                      : null}
-                  </TableCell>
+                  <TableCell>{t.name ?? ""}</TableCell>
                   <TableCell>{fmtHeight(t.totalHeight, lang)}</TableCell>
                   <TableCell>{fmtCapacity(t.effectiveCapacity, lang)}</TableCell>
                   <TableCell>
@@ -2168,10 +2240,18 @@ function GeneratorsScreenBody() {
                       }}
                     />
                   </TableCell>
+                  <TableCell>
+                    {/* `InformationIcon` column: `icon:Info` when Total Height > the planning height limitation
+                        (Y:2163-2171), `ColHideWhenBlank` otherwise; after the Delete column (Y:2382). */}
+                    {overHeightLimit(planning, t.totalHeight)
+                      ? <InfoRegular aria-hidden="true" className={s.turbineInfo} data-testid={`generators-turbine-info-${t.id}`} />
+                      : null}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
+          </div>
         </div>
       ),
     };
@@ -2329,9 +2409,9 @@ function GeneratorsScreenBody() {
       </div>
 
       {bodyVisible ? (
-        <>
+        <div className={s.scrollBody} data-testid="con_Generators_DisplayProject_Body_Form_FirstColumn">
           <Gallery
-            name="gal_Generators_DisplayProject_Body_Form_GeneratorTypes" selectLabel={SELECT_DOT.wtg}
+            name="gal_Generators_DisplayProject_Body_Form_GeneratorTypes" selectLabel={SELECT_DOT.wtg} shadow
             disabled={!editable} rows={wtgRows} rowFlow
             columns={[
               TYPE_DETAIL_FIELD_LABELS.supplier, TYPE_DETAIL_FIELD_LABELS.totalHeight,
@@ -2349,7 +2429,7 @@ function GeneratorsScreenBody() {
             ]}
           />
           <Gallery
-            name="gal_Generators_DisplayProject_Body_Form_Invertors" selectLabel={SELECT_DOT.inverter}
+            name="gal_Generators_DisplayProject_Body_Form_Invertors" selectLabel={SELECT_DOT.inverter} shadow
             disabled={!editable} rows={inverterRows}
             columns={[
               INVERTER_CARD_LABELS.inverterType, INVERTER_CARD_LABELS.supplier,
@@ -2382,7 +2462,7 @@ function GeneratorsScreenBody() {
             disabled={!editable} rows={substationRows} layout="simple"
             columns={[SUBSTATION_CARD_LABELS.capacity, SUBSTATION_CARD_LABELS.supplier]}
           />
-        </>
+        </div>
       ) : null}
 
       {/* ── Add Generator Type ── */}
@@ -2395,6 +2475,7 @@ function GeneratorsScreenBody() {
             cancelName="pcf_btn_GeneratorData_RightPanel_Form_Buttons_Cancel"
             primaryTooltip={TYPE_PANEL_TOOLTIPS.save} cancelTooltip={TYPE_PANEL_TOOLTIPS.cancel}
             disabled={!typeSaveable || settling}
+            hint={typeHeightBlocked ? HEIGHT_LIMIT_PM_MESSAGE : undefined}
             onCancel={close}
             onPrimary={onTypeSave}
           />
@@ -2461,7 +2542,7 @@ function GeneratorsScreenBody() {
             error={numberOfGeneratorsMessage(typeForm.numberOfGenerators, lang)}
             onChange={(v) => touchType("numberOfGenerators", v)}
           />
-          {typeHeightBlocked ? <Text className={s.pmError}>{HEIGHT_LIMIT_PM_MESSAGE}</Text> : null}
+          {/* The height-limitation message is the footer `hint` (canvas: inside the button container). */}
           {/* NEW (D89): the hidden reason Save is disabled (`typeSaveBlockedReason`); no canvas control. */}
           {typeSaveBlocked ? (
             <MessageBar intent="warning" className={s.typeField} data-testid="msg_GeneratorData_RightPanel_Form_SaveBlocked">
@@ -2483,6 +2564,7 @@ function GeneratorsScreenBody() {
             primaryTooltip={HINTS.save}
             cancelName="pcf_btn_GeneratorData_RightPanel_Form_Generator_Buttons_Cancel"
             disabled={!turbineSaveable || settling}
+            hint={turbineHeightBlocked ? HEIGHT_LIMIT_PM_MESSAGE : undefined}
             onCancel={close}
             onPrimary={onTurbineSave}
           />
@@ -2570,7 +2652,6 @@ function GeneratorsScreenBody() {
             readOnly disabledLook className={s.turbineField}
             value={fmtTurbineTotalHeightBox(turbineHeight, lang)}
           />
-          {turbineHeightBlocked ? <Text className={s.pmError}>{HEIGHT_LIMIT_PM_MESSAGE}</Text> : null}
         </div>
       </FormPanel>
 
@@ -2784,6 +2865,7 @@ function GeneratorsScreenBody() {
             cancelName="pcf_btn_GeneratorData_RightPanel_Form_Buttons_Cancel_1"
             primaryTooltip={REPLACE_LABELS.replaceTooltip} cancelTooltip={TYPE_PANEL_TOOLTIPS.cancel}
             disabled={!replaceWtgOk || settling}
+            hint={replaceHeightBlocked ? HEIGHT_LIMIT_PM_MESSAGE : undefined}
             onCancel={close} onPrimary={() => void replaceGeneratorType()}
           />
         }
@@ -2886,7 +2968,6 @@ function GeneratorsScreenBody() {
               ariaLabel="txt_GeneratorData_RightPanel_Form_Fields_NumberOfGenerator" required
               readOnly disabledLook value={String(replaceCount)}
             />
-            {replaceHeightBlocked ? <Text className={s.pmError}>{HEIGHT_LIMIT_PM_MESSAGE}</Text> : null}
           </div>
         </div>
       </FormPanel>
