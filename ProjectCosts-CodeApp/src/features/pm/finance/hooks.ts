@@ -37,22 +37,33 @@
  *
  * PERMISSIONS: `CanEditSelectedProject`, `DataSourceInfo` and `RecordInfo` have no SDK equivalent
  * (D1): they pass and Dataverse refuses what the user may not do.
+ *
+ * PERFORMANCE (D137, switches in `data/financeFlags.ts`; `perf.ts` shapes the writes):
+ *  - the inputs read does not wait for the categories (`parallelReads`), the project-state list is cached, the CAPEX
+ *    cost chunks are read together;
+ *  - the CAPEX total and the turbine count are read only while their panel or card is wanted (`lazyReads`);
+ *  - a write reloads only the reads it can change (`PlanJob.invalidate`, `reloadKeys`), not `financeAll`.
+ *  `useFinanceWrites`' own `invalidate` list (`financeAll`) is the default for a job that sets none.
  */
-import { useQuery } from "@tanstack/react-query";
+import { useCallback, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ES, ES_ADMIN, ES_FINANCE, ES_PLANT } from "@/data/dataverseNames";
+import { financePerf } from "@/data/financeFlags";
 import { qk } from "@/data/keys";
 import type { ScreenData } from "@/data/notConnected";
 import { usePlanWrite } from "@/data/usePlanWrite";
+import { listProjectStates } from "@/data/generalData";
 import {
   countActiveTurbines, findFinancingInputsByKey, listBanks, listDebtAssumptions,
-  listFinancingCategories, listFinancingInputs, listKfwTranches, listRepaymentAmounts,
-  listStepUpMargins, loadFinanceProject, loadTotalDevexCapex,
+  listFinancingCategories, listFinancingInputsRaw, listKfwTranches, listRepaymentAmounts,
+  listStepUpMargins, loadFinanceProject, loadTotalDevexCapex, withCategoryOrder,
 } from "@/data/finance";
 import {
   sliceDebtAssumptions,
   type BankRow, type DebtAssumptionSlices, type FinanceProject, type FinancingCategory,
   type FinancingInputRow, type StoredRepaymentRow, type StoredStepUpMarginRow,
 } from "./rules";
+import { FINANCE_WRITE_ACTION } from "./perf";
 
 /** The Dataverse entity sets the screen reads and writes. */
 /**
@@ -81,9 +92,17 @@ const REFERENCE_STALE = 30 * 60 * 1000;
 
 /** `gblRecordSelectedProject` (+ `'Financing Options'`). */
 export function useFinanceProject(projectId: string | undefined): ScreenData<FinanceProject | null> {
+  const qc = useQueryClient();
   const q = useQuery({
     queryKey: qk.finance(projectId ?? "", "project"),
-    queryFn: () => loadFinanceProject(projectId!),
+    // `parallelReads`: the project-state list is reference data (the admin-managed cluster states, read once per app
+    // session by the canvas `OnStart`), so it is cached like the other reference reads; the project row stays live.
+    queryFn: () => loadFinanceProject(
+      projectId!,
+      financePerf().parallelReads
+        ? () => qc.fetchQuery({ queryKey: qk.financeReference("projectStates"), queryFn: listProjectStates, staleTime: REFERENCE_STALE })
+        : undefined,
+    ),
     enabled: Boolean(projectId),
     ...EVERY_VISIT,
   });
@@ -135,14 +154,25 @@ export function useKfwTranches(): ScreenData<string[]> {
   return out<string[]>(q, []);
 }
 
-/** `colFinancingInputInProject` — needs the categories for each row's `Order`. */
+/**
+ * `colFinancingInputInProject` — each row's `Order` comes from the categories.
+ *
+ * `parallelReads` on (the default): the rows are read WITHOUT waiting for the categories (one query keyed by the
+ * project alone) and `select` attaches each row's `Order` once both are in, so the two requests run side by side.
+ * Off: the read waits for the categories and is keyed by their ids, as before. The rows the screen gets are the same.
+ */
 export function useFinancingInputs(
   projectId: string | undefined, categories: readonly FinancingCategory[],
 ): ScreenData<FinancingInputRow[]> & { fresh: boolean } {
+  const parallel = financePerf().parallelReads;
+  const select = useMemo(() => (rows: readonly Record<string, unknown>[]) => withCategoryOrder(rows, categories), [categories]);
   const q = useQuery({
-    queryKey: qk.finance(projectId ?? "", "inputs", categories.map((c) => c.id).join(",")),
-    queryFn: () => listFinancingInputs(projectId!, categories),
-    enabled: Boolean(projectId) && categories.length > 0,
+    queryKey: parallel
+      ? qk.finance(projectId ?? "", "inputs")
+      : qk.finance(projectId ?? "", "inputs", categories.map((c) => c.id).join(",")),
+    queryFn: () => listFinancingInputsRaw(projectId!),
+    select,
+    enabled: Boolean(projectId) && (parallel || categories.length > 0),
     ...EVERY_VISIT,
   });
   /*
@@ -176,23 +206,48 @@ export function useStepUpMargins(projectId: string | undefined): ScreenData<Stor
   return out<StoredStepUpMarginRow[]>(q, []);
 }
 
-/** `locTotalDevexCapexCost`. */
-export function useTotalDevexCapex(projectId: string | undefined): ScreenData<number> {
+/** The app-wide `staleTime` (`app/Providers.tsx`). */
+const APP_STALE = 30 * 1000;
+
+/**
+ * The `staleTime` of a LAZY read (D109 kept). A read that is wanted at mount is re-read by `refetchOnMount: "always"`;
+ * one that becomes wanted later is not "mounted", so without this a copy cached by an EARLIER visit (less than the
+ * app's 30 s old) would be shown without a read. Data fetched before this visit began is therefore stale at once, and
+ * data fetched during it keeps the app's 30 s (so a card folded and unfolded again does not read again).
+ */
+function useVisitStaleTime() {
+  const [mountedAt] = useState(() => Date.now());
+  return useCallback(
+    (query: { state: { dataUpdatedAt: number } }) => (query.state.dataUpdatedAt < mountedAt ? 0 : APP_STALE),
+    [mountedAt],
+  );
+}
+
+/**
+ * `locTotalDevexCapexCost`. `wanted` (default true): `lazyReads` passes false while no card or panel that shows the
+ * value has been opened, so the contracts and cost reads are not sent for a screen that never needs them. The screen
+ * keeps a value it asked for once wanted for the rest of the visit.
+ */
+export function useTotalDevexCapex(projectId: string | undefined, wanted = true): ScreenData<number> {
+  const staleTime = useVisitStaleTime();
   const q = useQuery({
     queryKey: qk.finance(projectId ?? "", "totalCapex"),
     queryFn: () => loadTotalDevexCapex(projectId!),
-    enabled: Boolean(projectId),
+    enabled: Boolean(projectId) && wanted,
+    staleTime,
     ...EVERY_VISIT,
   });
   return out(q, 0);
 }
 
-/** The active turbines of the project (decommissioning card, Per Turbine). */
-export function useActiveTurbineCount(projectId: string | undefined): ScreenData<number> {
+/** The active turbines of the project (decommissioning card, Per Turbine). `wanted`: as `useTotalDevexCapex`. */
+export function useActiveTurbineCount(projectId: string | undefined, wanted = true): ScreenData<number> {
+  const staleTime = useVisitStaleTime();
   const q = useQuery({
     queryKey: qk.finance(projectId ?? "", "activeTurbines"),
     queryFn: () => countActiveTurbines(projectId!),
-    enabled: Boolean(projectId),
+    enabled: Boolean(projectId) && wanted,
+    staleTime,
     ...EVERY_VISIT,
   });
   return out(q, 0);
@@ -205,6 +260,6 @@ export const fetchTrancheDuplicates = findFinancingInputsByKey;
 export function useFinanceWrites(projectId: string | undefined) {
   return usePlanWrite({
     invalidate: [qk.financeAll(projectId ?? "")],
-    action: "change this project's financing inputs",
+    action: FINANCE_WRITE_ACTION,
   });
 }

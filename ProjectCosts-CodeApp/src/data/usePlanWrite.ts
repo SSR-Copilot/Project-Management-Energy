@@ -29,7 +29,9 @@ import { useMutation, useQueryClient, type QueryKey } from "@tanstack/react-quer
 import { isRecordGone, RECORD_GONE_TEXT } from "@/platform/errors";
 import { permissionMessage } from "@/platform/privileges";
 import { BulkRowsGoneError } from "./bulkBackend";
-import { executePlan, PlanError, PlanRefusedError, type LandedRow, type PlanResult } from "./executePlan";
+import {
+  executePlan, PlanError, PlanRefusedError, type LandedRow, type PlanFailure, type PlanResult,
+} from "./executePlan";
 import { changeCount, type WritePlan } from "./writePlan";
 
 /** One write: a ready plan, or a function that reads what it needs and returns the plan. */
@@ -43,6 +45,12 @@ export interface PlanJob {
   success?: string | ((plan: WritePlan) => string);
   /** This job's canvas error text, when it differs from the screen's default. */
   errorText?: (detail: string) => string;
+  /**
+   * For a job whose plan runs several INDEPENDENT writes at once and whose canvas names each failure on its own (the
+   * Finance visit seeds, one `IfError` → `Notify` each). Called with every failure of the failing step; a string
+   * replaces the whole message, `null` falls back to the default one. Optional; no other caller sets it.
+   */
+  failureText?: (failures: readonly PlanFailure[]) => string | null;
   plan: WritePlan | (() => Promise<WritePlan>);
   /**
    * A second step in the SAME job, after the plan's writes (D81): the canvas sequences `Patch → Flow.Run → Patch`
@@ -266,7 +274,8 @@ export function usePlanWrite(opts: {
       if (job.success) setSuccess(typeof job.success === "function" ? job.success(result.plan) : job.success);
       return result.createdIds;
     } catch (e) {
-      setError(writeErrorMessage(e, opts.action, job.errorText ?? opts.errorText));
+      const own = e instanceof PlanError && job.failureText ? job.failureText(e.failures) : null;
+      setError(own ?? writeErrorMessage(e, opts.action, job.errorText ?? opts.errorText));
       return null;
     } finally {
       setProgress(null);

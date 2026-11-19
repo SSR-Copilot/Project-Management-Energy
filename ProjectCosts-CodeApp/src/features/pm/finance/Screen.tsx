@@ -88,6 +88,11 @@ import {
   useFinanceWrites, useFinancingCategories, useFinancingInputs, useKfwTranches, useRepaymentAmounts,
   useStepUpMargins, useTotalDevexCapex,
 } from "./hooks";
+import { financePerf } from "@/data/financeFlags";
+import {
+  FINANCE_WRITE_ACTION, optimizeFinancingOptionPlan, optimizeTrancheDeletePlan, optimizeTrancheSavePlan,
+  reloadKeys, seedGroupJob, withReload,
+} from "./perf";
 
 /* ═══════════════════════════════════════════════════════════════════ styles ══ */
 
@@ -706,8 +711,7 @@ export default function ProjectFinanceScreen() {
   const stepUpsQ = useStepUpMargins(projectId);
   const banksQ = useBanks();
   const kfwQ = useKfwTranches();
-  const capexQ = useTotalDevexCapex(projectId);
-  const turbinesQ = useActiveTurbineCount(projectId);
+  // `capexQ` and `turbinesQ` are called below, after the card and panel state they depend on (`lazyReads`).
   const writes = useFinanceWrites(projectId);
 
   // The debt standard is usable only once its rows are in: while they load, or if the Fabric read
@@ -720,8 +724,6 @@ export default function ProjectFinanceScreen() {
   const loadError = projectQ.error ?? categoriesQ.error ?? inputsQ.error ?? repaymentsQ.error ?? stepUpsQ.error;
   const inputs = inputsQ.data;
   const banks = banksQ.data;
-  const totalCapex = capexQ.data;
-  const activeTurbines = turbinesQ.data;
   const country = project?.countryName ?? null;
   const unit = currencySuffix(country);
   const busy = writes.progress !== null;
@@ -762,6 +764,15 @@ export default function ProjectFinanceScreen() {
       decStandard ?? buildDecommissioningStandard([], tech, project),
     ), assumptionsConnected);
     void (async () => {
+      if (financePerf().concurrentWrites) {
+        // One job: the option patch and every seed together, ONE reload (D137). The canvas `IfError` per
+        // seed is kept: a failing seed stops no other and each failure is named.
+        const job = seedGroupJob({
+          seeds, project, optionPlan, action: FINANCE_WRITE_ACTION, reload: reloadKeys(projectId, optionPlan ? "option" : "inputs"),
+        });
+        if (job) await writes.run(job);
+        return;
+      }
       if (optionPlan) await writes.run(financingOptionJob(optionPlan));
       for (const job of seedJobs(seeds, project)) await writes.run(job);
     })();
@@ -777,6 +788,27 @@ export default function ProjectFinanceScreen() {
   const [trancheFolded, setTrancheFolded] = useState<ReadonlyMap<string, boolean>>(new Map());
   const [panel, setPanel] = useState<Panel>("none");
   const [dialog, setDialog] = useState<Dialog>("none");
+
+  /*
+   * `lazyReads`: the CAPEX total feeds only the Equity PANEL (the card's loan line is `100 - value` for a percentage and
+   * is not shown for a fixed value), and the turbine count only the Decommissioning card's Per Turbine total. Neither is
+   * read until that panel or card is open; once wanted, it stays wanted for the visit (a latch), so folding a card again
+   * never reads again. With the switch off both are read at mount, as before.
+   */
+  const lazy = financePerf().lazyReads;
+  const [capexLatched, setCapexLatched] = useState(false);
+  const [turbinesLatched, setTurbinesLatched] = useState(false);
+  const capexWanted = !lazy || capexLatched || panel === "equity";
+  const turbinesWanted = !lazy || turbinesLatched || panel === "decommissioning" || !folded.has(CATEGORY_ORDER.decommissioning);
+  // State adjusted while rendering (the React-documented form of "derive it from a prop"), not in an effect.
+  if (lazy && capexWanted && !capexLatched) setCapexLatched(true);
+  if (lazy && turbinesWanted && !turbinesLatched) setTurbinesLatched(true);
+  const capexQ = useTotalDevexCapex(projectId, capexWanted);
+  const turbinesQ = useActiveTurbineCount(projectId, turbinesWanted);
+  const totalCapex = capexQ.data;
+  const activeTurbines = turbinesQ.data;
+  /** The Equity Save and its messages wait for the total while it is being read (no figure checked against a 0). */
+  const capexLoading = capexQ.isLoading;
   const [selectedTrancheId, setSelectedTrancheId] = useState<string | null>(null);
   const [toggleTarget, setToggleTarget] = useState<FinancingInputRow | null>(null);
   const [equity, setEquity] = useState<EquityForm | null>(null);
@@ -924,7 +956,8 @@ export default function ProjectFinanceScreen() {
     // The radio moves at once (as the canvas control does); the stored value takes over after the refresh.
     setPendingOption(option);
     try {
-      await writes.run(financingOptionJob(planFinancingOption(project, option, inputs)));
+      await writes.run(withReload(
+        financingOptionJob(optimizeFinancingOptionPlan(planFinancingOption(project, option, inputs))), projectId, "option"));
     } finally {
       setPendingOption(null);
     }
@@ -934,11 +967,11 @@ export default function ProjectFinanceScreen() {
     if (!tranche || !project) return;
     const form: SeniorDebtFormState = { ...tranche, repaymentRows, stepUpRows, isSaving: true };
     closePanel();
-    const ids = await writes.run(trancheSaveJob(async () => planTrancheSave({
+    const ids = await writes.run(withReload(trancheSaveJob(async () => optimizeTrancheSavePlan(planTrancheSave({
       form, project, seniorDebtCategoryId: categoryOf(CATEGORY_ORDER.seniorDebt)?.id ?? null,
       duplicateIds: await fetchTrancheDuplicates(trancheUniqueKey(form)),
       storedRepayments: repaymentsQ.data, storedStepUps: stepUpsQ.data, language: lang,
-    })));
+    }))), projectId, "schedules"));
     if (ids !== null) setSelectedTrancheId(null);
   };
 
@@ -1262,12 +1295,12 @@ export default function ProjectFinanceScreen() {
             if (!equity) return;
             const plan = planEquitySave({ project, row: equityInput, form: equity, totalCapex, language: lang });
             closePanel();
-            void writes.run(equitySaveJob(plan));
+            void writes.run(withReload(equitySaveJob(plan), projectId, "inputs"));
           }}
           onCancel={closePanel}
           saveTestId="pcf_btn_GeneralData_RightPanel_Equity_Form_Buttons_Save" cancelTestId="pcf_btn_GeneralData_RightPanel_Equity_Form_Buttons_Cancel"
           saveLabel="pcf_btn_GeneralData_RightPanel_Equity_Form_Buttons_Save" cancelLabel="pcf_btn_GeneralData_RightPanel_Equity_Form_Buttons_Cancel"
-          subtleWhenDisabled disabled={busy || !equity || !formChanged(openedForm, equity) || equity.value === ""
+          subtleWhenDisabled disabled={busy || capexLoading || !equity || !formChanged(openedForm, equity) || equity.value === ""
             || !validateFreeEquity(equity.value, equity.mode, country, totalCapex, lang).valid} />}
       >
         {equity ? (
@@ -1288,7 +1321,7 @@ export default function ProjectFinanceScreen() {
                   testId="txt_EquityData_FreeEquityEUR" ariaLabel="txt_EquityData_FreeEquityEUR"
                   standard={equity.flags.locIsStandardFreeEquity}
                   value={equity.value} disabled={busy} maxLength={PANEL_MAX_LENGTH.freeEquity} counter={false}
-                  error={validateFreeEquity(equity.value, equity.mode, country, totalCapex, lang).message || undefined}
+                  error={capexLoading ? undefined : validateFreeEquity(equity.value, equity.mode, country, totalCapex, lang).message || undefined}
                   onChange={(v) => setEquity({ ...equity, value: v, flags: { locIsStandardFreeEquity: false, locIsStandardShareholderLoan: false } })}
                 />
               </div>
@@ -1325,7 +1358,7 @@ export default function ProjectFinanceScreen() {
             if (!vat) return;
             const plan = planVatSave({ project, row: vatInput, form: vat, language: lang });
             closePanel();
-            void writes.run(vatSaveJob(plan));
+            void writes.run(withReload(vatSaveJob(plan), projectId, "inputs"));
           }}
           onCancel={closePanel}
           saveTestId="pcf_btn_GeneralData_RightPanel_VATFinancing_Form_Buttons_Save" cancelTestId="pcf_btn_GeneralData_RightPanel_VATFinancing_Form_Buttons_Cancel"
@@ -1761,7 +1794,7 @@ export default function ProjectFinanceScreen() {
             if (!decom) return;
             const plan = planDecommissioningSave({ row: decInput, form: decom, language: lang });
             closePanel();
-            void writes.run(decommissioningSaveJob(plan));
+            void writes.run(withReload(decommissioningSaveJob(plan), projectId, "inputs"));
           }}
           onCancel={closePanel}
           saveTestId="pcf_btn_GeneralData_RightPanel_Decommissioning_Form_Buttons_Save_1" cancelTestId="pcf_btn_GeneralData_RightPanel_Decommissioning_Form_Buttons_Cancel_1"
@@ -1899,7 +1932,7 @@ export default function ProjectFinanceScreen() {
             if (!dsra) return;
             const plan = planDsraSave({ project, row: dsraInput, form: dsra, language: lang });
             closePanel();
-            void writes.run(dsraSaveJob(plan));
+            void writes.run(withReload(dsraSaveJob(plan), projectId, "inputs"));
           }}
           onCancel={closePanel}
           saveTestId="pcf_btn_GeneralData_RightPanel_Equity_Form_Buttons_Save_1" cancelTestId="pcf_btn_GeneralData_RightPanel_Equity_Form_Buttons_Cancel_1"
@@ -2003,7 +2036,7 @@ export default function ProjectFinanceScreen() {
         onConfirm={() => {
           const target = toggleTarget;
           closeDialog();
-          if (target) void writes.run(categoryToggleJob(target, planCategoryToggle(target)));
+          if (target) void writes.run(withReload(categoryToggleJob(target, planCategoryToggle(target)), projectId, "inputs"));
         }}
       />
       <ConfirmDialog
@@ -2020,9 +2053,11 @@ export default function ProjectFinanceScreen() {
           closeDialog();
           if (deletion) {
             setSelectedTrancheId(null);
-            void writes.run(trancheDeleteJob(planTrancheDelete(target?.id ?? null, stepUpsQ.data, repaymentsQ.data)));
+            void writes.run(withReload(
+              trancheDeleteJob(optimizeTrancheDeletePlan(planTrancheDelete(target?.id ?? null, stepUpsQ.data, repaymentsQ.data))),
+              projectId, "schedules"));
           } else {
-            void writes.run(trancheToggleJob(planTrancheToggle(target)));
+            void writes.run(withReload(trancheToggleJob(planTrancheToggle(target)), projectId, "inputs"));
           }
         }}
       />
@@ -2033,7 +2068,7 @@ export default function ProjectFinanceScreen() {
         onCancel={closeDialog}
         onConfirm={() => {
           closeDialog();
-          if (dsraInput) void writes.run(dsraToggleJob(dsraInput, planDsraToggle(dsraInput)));
+          if (dsraInput) void writes.run(withReload(dsraToggleJob(dsraInput, planDsraToggle(dsraInput)), projectId, "inputs"));
         }}
       />
     </div>

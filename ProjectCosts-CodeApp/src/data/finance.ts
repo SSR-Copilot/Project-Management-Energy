@@ -29,11 +29,17 @@ import {
   type FinancingInputRow, type StoredRepaymentRow, type StoredStepUpMarginRow,
 } from "@/features/pm/finance/rules";
 import { PROJECT_COL } from "@/features/pm/revenues/rules";
+import "./financeBulk"; // registers the schedule tables with the bulk backend (a side effect)
+import { financePerf } from "./financeFlags";
+import { mapLimit } from "./concurrency";
 import { fetchAll, fetchPage } from "./client";
 import { chunk, eq, guid, lookupEq, lookupIn, numberOf } from "./odata";
 import { PROJECT_SELECT, toRevenueProject } from "./revenues";
 import { listProjectStates } from "./generalData";
 import { listGeneratorTypes, listProjectTurbines } from "./generators";
+
+/** Cost-chunk reads in flight at once (`parallelReads`): a read shares the 52-request ceiling with the screen's other reads. */
+const READ_CONCURRENCY = 8;
 
 type Raw = Record<string, unknown>;
 const raw = <T,>(rows: T[]): Raw[] => rows as unknown as Raw[];
@@ -44,14 +50,18 @@ const num = (v: unknown): number | null => numberOf(v) ?? null;
  * `gblRecordSelectedProject` with `'Financing Options'` — the project row the PM screens share,
  * read once per visit (the canvas `Set(gblRecordSelectedProject, Patch(…))` keeps it current).
  */
-export async function loadFinanceProject(projectId: string): Promise<FinanceProject | null> {
+export async function loadFinanceProject(
+  projectId: string,
+  /** The project-state list. The screen passes a cached read (`parallelReads`); the default reads it every time. */
+  loadStates: () => Promise<Awaited<ReturnType<typeof listProjectStates>>> = listProjectStates,
+): Promise<FinanceProject | null> {
   const [rows, states] = await Promise.all([
     fetchPage(
       "load the project",
       (o) => Vsb_projectsService.getAll(o),
       { select: [...PROJECT_SELECT, PROJECT_FINANCING_OPTIONS_COL], filter: `${PROJECT_COL.id} eq ${guid(projectId)}`, top: 1 },
     ),
-    listProjectStates(),
+    loadStates(),
   ]);
   const r = raw(rows)[0];
   if (!r) return null;
@@ -81,18 +91,33 @@ const INPUT_SELECT = [...Object.values(INPUT_COL), "statecode", "createdon"];
 export async function listFinancingInputs(
   projectId: string, categories: readonly FinancingCategory[],
 ): Promise<FinancingInputRow[]> {
-  const rows = raw(await fetchAll(
+  return withCategoryOrder(await listFinancingInputsRaw(projectId), categories);
+}
+
+/**
+ * The project's financing input rows as Dataverse returned them. `listFinancingInputs` is this read plus
+ * `withCategoryOrder`; the screen reads the rows alone (so the read does not wait for the categories, `parallelReads`)
+ * and attaches each row's `Order` when both are in.
+ */
+export async function listFinancingInputsRaw(projectId: string): Promise<Raw[]> {
+  return raw(await fetchAll(
     "load the project's financing inputs",
     (o) => Vsb_financinginputsService.getAll(o),
     { select: INPUT_SELECT, filter: lookupEq("vsb_project", projectId), orderBy: ["createdon asc"] },
   ));
+}
+
+/** The rows of `listFinancingInputsRaw` as `FinancingInputRow`s; `categoryOrder` comes from the categories by id. */
+export function withCategoryOrder(rows: readonly Raw[], categories: readonly FinancingCategory[]): FinancingInputRow[] {
+  const orderById = new Map(categories.map((c) => [c.id, c.order]));
   return rows.map((r) => {
     const categoryId = str(r[INPUT_COL.category]);
     return {
       id: String(r[INPUT_COL.id]),
       name: str(r[INPUT_COL.name]) ?? "",
       categoryId,
-      categoryOrder: categories.find((c) => c.id === categoryId)?.order ?? 0,
+      // Category ids are primary keys, so the map lookup equals the `find` it replaced.
+      categoryOrder: (categoryId ? orderById.get(categoryId) : undefined) ?? 0,
       uniqueKeyString: str(r[INPUT_COL.uniqueKeyString]),
       status: num(r.statecode) ?? 0,
       raw: r,
@@ -147,22 +172,37 @@ export async function listStepUpMargins(projectId: string): Promise<StoredStepUp
  * CAPEX Project Contracts>), Cost)`, 0 without contracts. Both filters run on the server (the canvas
  * loaded the whole contracts table at app start).
  */
-export async function loadTotalDevexCapex(projectId: string): Promise<number> {
+export async function loadTotalDevexCapex(
+  projectId: string,
+  /** `true` (`parallelReads`): the cost chunks are read together, in chunk order. `false`: one after the other, as before. */
+  parallel: boolean = financePerf().parallelReads,
+): Promise<number> {
   const contracts = raw(await fetchAll(
     "load the project's CAPEX contracts",
     (o) => Vsb_capexprojectcontractsService.getAll(o),
     { select: ["vsb_capexprojectcontractid"], filter: lookupEq("vsb_project", projectId) },
   )).map((r) => String(r.vsb_capexprojectcontractid));
+  const readChunk = async (part: string[]) => raw(await fetchAll(
+    "load the project's CAPEX costs",
+    (o) => Vsb_capexcostsService.getAll(o),
+    { select: ["vsb_capexcostid", "_vsb_contract_value", "vsb_cost"], filter: lookupIn("vsb_contract", part) },
+  ));
+  const parts = chunk(contracts);
+  // `mapLimit` keeps the chunk order, so the rows (and the sum) are exactly the sequential ones; at most
+  // `READ_CONCURRENCY` chunks are in flight, so a project with very many contracts cannot flood the 52-request ceiling.
+  const chunks = parallel ? await mapLimit(parts, readChunk, READ_CONCURRENCY) : await readInOrder(parts, readChunk);
   const costs: { contractId: string; cost: number | null }[] = [];
-  for (const part of chunk(contracts)) {
-    const rows = raw(await fetchAll(
-      "load the project's CAPEX costs",
-      (o) => Vsb_capexcostsService.getAll(o),
-      { select: ["vsb_capexcostid", "_vsb_contract_value", "vsb_cost"], filter: lookupIn("vsb_contract", part) },
-    ));
+  for (const rows of chunks) {
     costs.push(...rows.map((r) => ({ contractId: str(r._vsb_contract_value) ?? "", cost: num(r.vsb_cost) })));
   }
   return totalDevexCapex(contracts, costs);
+}
+
+/** `read` over `parts`, one at a time (the behaviour before `parallelReads`). */
+async function readInOrder<T, R>(parts: readonly T[], read: (part: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = [];
+  for (const part of parts) out.push(await read(part));
+  return out;
 }
 
 /**

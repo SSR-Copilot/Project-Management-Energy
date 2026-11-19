@@ -12,6 +12,7 @@ import { FluentProvider } from "@fluentui/react-components";
 import { MemoryRouter } from "react-router-dom";
 import { vsbTheme } from "@/theme/fluent";
 import { CHOICE_FINANCE } from "@/data/dataverseNames";
+import { setFinancePerfFlags } from "@/data/financeFlags";
 import type { PlanJob } from "@/data/usePlanWrite";
 import type { WritePlan } from "@/data/writePlan";
 import {
@@ -112,6 +113,10 @@ const planOf = async (job: PlanJob): Promise<WritePlan> => (typeof job.plan === 
 const lastJob = (): PlanJob => run.mock.calls.at(-1)![0];
 
 beforeEach(() => {
+  // D137: every switch is at its default. The three seed tests below that pin the one-job-per-seed
+  // structure run on the legacy path (`concurrentWrites` off), which still exists; their twins for the grouped path
+  // are UT-FINPERF-201..203.
+  setFinancePerfFlags(null);
   state.projectId = "p-1";
   state.project = baseProject;
   state.inputs = inputs;
@@ -195,6 +200,7 @@ describe("UT-FIN Screen (connected)", () => {
   });
 
   it("UT-FIN-905 on visit: no write when every input exists and the option is set; Equity and VAT seeds otherwise", async () => {
+    setFinancePerfFlags({ concurrentWrites: false });
     renderScreen();
     await new Promise((r) => setTimeout(r, 0));
     expect(run).not.toHaveBeenCalled();
@@ -227,6 +233,7 @@ describe("UT-FIN Screen (connected)", () => {
   });
 
   it("UT-FIN-914 Fabric connected: the visit waits for the debt rows, then seeds every missing input", async () => {
+    setFinancePerfFlags({ concurrentWrites: false });
     state.project = { ...baseProject, id: "p-1", financingOptions: null };
     state.inputs = [];
     state.debt = { ...NO_DEBT, isLoading: true, connected: true };
@@ -246,6 +253,7 @@ describe("UT-FIN Screen (connected)", () => {
   });
 
   it("UT-FIN-915 a failed Fabric debt read keeps the Fabric-built seeds withheld (Equity and VAT only)", async () => {
+    setFinancePerfFlags({ concurrentWrites: false });
     state.project = { ...baseProject, id: "p-1", financingOptions: null };
     state.inputs = [];
     state.debt = { ...NO_DEBT, connected: true, error: new Error("Fabric unreachable") };
@@ -253,6 +261,59 @@ describe("UT-FIN Screen (connected)", () => {
     await waitFor(() => expect(run).toHaveBeenCalledTimes(3));
     const plans = await Promise.all(run.mock.calls.map(([job]) => planOf(job)));
     expect(plans.slice(1).map((p) => p.writes[0]!.data?.vsb_name)).toEqual(["Windpark Nord-Equity", "Windpark Nord-VAT-Financing"]);
+  });
+
+  /* D137: the same visits on the default path, where the option patch and every seed are ONE job. */
+
+  it("UT-FINPERF-201 on visit: the option patch and the Equity and VAT seeds are ONE concurrent job with one targeted reload", async () => {
+    state.project = { ...baseProject, id: "p-1", financingOptions: null };
+    state.inputs = [];
+    renderScreen();
+    await waitFor(() => expect(run).toHaveBeenCalledTimes(1));
+    const job = lastJob();
+    const plan = await planOf(job);
+    expect(plan.writes.map((w) => w.data?.vsb_financingoptions ?? w.data?.vsb_name)).toEqual([
+      CHOICE_FINANCE.financingOptions.debtFinancing, "Windpark Nord-Equity", "Windpark Nord-VAT-Financing",
+    ]);
+    expect(plan.writes.every((w) => w.concurrent === true && !w.stopOnFailure)).toBe(true);
+    expect(new Set(plan.writes.map((w) => w.concurrencyGroup)).size).toBe(1);
+    // The option patch changes the project row, so the project and the inputs reload; nothing else.
+    expect(job.invalidate).toEqual([["pmFinance", "p-1", "project"], ["pmFinance", "p-1", "inputs"]]);
+  });
+
+  it("UT-FINPERF-202 Fabric connected: the visit seeds every missing input in ONE job (the option patch + 5 seeds)", async () => {
+    state.project = { ...baseProject, id: "p-1", financingOptions: null };
+    state.inputs = [];
+    state.debt = { ...NO_DEBT, isLoading: true, connected: true };
+    const view = renderScreen();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(run).not.toHaveBeenCalled();
+    state.debt = { ...NO_DEBT, isLoading: false, connected: true };
+    view.rerender(
+      <FluentProvider theme={vsbTheme}><MemoryRouter><ProjectFinanceScreen /></MemoryRouter></FluentProvider>,
+    );
+    await waitFor(() => expect(run).toHaveBeenCalledTimes(1));
+    const plan = await planOf(lastJob());
+    expect(plan.writes).toHaveLength(6);
+    expect(plan.writes.slice(1).map((w) => w.reason)).toEqual(expect.arrayContaining([
+      "create the Equity financing input", "create the VAT-Financing financing input", "create the Senior Debt financing input",
+    ]));
+  });
+
+  it("UT-FINPERF-203 a failed Fabric debt read: ONE job with the option patch and the two seeds that do not need it; no option patch when it is set", async () => {
+    state.project = { ...baseProject, id: "p-1", financingOptions: null };
+    state.inputs = [];
+    state.debt = { ...NO_DEBT, connected: true, error: new Error("Fabric unreachable") };
+    const view = renderScreen();
+    await waitFor(() => expect(run).toHaveBeenCalledTimes(1));
+    expect((await planOf(lastJob())).writes.slice(1).map((w) => w.data?.vsb_name)).toEqual(["Windpark Nord-Equity", "Windpark Nord-VAT-Financing"]);
+    view.unmount();
+    run.mockClear();
+    // The option is already set: no project write, the inputs alone reload.
+    state.project = { ...baseProject, id: "p-1" };
+    renderScreen();
+    await waitFor(() => expect(run).toHaveBeenCalledTimes(1));
+    expect(lastJob().invalidate).toEqual([["pmFinance", "p-1", "inputs"]]);
   });
 
   it("UT-FIN-906 the Equity panel saves with the canvas spinner and the edited flags", async () => {

@@ -77,9 +77,23 @@ export const GENERATORS_TABLES: Readonly<Record<string, GeneratorsTable>> = Obje
   ].map((t) => [t.entitySetName, t])),
 );
 
+/**
+ * Tables another screen registers for this backend (Finance schedules, D137). Kept apart from the frozen
+ * `GENERATORS_TABLES` so the Generators list, which a test pins, never changes: `tableFor` looks there first.
+ */
+const extraTables = new Map<string, GeneratorsTable>();
+
+/** Builds one registry entry, for `registerBulkTables`. Same arguments as the Generators entries above. */
+export const defineBulkTable = table;
+
+/** Adds tables this backend may write (additive; registering a table again replaces its entry). */
+export function registerBulkTables(tables: readonly GeneratorsTable[]): void {
+  for (const t of tables) extraTables.set(t.entitySetName, t);
+}
+
 function tableFor(entitySet: string): GeneratorsTable {
   const found = Object.prototype.hasOwnProperty.call(GENERATORS_TABLES, entitySet)
-    ? GENERATORS_TABLES[entitySet] : undefined;
+    ? GENERATORS_TABLES[entitySet] : extraTables.get(entitySet);
   if (!found) {
     throw new BulkBackendValidationError(`"${entitySet}" is not a table the Generators bulk backend writes; nothing was sent.`);
   }
