@@ -23,7 +23,16 @@ export default defineConfig({
     watch: { ignored: ["**/e2e/**"] },
   },
   resolve: {
-    alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+      /*
+       * D140: `react-spreadsheet` (the Add Cost from Table grid) is the only package that uses
+       * `use-context-selector`; under React 19 it rendered all ~28,000 cells on every keystroke.
+       * `src/platform/useContextSelector.ts` implements the same two exports on
+       * `useSyncExternalStore`, so only the cells whose state changed render.
+       */
+      "use-context-selector": fileURLToPath(new URL("./src/platform/useContextSelector.ts", import.meta.url)),
+    },
   },
   build: {
     outDir: "dist",

@@ -12,8 +12,8 @@
  *
  * DELETION BEHAVIOUR is a single switch — `CANVAS_PARITY_DELETION` below.
  */
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Button, Switch } from "@fluentui/react-components";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Button } from "@fluentui/react-components";
 import { Add20Regular, Delete20Regular, Copy20Regular } from "@fluentui/react-icons";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { EmptyState, FormPanel, LoadingOverlay, PanelButtons, WriteStatus } from "@/components";
@@ -37,7 +37,6 @@ import {
 } from "./rules";
 import { outputRowsToSheetRows, prepareSheetSave, sheetRowsToGrid } from "./spreadsheet/adapter";
 import { SpreadSheetComp, gridToJson, type SheetGrid } from "./spreadsheet/SpreadSheet";
-import { currentYearIndex } from "./spreadsheet/viewColumns";
 import { saveButtonDisabled, saveRequestRows, sheetLocked } from "./saveRetry";
 
 /**
@@ -59,6 +58,22 @@ import { saveButtonDisabled, saveRequestRows, sheetLocked } from "./saveRetry";
  * carrying costs in a past year and reports it (`ADDCOST_MSG.pastCostGuard`).
  */
 export const CANVAS_PARITY_DELETION = true;
+
+/**
+ * How long the grid must be still before an edit is read back and validated. The read-back
+ * (`gridToJson` + `outputRowsToSheetRows`) and validation re-read the whole sheet, so running them
+ * on every keystroke made typing lag; Save reads back at once (`flushReadBack`), so it is never
+ * behind the grid.
+ */
+export const READ_BACK_DELAY_MS = 200;
+
+/** The grid's content as `SheetRow`s, the shape the validation and the save work on. */
+function readBackGrid(
+  grid: SheetGrid, startYear: number,
+  subaccounts: Parameters<typeof outputRowsToSheetRows>[1], contracts: Parameters<typeof outputRowsToSheetRows>[2],
+): SheetRow[] {
+  return outputRowsToSheetRows(gridToJson(grid, String(startYear)), subaccounts, contracts);
+}
 
 /** No canvas equivalent — the canvas has no notion of its own round trip failing. */
 const ROUND_TRIP_FAILED = (names: string[]): string =>
@@ -106,11 +121,6 @@ export default function AddCostsFromTableScreen() {
   const [addRowToken, setAddRowToken] = useState(0);
   const [deleteRowToken, setDeleteRowToken] = useState(0);
   const [copyTableToken, setCopyTableToken] = useState(0);
-  /*
-   * NEW (no canvas equivalent, D73): the table opens on the current year only; the switch shows every year. It only changes
-   * which columns are drawn — the grid, the read-back, validation, Copy Table and Save always use every year.
-   */
-  const [showAllYears, setShowAllYears] = useState(false);
   /*
    * Identity key → id of every NEW row a save attempt of THIS loaded sheet sent. Kept across a
    * failed save on purpose: the retry sends the same ids, so it updates what the failed attempt
@@ -190,8 +200,8 @@ export default function AddCostsFromTableScreen() {
 
   /*
    * How long the latest grid read-back and validation took, for the Save's one-line timing
-   * log. Both run on every settled edit, not on Save — `currentRows` is already up to date
-   * when Save is clicked — but they are the client-side work a Save waits behind.
+   * log. Both run once the grid has been still for `READ_BACK_DELAY_MS`, and on Save only for an
+   * edit made within that time (`flushReadBack`) — but they are the client-side work a Save waits behind.
    */
   const readBackMs = useRef(0);
   const validationMs = useRef(0);
@@ -205,12 +215,55 @@ export default function AddCostsFromTableScreen() {
 
   const back = () => navigate({ pathname: "/costs/capex", search: `?category=${category}` });
 
-  const handleDataChange = (grid: SheetGrid) => {
+  /*
+   * The grid reports every edit; reading it back waits until the grid has been still for
+   * `READ_BACK_DELAY_MS`. The first report after a (re)load is read back at once, as every report
+   * used to be, so a freshly loaded sheet is never even briefly behind. `handleDataChange` is
+   * stable (it reads everything through refs), so the memoized grid never re-renders because the
+   * screen did.
+   */
+  const latestGrid = useRef<SheetGrid | null>(null);
+  const readBackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const readBackInputs = useRef({ start: years.start, subaccounts, existingContracts, loaded });
+  useLayoutEffect(() => {
+    readBackInputs.current = { start: years.start, subaccounts, existingContracts, loaded };
+  });
+  /** The `loaded` snapshot whose first grid report has been read back. */
+  const readBackOf = useRef<typeof loaded>(null);
+  useEffect(() => () => {
+    if (readBackTimer.current !== null) clearTimeout(readBackTimer.current);
+  }, []);
+
+  const readBackNow = useCallback((grid: SheetGrid): SheetRow[] => {
+    const { start, subaccounts: subs, existingContracts: contracts } = readBackInputs.current;
     const t0 = performance.now();
-    const json = gridToJson(grid, String(years.start));
-    const rows = outputRowsToSheetRows(json, subaccounts, existingContracts);
+    const rows = readBackGrid(grid, start, subs, contracts);
     readBackMs.current = performance.now() - t0;
     setCurrentRows(rows);
+    return rows;
+  }, []);
+
+  const handleDataChange = useCallback((grid: SheetGrid) => {
+    latestGrid.current = grid;
+    if (readBackTimer.current !== null) clearTimeout(readBackTimer.current);
+    readBackTimer.current = null;
+    if (readBackOf.current !== readBackInputs.current.loaded) {
+      readBackOf.current = readBackInputs.current.loaded;
+      readBackNow(grid);
+      return;
+    }
+    readBackTimer.current = setTimeout(() => {
+      readBackTimer.current = null;
+      readBackNow(grid);
+    }, READ_BACK_DELAY_MS);
+  }, [readBackNow]);
+
+  /** Reads a pending edit back now, for Save. The rows read, or `null` when none was pending. */
+  const flushReadBack = (): SheetRow[] | null => {
+    if (readBackTimer.current === null || latestGrid.current === null) return null;
+    clearTimeout(readBackTimer.current);
+    readBackTimer.current = null;
+    return readBackNow(latestGrid.current);
   };
 
   const doSave = async () => {
@@ -226,7 +279,17 @@ export default function AddCostsFromTableScreen() {
      */
     setSaveError(null);
     setSaveNotice(null);
-    if (!canSaveBulkEdit(permissions, errors) || !loaded) {
+    // An edit made within `READ_BACK_DELAY_MS` of the click is read back and validated now: Save
+    // always works on the grid as it is, never on the last settled read-back.
+    const flushed = flushReadBack();
+    const rowsNow = flushed ?? currentRows;
+    let errorsNow = errors;
+    if (flushed) {
+      const t0 = performance.now();
+      errorsNow = validateSheet(flushed);
+      validationMs.current = performance.now() - t0;
+    }
+    if (!canSaveBulkEdit(permissions, errorsNow) || !loaded) {
       addCostSaveTimeline.cancel();
       return;
     }
@@ -246,7 +309,7 @@ export default function AddCostsFromTableScreen() {
       loadedRows: loaded.loadedRows,
       roundTripped: loaded.roundTripped,
       originalRows,
-      currentRows,
+      currentRows: rowsNow,
       contracts: existingContracts,
       costs: existingCosts,
       currentYear,
@@ -259,7 +322,7 @@ export default function AddCostsFromTableScreen() {
     // the network side at a glance.
     const readBack = readBackMs.current;
     const validation = validationMs.current;
-    const rowCount = currentRows.length;
+    const rowCount = rowsNow.length;
     const prepareLog = () => prepareLogReport(prepared.timings, readBack, validation, rowCount);
     if (prepared.kind === "lost") {
       // Nothing is sent, so nothing waits behind the log: it prints now, and no timeline line.
@@ -272,7 +335,7 @@ export default function AddCostsFromTableScreen() {
     const contractDeleteIds = deletion.deleteIds;
     // After a failed attempt: re-send the rows it sent, and re-read before planning (F-A, M1).
     const { changedRows, refreshBeforePlan, sentIdentities } = saveRequestRows({
-      changed, orphanCleanup, currentRows, sentBefore: sentInFailedAttempts.current,
+      changed, orphanCleanup, currentRows: rowsNow, sentBefore: sentInFailedAttempts.current,
     });
 
     /*
@@ -399,10 +462,6 @@ export default function AddCostsFromTableScreen() {
           <Button aria-label="Copy Table" data-testid="btn_CopyData_SpreadSheet_Costs_ProjectCosts_TableCommandBar_AddDataTable_3" appearance="transparent" icon={<Copy20Regular />} disabled={locked} onClick={() => setCopyTableToken((t) => t + 1)}>
             Copy Table
           </Button>
-          <Switch
-            label="Show all years" aria-label="Show all years" data-testid="add-costs-show-all-years"
-            checked={showAllYears} onChange={(_, d) => setShowAllYears(d.checked)}
-          />
         </div>
 
         {saveError ? <div className="canvas-error" role="alert">{saveError}</div> : null}
@@ -428,7 +487,6 @@ export default function AddCostsFromTableScreen() {
             addRowToken={addRowToken}
             deleteRowToken={deleteRowToken}
             copyTableToken={copyTableToken}
-            visibleYearIndex={showAllYears ? null : currentYearIndex(currentYear, years.start, years.years.length)}
           />
         </div>
       </div>
