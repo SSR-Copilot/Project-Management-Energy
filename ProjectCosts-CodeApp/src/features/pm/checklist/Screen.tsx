@@ -24,7 +24,7 @@
  * Request Approval, Cancel Approval Request and the row's cancel ✕ run the approval flows through
  * `hooks.ts` / `data/flows.ts` (D81, 4 Nov 2026; under D29 they were visible and disabled).
  */
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   Button, MessageBar, MessageBarBody,
   Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow, Text, Tooltip,
@@ -51,7 +51,7 @@ import {
   holdingColumnToggleLabel, inProgressTogglePatch, nextClusterCaption, nextClusterEnabled, nextClusterIcon,
   nextClusterTooltip, nextState, pageLock, parseNoteHtml, previousState, projectIsTerminal,
   requestApprovalCaption, resetToPreviousCaption, returnConfirmation, rightPanelTitle, rowActionEnabled,
-  rowActionKind, rowApproval, rowCompleteHighlighted, rowHasNote, showActualTaskState, showApprovalDueDate,
+  rowActionKind, approvalIndexes, rowApprovalIn, rowCompleteHighlighted, rowHasNote, showActualTaskState, showApprovalDueDate,
   showCancelApproval, showCancelApprovalIcon, showRequestApproval, showReturnToPrevious, showSave,
   stageTerminalToggle, startClusterNo, stepClockVisible, stepDescriptionLines, stepGateIcon, stepGateVisible,
   stepStateLabel, taskStateLabel, taskTableRows, terminalButtonVisible, terminalStates,
@@ -469,15 +469,18 @@ function CheckListScreenBody() {
 
   /* ── the two sequences and the selected cluster. */
   const startCluster = startClusterNo(project);
-  const operational = buildOperationalSequence(states, startCluster, gates);
-  const display = buildDisplaySequence(states, startCluster, gates);
+  // D138 (A1): derived once per input change, not on every render (every comment keystroke re-ran both, and made
+  // `current` a new object each time, which re-ran the orchestration effects).
+  const operational = useMemo(() => buildOperationalSequence(states, startCluster, gates), [states, startCluster, gates]);
+  const display = useMemo(() => buildDisplaySequence(states, startCluster, gates), [states, startCluster, gates]);
   // C2 / C3: nothing is derived from the first read until the project, the states, the trackings and the gates have all
   // answered: no tip, no Draft fallback, no cluster actions (D127 §1).
   const loading = checklistIsLoading({
     hasProjectId: Boolean(projectId), projectLoading: projectQ.isLoading, sequenceLoading: sequenceQ.isLoading,
   });
-  const current: SequenceEntry | null = loading ? null
-    : operational.find((x) => x.id === selectedClusterId) ?? defaultSelectedCluster(operational, trackings);
+  const current: SequenceEntry | null = useMemo(() => (loading ? null
+    : operational.find((x) => x.id === selectedClusterId) ?? defaultSelectedCluster(operational, trackings)),
+  [loading, operational, selectedClusterId, trackings]);
   const tracking = trackingFor(trackings, current?.id ?? null);
   const gate = gateFor(gates, current);
   const previous = previousState(operational, current?.id ?? null);
@@ -492,6 +495,8 @@ function CheckListScreenBody() {
   const rows = checklistQ.data;
   const settingsQ = useChecklistApprovalSettings(projectId, rows);
   const settings = settingsQ.data;
+  /** D138 (A1): the two approval-setting lookup maps, built once per settings array (not once per row per render). */
+  const approvalIx = useMemo(() => approvalIndexes(settings), [settings]);
   // C1: the row actions that depend on the approval settings wait until they are KNOWN (a double without `hasData` counts as known).
   const approvalsState = approvalSettingsState({
     needed: approvalSettingsNeeded(rows),
@@ -524,7 +529,7 @@ function CheckListScreenBody() {
       return clusterPanel ?{ ...clusterPanel, comment: panelForm.comment, approvalDueDate: panelForm.approvalDueDate || null } : null;
     }
     if (!panelRow) return null;
-    const ra = rowApproval(settings, panelRow);
+    const ra = rowApprovalIn(approvalIx, panelRow);
     return {
       target: { kind: "checklist", row: panelRow, setting: ra.active, first: ra.first },
       comment: panelForm.comment, approvalDueDate: panelForm.approvalDueDate || null,
@@ -571,7 +576,8 @@ function CheckListScreenBody() {
   });
 
   /* ── the stepper cards (`cmp_CheckList_Project_States`) — every visible state; skipped clusters muted. */
-  const steps: ProjectStateStep[] = loading ? [] : display.map((step, index) => {
+  const currentId = current?.id;
+  const steps: ProjectStateStep[] = useMemo(() => (loading ? [] : display.map((step, index) => {
     const stepTracking = trackingFor(trackings, step.id);
     const stepGate = gateFor(gates, step);
     return {
@@ -579,7 +585,7 @@ function CheckListScreenBody() {
       name: step.name,
       lines: stepDescriptionLines(step),
       stateLabel: stepStateLabel(stepTracking, index),
-      selected: step.id === current?.id,
+      selected: step.id === currentId,
       skipped: Boolean(step.isSkippedDisplayOnly),
       gate: stepGateVisible(step, index === display.length - 1)
         ? {
@@ -591,7 +597,7 @@ function CheckListScreenBody() {
         : null,
       clock: stepClockVisible(stepTracking),
     };
-  });
+  })), [loading, display, trackings, gates, currentId]);
 
   /* ── panels */
   const openPanel = (form: { kind: "cluster" } | { kind: "checklist"; row: ChecklistRow }) => {
@@ -611,7 +617,7 @@ function CheckListScreenBody() {
   const onRowAction = (row: ChecklistRow) => {
     // C1: never decide "complete" from settings that have not been read.
     if (approvalsState !== "ready") return;
-    const ra = rowApproval(settings, row);
+    const ra = rowApprovalIn(approvalIx, row);
     const kind = rowActionKind(row, ra.iconVisible);
     if (kind === "needDate") { setInfo(COMPLETION_DATE_MESSAGE); return; }
     if (kind === "panel") { openPanel({ kind: "checklist", row }); return; }
@@ -653,7 +659,7 @@ function CheckListScreenBody() {
         // `LookUp('Check List Default Approvals', template).'Check List Default Approval'` (Y:5517-5520): the first row, active or not.
         checkListDefaultApprovalId: panel.target.first?.id ?? "",
         currentStateId: current.id,
-        approvalRequested: rowApproval(settings, panel.target.row).icon === "People",
+        approvalRequested: rowApprovalIn(approvalIx, panel.target.row).icon === "People",
         comment: panel.comment, approvalDueDate: due,
       };
     const done = await writes.requestApproval(req, { onWritten: (ok) => { setPanelForm(null); if (ok) setSelectedClusterId(null); } });
@@ -672,6 +678,9 @@ function CheckListScreenBody() {
     });
   };
 
+  /** D138 (A1): the panel's task table and its history, derived when their source changes (not per keystroke). */
+  const taskRows = useMemo(() => taskTableRows(rows), [rows]);
+  const historyEntries = useMemo(() => historyQ.data.map((e) => ({ e, note: parseNoteHtml(e.note) })), [historyQ.data]);
   const requestCaption = panel ? requestApprovalCaption(panel, next) : "";
   // C4: a failed read with NO data blanks the screen (now with a Refresh button, which the text points to); a failed refresh that
   // still has data (window focus, a write's reload) is a banner and the screen stays (D127 §3).
@@ -797,7 +806,7 @@ function CheckListScreenBody() {
             </TableHeader>
             <TableBody>
               {rows.map((row, rowIndex) => {
-                const ra = rowApproval(settings, row);
+                const ra = rowApprovalIn(approvalIx, row);
                 const label = ra.label;
                 const cancelVisible = showCancelApprovalIcon(label);
                 const holding = truncateHolding(row.holdingDescription);
@@ -1028,7 +1037,7 @@ function CheckListScreenBody() {
                   <tr>{TASK_TABLE_HEADERS.map((h) => <th key={h}>{h}</th>)}</tr>
                 </thead>
                 <tbody>
-                  {taskTableRows(rows).map((r, i) => (
+                  {taskRows.map((r, i) => (
                     <tr key={`${r.name}-${i}`}>
                       <td>{r.relevance}</td><td title={r.name}>{r.name}</td><td>{r.clusterstate}</td>
                       <td>{r.taskstate}</td><td title={r.editor}>{r.editor}</td><td>{r.editdate}</td>
@@ -1047,8 +1056,7 @@ function CheckListScreenBody() {
                 <MessageBarBody>{READ_GATE_MSG.historyFailed}</MessageBarBody>
               </MessageBar>
             ) : null}
-            {historyQ.data.map((e) => {
-              const note = parseNoteHtml(e.note);
+            {historyEntries.map(({ e, note }) => {
               const [head, ...body] = note.table ?? [];
               return (
                 <div key={e.id} className={s.historyEntry}>

@@ -74,7 +74,8 @@ import { isBlank } from "@/domain/powerFxNumeric";
 import { dateOnly } from "@/data/odata";
 import { dateFormat } from "@/domain/locale";
 import { ES, ES_PROCESS, CHOICE, CHOICE_PROCESS, TEXT_MAX_LENGTH } from "@/data/dataverseNames";
-import { createdRowRef, emptyPlan, together, type PlannedWrite, type WritePlan } from "@/data/writePlan";
+import { createMany, createdRowRef, emptyPlan, together, type PlannedWrite, type WritePlan } from "@/data/writePlan";
+import { newRowId } from "@/data/newRowId";
 import type { GateCancellationPayload } from "@/data/flows";
 
 /* ═══════════════════════════════════════════════════════════════════ columns ════ */
@@ -687,6 +688,12 @@ export function shouldMaterialiseChecklist(
  * and `.Technology`) is applied SERVER-side by `hooks.ts`; the templates arriving here
  * are already scoped. This function only shapes the rows.
  */
+/** B1 (D138): `bulk` sends the templates as one bulk create; `newId` injects the row ids (tests). */
+export interface MaterialiseOptions {
+  bulk?: boolean;
+  newId?: () => string;
+}
+
 export function planChecklistMaterialisation(
   templates: DefaultChecklistTemplate[],
   ctx: {
@@ -694,9 +701,11 @@ export function planChecklistMaterialisation(
     clusterStateId: string;
     owningBusinessUnitId: string | null;
   },
+  opts: MaterialiseOptions = {},
 ): WritePlan {
   const plan = emptyPlan();
   const creates: PlannedWrite[] = [];
+  const bulkRows: { id: string; data: Record<string, unknown> }[] = [];
   for (const t of templates) {
     const data: Record<string, unknown> = {
       [CHECKLIST_COL.name]: t.name,
@@ -719,6 +728,17 @@ export function planChecklistMaterialisation(
       op: "create", entitySet: ES.projectChecklists, data,
       reason: `Checklist task “${t.name}” created from the default template`,
     });
+    bulkRows.push({ id: (opts.newId ?? newRowId)(), data });
+  }
+  // D138 (B1), behind `CHECKLIST_BULK.materialise`: the same rows as ONE `CreateMultiple` step. Only for a project with an
+  // Owning Business Unit (the bulk backend refuses a create without the bind, where the single creates would have gone out without it:
+  // such a project keeps the single creates, so nothing changes for it).
+  if (opts.bulk === true && ctx.owningBusinessUnitId && bulkRows.length > 0) {
+    plan.writes.push(createMany(
+      ES.projectChecklists, bulkRows, `${bulkRows.length} checklist task(s) created from the default templates`,
+    ));
+    plan.log.push(`Created ${bulkRows.length} checklist task(s) from the defaults.`);
+    return plan;
   }
   plan.writes.push(...together(creates, { stopOnFailure: true }));
   if (plan.writes.length) {
@@ -750,13 +770,15 @@ export function planPrepareCluster(args: {
   existingRowCount: number;
   templates: DefaultChecklistTemplate[];
   ctx: { projectId: string; owningBusinessUnitId: string | null };
+  /** B1 (D138): the materialisation as one bulk create. Absent = the single creates, as before. */
+  materialise?: MaterialiseOptions;
 }): WritePlan {
   const plan = planEnsureTracking(args.selected, args.tracking, args.ctx);
   if (needsTemplates(args.tracking, args.selected, args.existingRowCount)) {
     const rows = planChecklistMaterialisation(args.templates, {
       projectId: args.ctx.projectId, clusterStateId: args.selected.id,
       owningBusinessUnitId: args.ctx.owningBusinessUnitId,
-    });
+    }, args.materialise);
     plan.writes.push(...rows.writes);
     plan.log.push(...rows.log);
   }
@@ -989,11 +1011,30 @@ export interface RowApproval {
   label: RowActionLabel;
 }
 
-export function rowApproval(settings: ChecklistApprovalSetting[], row: ChecklistRow): RowApproval {
-  const first = settingForRow(approvalSettingIndex(settings), row);
-  const active = settingForRow(approvalSettingIndex(settings, true), row);
+/**
+ * D138 (A1): the two lookup maps, built ONCE per settings array. `rowApproval` used to build both for every row of
+ * every render (O(rows x settings), two Map allocations per row, again on every keystroke of a comment box).
+ */
+export interface ApprovalIndexes {
+  first: Map<string, ChecklistApprovalSetting>;
+  active: Map<string, ChecklistApprovalSetting>;
+}
+
+export const approvalIndexes = (settings: ChecklistApprovalSetting[]): ApprovalIndexes => ({
+  first: approvalSettingIndex(settings),
+  active: approvalSettingIndex(settings, true),
+});
+
+/** `rowApproval` over indexes built by `approvalIndexes`: the same first-match-wins lookups, no rebuilding. */
+export function rowApprovalIn(indexes: ApprovalIndexes, row: ChecklistRow): RowApproval {
+  const first = settingForRow(indexes.first, row);
+  const active = settingForRow(indexes.active, row);
   const icon = rowApprovalIconFor(first, active);
   return { first, active, icon, iconVisible: rowApprovalIconVisible(active), label: rowActionLabelFor(row, icon) };
+}
+
+export function rowApproval(settings: ChecklistApprovalSetting[], row: ChecklistRow): RowApproval {
+  return rowApprovalIn(approvalIndexes(settings), row);
 }
 
 /* ══════════════════════════════════════════════════════════════ the right panel ════ */

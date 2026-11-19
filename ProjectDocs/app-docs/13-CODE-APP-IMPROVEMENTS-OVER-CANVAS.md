@@ -742,3 +742,15 @@ Implemented in the worktree `optimize-finance-perf`, uncommitted until approved.
 | Cross-cutting (tests) | Before / after benchmark with request counts per flow and a mutation-checked equivalence suite (same rows from the per-row, concurrent and bulk paths). UT-FINPERF-001..008, 099, 101..104, 110..160, 201..203 | **new test** |
 
 **Modelled numbers** (25 ms per call; whole flows, reload included): visit reads 15 → 9 requests; tranche Save (edit) 42 → 34 (11 with bulk), serial steps about 45 → 9; tranche Delete 41 → 33, steps about 43 → 5; option switch 17 → 8; first visit seeds 72 → 8; a toggle or panel save 12 → 2. The step counts vary by about two between runs (timer jitter in the model); the request counts are exact.
+
+
+## Cluster Checklist: less work per keystroke and per visit (19 Nov 2026, D138) — new (not approved, not run on DEV)
+
+| Screen | Change | Status |
+|---|---|---|
+| Cluster Checklist | Typing in the panel comment no longer rebuilds the cluster sequences, the stepper cards, the history notes or the approval lookups (10 rebuilds per 10 keystrokes before, 0 after); the same screen, texts and behaviour | **new** (performance only) |
+| Cluster Checklist | The Portfolio Manager's mail is asked from Entra once per person per visit instead of once in the gates and again in the approval settings; Refresh asks again; a failed lookup is never remembered | **new** |
+| Cluster Checklist | The visit effects no longer re-run on every render; Refresh still runs the visit again | **new** |
+| Cluster Checklist | The first visit to a cluster can copy its default templates as one bulk create instead of N single creates (switch `CHECKLIST_BULK.materialise`, OFF until the DEV test; projects without an Owning Business Unit keep the single creates) | **new**, behind a switch |
+| Cluster Checklist | Request-count and render-count tests (`UT-CHKPERF-*`) pin the baseline and the result | **new** (test gate) |
+| Cluster Checklist | Component extraction so typing no longer re-renders the rows; one batched people request; dropping the guarded reads of Move to Cluster (rejected: removes the D127 §5 protection) | **proposed (not approved)**, see D138 |

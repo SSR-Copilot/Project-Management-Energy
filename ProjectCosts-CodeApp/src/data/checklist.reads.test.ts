@@ -38,6 +38,7 @@ import {
   countClusterChecklistRows, listChecklistApprovalSettings, listChecklistGates, listChecklistProjectStates,
   listChecklistTrackings, listClusterChecklist, listClusterTemplates, listHistory, loadChecklistProject,
 } from "./checklist";
+import { resetChecklistPeopleCache } from "./checklistPeople";
 
 const PROJECT = "11111111-1111-1111-1111-111111111111";
 const id = (n: number) => `00000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
@@ -47,6 +48,7 @@ const queries = (name: string): Query[] => getAllOf(name).mock.calls.map((c) => 
 const MODE = CHOICE_PROCESS.approvalMode;
 
 beforeEach(() => {
+  resetChecklistPeopleCache(); // D138 (A2): the people answers are shared between reads; each test starts empty
   for (const f of Object.values(svc.fns)) f.mockReset();
   for (const f of [svc.scope, svc.entra, svc.approvals, svc.gates, svc.states]) f.mockReset();
   svc.entra.mockResolvedValue(new Map());

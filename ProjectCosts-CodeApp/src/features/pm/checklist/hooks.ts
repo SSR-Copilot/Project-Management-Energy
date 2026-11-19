@@ -31,10 +31,12 @@
  *  - the row's ✕: `PerformRequestofCheckListApprovalCancellation`, then the refresh.
  * Before D81 these three controls were visible and disabled (D29: the flows send mails / Teams cards).
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ES, ES_PROCESS } from "@/data/dataverseNames";
 import { qk } from "@/data/keys";
+import { CHECKLIST_BULK } from "@/data/checklistBulkFlags";
+import { resetChecklistPeopleCache } from "@/data/checklistPeople";
 import type { ScreenData } from "@/data/notConnected";
 import { usePlanWrite } from "@/data/usePlanWrite";
 import { emptyPlan, refusePlan } from "@/data/writePlan";
@@ -189,7 +191,11 @@ export function useChecklistApprovalSettings(
   projectId: string | undefined,
   rows: readonly ChecklistRow[],
 ): ReadResult<ChecklistApprovalSetting[]> {
-  const ids = [...new Set(rows.map((r) => r.projectDefaultChecklistId).filter((x): x is string => Boolean(x)))].sort();
+  // D138 (A3): rebuilt only when the rows change, not on every render (the query key is the same by value either way).
+  const ids = useMemo(
+    () => [...new Set(rows.map((r) => r.projectDefaultChecklistId).filter((x): x is string => Boolean(x)))].sort(),
+    [rows],
+  );
   const q = useQuery({
     queryKey: qk.checklist(projectId ?? "", "approvals", ...ids),
     queryFn: () => listChecklistApprovalSettings(ids),
@@ -307,7 +313,12 @@ export function useChecklistWrites(projectId: string | undefined) {
       ]);
       const tracking = trackingFor(trackings, selected.id);
       const templates = needsTemplates(tracking, selected, count) ? await listClusterTemplates(project, selected.id) : [];
-      plan = planPrepareCluster({ selected, tracking, existingRowCount: count, templates, ctx: ctx(project) });
+      // D138 (B1): with the switch on, the bulk backend learns the table (a separate chunk, loaded only now).
+      const bulk = CHECKLIST_BULK.materialise && templates.length > 0;
+      if (bulk) (await import("@/data/checklistBulk")).registerChecklistBulk();
+      plan = planPrepareCluster({
+        selected, tracking, existingRowCount: count, templates, ctx: ctx(project), ...(bulk ? { materialise: { bulk: true } } : {}),
+      });
     } catch (e) {
       return w.run({ progress: MSG.loading, plan: () => Promise.reject(e) });
     }
@@ -473,7 +484,11 @@ export function useChecklistWrites(projectId: string | undefined) {
     backfill, prepareCluster, patchRow, saveTransition, returnToPrevious, changeTerminal,
     requestApproval, cancelGateApproval, cancelChecklistApproval,
     /** The command bar's Refresh (`Navigate` to the same screen) and the history Refresh. */
-    refresh: (part?: string) => qc.invalidateQueries({ queryKey: part ? qk.checklist(id, part) : qk.checklistAll(id) }),
+    refresh: (part?: string) => {
+      // D138 (A2): the command bar's Refresh re-asks Entra too; a history-only refresh does not need to.
+      if (!part) resetChecklistPeopleCache();
+      return qc.invalidateQueries({ queryKey: part ? qk.checklist(id, part) : qk.checklistAll(id) });
+    },
   };
 }
 
@@ -494,6 +509,15 @@ export function useChecklistOrchestration(args: {
   const [backfillDone, setBackfillDone] = useState<string | null>(null);
   const backfillStarted = useRef<string | null>(null);
   const prepared = useRef(new Set<string>());
+  /**
+   * D138 (A3): `writes` is a new object on every render, so listing it in the effects' dependencies re-ran both of
+   * them after every render (a comment keystroke included); they were idle only because of the guards below. The latest copy is
+   * read through a ref instead, and `restart()` bumps `epoch` so a Refresh still runs the visit again, now by design rather than
+   * by the side effect of a changing `writes`.
+   */
+  const writesRef = useRef(writes);
+  useEffect(() => { writesRef.current = writes; });
+  const [epoch, setEpoch] = useState(0);
 
   useEffect(() => {
     if (!project || !sequenceReady || backfillStarted.current === project.id) return;
@@ -505,20 +529,20 @@ export function useChecklistOrchestration(args: {
     // C10 (CW-2): the cluster is prepared only after the back-fill succeeded (or was not needed). A failed back-fill leaves
     // its error on screen, which the next job's run() would have cleared. Refresh runs the visit again.
     // DIVERGENCE: D127 §9 (the canvas ran the preparation whatever the back-fill did).
-    void (needed ? writes.backfill(project, states) : Promise.resolve<string[] | null>([])).then((result) => {
+    void (needed ? writesRef.current.backfill(project, states) : Promise.resolve<string[] | null>([])).then((result) => {
       if (result !== null) setBackfillDone(id);
     });
-  }, [project, sequenceReady, states, trackings, writes]);
+  }, [project, sequenceReady, states, trackings, epoch]);
 
   useEffect(() => {
     if (!project || !selected || !sequenceReady || backfillDone !== project.id) return;
     const key = `${project.id}:${selected.id}`;
     if (prepared.current.has(key)) return;
     prepared.current.add(key);
-    void writes.prepareCluster(project, selected);
-  }, [project, selected, sequenceReady, backfillDone, writes]);
+    void writesRef.current.prepareCluster(project, selected);
+  }, [project, selected, sequenceReady, backfillDone]);
 
   return {
-    restart: () => { backfillStarted.current = null; prepared.current.clear(); setBackfillDone(null); },
+    restart: () => { backfillStarted.current = null; prepared.current.clear(); setBackfillDone(null); setEpoch((e) => e + 1); },
   };
 }

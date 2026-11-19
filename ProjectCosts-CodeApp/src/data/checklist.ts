@@ -33,6 +33,7 @@ import { findScopeCountryTechId, getEntraPeople, listChecklistApprovals, listGat
 import type { Persona } from "./adminGatesApprovals";
 import { ACTIVE, and, eq, guid, lookupEq } from "./odata";
 import { ES } from "./dataverseNames";
+import { lookupPersonOnce } from "./checklistPeople";
 
 type Raw = Record<string, unknown>;
 /** `<col>@OData.Community.Display.V1.FormattedValue` — a lookup's name. */
@@ -154,7 +155,7 @@ const toHistoryEntry = (idCol: string) => (r: Raw): HistoryEntry => ({
 async function entraMails(ids: readonly string[]): Promise<Map<string, Persona>> {
   const people = new Map<string, Persona>();
   // One request per person (`getEntraPeople` fails whole when one lookup does), so one bad lookup loses one mail only.
-  const results = await Promise.allSettled([...new Set(ids)].map((id) => getEntraPeople([id])));
+  const results = await Promise.allSettled([...new Set(ids)].map((id) => lookupPersonOnce(id, (one) => getEntraPeople([one]))));
   for (const r of results) if (r.status === "fulfilled") for (const [id, persona] of r.value) people.set(id, persona);
   return people;
 }
