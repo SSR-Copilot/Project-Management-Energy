@@ -1,6 +1,9 @@
 /**
  * The "current year / all years" view of the sheet (product owner, 29 Oct 2026, D73).
  *
+ * UNUSED by the screen since 19 Nov 2026 (D139): the "Show all years" switch was removed and the
+ * sheet always shows every year. Kept, with its tests, for `SpreadSheetComp`'s `visibleYearIndex`.
+ *
  * The grid always HOLDS every column: 6 fixed ones (Number, Name, Description, Cost Paid By,
  * Depreciation, Apply VAT) then 12 month columns per year. The toggle only chooses which columns
  * the table SHOWS. A table of ~28,000 cells (225 rows x ~126 columns) lags on every click and Tab

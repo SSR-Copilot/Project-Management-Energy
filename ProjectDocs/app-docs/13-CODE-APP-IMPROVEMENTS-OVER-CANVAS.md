@@ -304,9 +304,14 @@ Found while porting about 6,100 canvas lines against the newer `.pa.yaml`: 13 de
 - **Cross-cutting:** every request, data call, page load and save now prints a `[VSB]` line in the browser console (requests, rows, milliseconds), in every build. The canvas has no such trace. The Add Cost from Table lines use the same format.
 - **Fixed (3 Nov 2026, D79, CA-28):** a load named by its raw query key printed the project GUID; `keyText` now prints `<id>` (UT-REQLOG-023).
 
-## Add Cost from Table, year view (29 Oct 2026, D73) — fixed (default is a divergence, not approved)
+## Add Cost from Table, year view (29 Oct 2026, D73) — removed 19 Nov 2026 (D139)
 
-- A "Show all years" switch limits the table to the current year's columns, so clicking and Tab are fast on big sheets. Display only: save, validation and Copy Table still use every year. The canvas always shows every year.
+- A "Show all years" switch limited the table to the current year's columns, so clicking and Tab were fast on big sheets. **Removed (D139):** the sheet always shows every year again, as the canvas does.
+
+## Add Cost from Table, typing with every year shown (19 Nov 2026, D139) — fixed
+
+- **Fixed:** typing in a cell redrew the whole sheet (about 28,000 cells) up to three times per keystroke, and re-read and re-validated the whole sheet each time. Now an edit rebuilds only its own row, the grid is not reloaded when it already shows the typed value, and the read-back and validation wait for a 200 ms pause. Save reads back an edit made within that pause first, so it always saves what the grid shows. In a jsdom benchmark a keystroke went from about 3.5–6.1 s to 1.1–1.8 s. One redraw per keystroke remains, inside `react-spreadsheet` itself.
+- **Fixed (D140):** in a real browser typing still took 0.6–1.9 s per key. Now the grid's cells update only when their own state changes (`src/platform/useContextSelector.ts`), and only the cells in view are drawn, with column widths pinned from every row. Measured on the real screen in Edge (production build): a keystroke 21–28 ms, a click 16–33 ms, scrolling smooth. Selection, keys, copy, paste and Save still work on the whole sheet.
 
 ## One-hour parity harness, any screen (3–4 Nov 2026, D80) — new gate, proposed (not approved)
 

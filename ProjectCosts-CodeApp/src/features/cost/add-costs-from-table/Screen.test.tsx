@@ -30,6 +30,8 @@ const refetch = vi.fn(async () => undefined);
 const mutateAsync = vi.fn(async (_args: unknown) => undefined);
 let reportGrid: ((g: SheetGrid) => void) | null = null;
 let lastGrid: SheetGrid | null = null;
+/** Every prop set the grid was rendered with, in order. */
+let gridProps: Record<string, unknown>[] = [];
 
 // One stable session object: the screen re-hydrates the grid whenever `project` changes identity.
 vi.mock("@/app/SessionContext", () => {
@@ -65,8 +67,10 @@ vi.mock("./spreadsheet/SpreadSheet", async (importOriginal) => {
   return {
     ...actual,
     // Reports the grid it is handed once, as the real grid does on mount; `reportGrid` plays an edit.
-    // Keyed on `data` only: the screen hands a new `onDataChange` on every render.
-    SpreadSheetComp: ({ data, onDataChange }: { data: SheetGrid; onDataChange: (g: SheetGrid) => void }) => {
+    // Keyed on `data` only, as the real grid is.
+    SpreadSheetComp: (props: { data: SheetGrid; onDataChange: (g: SheetGrid) => void }) => {
+      const { data, onDataChange } = props;
+      gridProps.push(props);
       reportGrid = onDataChange;
       useEffect(() => {
         lastGrid = data;
@@ -78,7 +82,7 @@ vi.mock("./spreadsheet/SpreadSheet", async (importOriginal) => {
   };
 });
 
-import AddCostsFromTableScreen from "./Screen";
+import AddCostsFromTableScreen, { READ_BACK_DELAY_MS } from "./Screen";
 
 /* ── fixtures ─────────────────────────────────────────────────────────────── */
 
@@ -100,14 +104,16 @@ const freshData = (): AddCostSheetData => ({
   payerDefaults: new Map(),
 });
 
-/** The grid with the contract's January 2026 cell set to `value`, as a user edit. */
-const editJanuary = (value: string) => {
+/** The grid with column `col` of the contract's row set to `value`, as a user edit. */
+const editCell = (col: number, value: string) => {
   const grid = lastGrid!.map((row) => row.map((c) => (c ? { ...c } : c))) as SheetGrid;
   const r = grid.findIndex((row) => row[2]?.value === "My Cost");
   expect(r).toBeGreaterThan(0);
-  grid[r]![6] = { ...grid[r]![6], value };
+  grid[r]![col] = { ...grid[r]![col], value };
   act(() => reportGrid!(grid));
 };
+/** The contract's January 2026 cell set to `value`, as a user edit. */
+const editJanuary = (value: string) => editCell(6, value);
 
 const saveButton = () => screen.getByTestId("pcf_Spreadsheet_Costs_ProjectCosts_BodyButtons_Save");
 const clickSave = async () => { await act(async () => { fireEvent.click(saveButton()); }); };
@@ -129,6 +135,7 @@ beforeEach(() => {
   refetch.mockClear();
   reportGrid = null;
   lastGrid = null;
+  gridProps = [];
   vi.spyOn(console, "info").mockImplementation(() => undefined);
   vi.spyOn(console, "error").mockImplementation(() => undefined);
 });
@@ -350,6 +357,55 @@ describe("Add Cost from Table without spinners (D58)", () => {
     renderScreen();
     for (const id of lockable) expect(screen.getByTestId(id), id).toHaveProperty("disabled", false);
     expect(screen.getByTestId("add-costs-grid").hasAttribute("inert")).toBe(false);
+  });
+});
+
+/* ── every year, and the read-back off the typing path (19 Nov 2026) ─────── */
+
+describe("Add Cost from Table — all years, deferred read-back", () => {
+  const validationBanner = () => screen.queryByText(/validation error\(s\):/);
+
+  it("UT-ADDCOST-YEARS-001 there is no 'Show all years' switch, and the grid is never limited to one year", () => {
+    renderScreen();
+    expect(screen.queryByTestId("add-costs-show-all-years")).toBeNull();
+    expect(screen.queryByText("Show all years")).toBeNull();
+    expect(screen.queryByRole("switch")).toBeNull();
+    expect(gridProps.length).toBeGreaterThan(0);
+    for (const p of gridProps) expect(p.visibleYearIndex ?? null).toBeNull();
+  });
+
+  it("UT-ADDCOST-READBACK-001 the grid gets the same onDataChange on every render of the screen", () => {
+    renderScreen();
+    editJanuary("200");
+    editCell(3, "");
+    const handlers = new Set(gridProps.map((p) => p.onDataChange));
+    expect(handlers.size).toBe(1);
+  });
+
+  it("UT-ADDCOST-READBACK-002 an edit is read back and validated once the grid has been still, not at once", async () => {
+    renderScreen();
+    editCell(3, ""); // Cost Paid By cleared: missing information
+    expect(validationBanner()).toBeNull();
+    await act(async () => { await new Promise((r) => setTimeout(r, READ_BACK_DELAY_MS + 50)); });
+    expect(validationBanner()).not.toBeNull();
+  });
+
+  it("UT-ADDCOST-READBACK-003 Save straight after an edit validates that edit: an invalid one is refused and shown", async () => {
+    renderScreen();
+    editCell(3, "");
+    await clickSave();
+    expect(mutateAsync).not.toHaveBeenCalled();
+    expect(validationBanner()).not.toBeNull();
+  });
+
+  it("UT-ADDCOST-READBACK-004 Save straight after an edit sends that edit, read back once", async () => {
+    renderScreen();
+    editJanuary("300");
+    await clickSave();
+    expect(sentJanuary(0)).toEqual([300]);
+    // Nothing is left pending to overwrite the saved rows later.
+    await act(async () => { await new Promise((r) => setTimeout(r, READ_BACK_DELAY_MS + 50)); });
+    expect(mutateAsync).toHaveBeenCalledTimes(1);
   });
 });
 
