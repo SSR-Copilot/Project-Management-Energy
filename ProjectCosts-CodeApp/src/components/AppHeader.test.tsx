@@ -12,7 +12,7 @@ import { FluentProvider } from "@fluentui/react-components";
 import { vsbTheme } from "@/theme/fluent";
 import { AppHeader } from "./AppHeader";
 import {
-  brandVersionVisible, environmentHeaderFill, environmentInfoColor, environmentVersionVisible,
+  brandInfoColor, brandVersionVisible, environmentHeaderFill, environmentInfoColor, environmentVersionVisible,
   pmHeaderTitle, projectPermissionLabel, projectStatusColour, projectStatusIcon, projectStatusLabel,
   projectStatusVisible, PROJECT_PERMISSION_LABEL,
 } from "./headerRules";
@@ -110,31 +110,92 @@ describe("AppHeader user menu", () => {
 });
 
 describe("AppHeader environment info icon", () => {
-  it("UT-HEADER-003 the (i) icon takes the ico_cmp_Header_Info.Color switch", () => {
-    expect(environmentInfoColor("Dev")).toBe(palette.Error);
-    expect(environmentInfoColor("Hotfix")).toBe(palette.Error);
+  it("UT-HEADER-003 both (i) icons take their canvas colour switch, in the canvas colours (akzent5 / akzent3 / #EE940C)", () => {
+    // PM `ico_cmp_Header_Info_4` — gblAppColors, with a Hotfix case.
+    expect(environmentInfoColor("Dev")).toBe(palette.akzent5);
+    expect(environmentInfoColor("Hotfix")).toBe(palette.akzent5);
     expect(environmentInfoColor("Nightly")).toBe(palette.Warning);
-    expect(environmentInfoColor("QA")).toBe(palette.Success);
+    expect(environmentInfoColor("QA")).toBe(palette.akzent3);
     // `gblAppColors.Transparent` — no icon at all.
     expect(environmentInfoColor("Prod")).toBeUndefined();
     expect(environmentInfoColor(undefined)).toBeUndefined();
+    // Cost `ico_cmp_Header_Info` — gblAppStyles, and no Hotfix case (`Color.Transparent`).
+    expect(brandInfoColor("Dev")).toBe(palette.akzent5);
+    expect(brandInfoColor("Nightly")).toBe(palette.Warning);
+    expect(brandInfoColor("QA")).toBe(palette.akzent3);
+    expect(brandInfoColor("Hotfix")).toBeUndefined();
+    expect(brandInfoColor("Prod")).toBeUndefined();
+    expect(brandInfoColor(undefined)).toBeUndefined();
+    // Not the code app's own Error / Success tokens.
+    expect(palette.akzent5).toBe("#d20532");
+    expect(palette.akzent3).toBe("#82a51e");
+    expect(palette.Warning).toBe("#EE940C");
   });
 
-  it("UT-HEADER-004 no (i) icon renders beside the version: its canvas Visible is a literal false", () => {
+  it("UT-HEADER-004 Cost screens: the (i) icon sits under \"Cloud\", and none before Help", () => {
     const { unmount } = render(
       <FluentProvider theme={vsbTheme}>
-        <AppHeader hasError={false} onReportProblem={() => undefined} environmentName="Dev" appVersion="1.0.0.1" />
+        <AppHeader hasError={false} onReportProblem={() => undefined} onLogoClick={() => undefined}
+          environmentName="QA" appVersion="1.21.780" />
       </FluentProvider>,
     );
-    expect(screen.queryByTestId("ico_cmp_Header_Info")).toBeNull();
-    expect(screen.getByText("Version 1.0.0.1 (Dev)")).toBeInTheDocument();
+    expect(screen.getByTestId("ico_cmp_Header_Info")).toHaveAttribute("color", palette.akzent3);
+    expect(screen.queryByTestId("ico_cmp_Header_Info_4")).toBeNull();
     unmount();
-    render(
+    const dev = render(
       <FluentProvider theme={vsbTheme}>
-        <AppHeader hasError={false} onReportProblem={() => undefined} environmentName="Prod" appVersion="1.0.0.1" />
+        <AppHeader hasError={false} onReportProblem={() => undefined} onLogoClick={() => undefined}
+          environmentName="Dev" appVersion="1.0.0.1" />
       </FluentProvider>,
     );
-    expect(screen.queryByTestId("ico_cmp_Header_Info")).toBeNull();
+    expect(screen.getByTestId("ico_cmp_Header_Info")).toHaveAttribute("color", palette.akzent5);
+    expect(screen.getByText("Version 1.0.0.1 (Dev)")).toBeInTheDocument();
+    dev.unmount();
+    // Prod and Hotfix: `Color.Transparent`, so no icon.
+    for (const environmentName of ["Prod", "Hotfix"]) {
+      const view = render(
+        <FluentProvider theme={vsbTheme}>
+          <AppHeader hasError={false} onReportProblem={() => undefined} onLogoClick={() => undefined}
+            environmentName={environmentName} appVersion="1.0.0.1" />
+        </FluentProvider>,
+      );
+      expect(screen.queryByTestId("ico_cmp_Header_Info"), environmentName).toBeNull();
+      expect(screen.queryByTestId("ico_cmp_Header_Info_4"), environmentName).toBeNull();
+      view.unmount();
+    }
+  });
+
+  it("UT-HEADER-004d PM project and admin screens: the (i) icon sits before Help, and none under \"Cloud\"", () => {
+    const expected: Record<string, string | undefined> = {
+      Dev: palette.akzent5, Hotfix: palette.akzent5, Nightly: palette.Warning, QA: palette.akzent3, Prod: undefined,
+    };
+    for (const [environmentName, colour] of Object.entries(expected)) {
+      const view = render(
+        <FluentProvider theme={vsbTheme}>
+          <AppHeader hasError={false} onReportProblem={() => undefined} onBack={() => undefined}
+            environmentName={environmentName} appVersion="1.0.0.1" />
+        </FluentProvider>,
+      );
+      expect(screen.queryByTestId("ico_cmp_Header_Info"), environmentName).toBeNull();
+      if (colour) expect(screen.getByTestId("ico_cmp_Header_Info_4"), environmentName).toHaveAttribute("color", colour);
+      else expect(screen.queryByTestId("ico_cmp_Header_Info_4"), environmentName).toBeNull();
+      view.unmount();
+    }
+  });
+
+  it("UT-HEADER-004e the project list shows no (i) icon in any environment (Main Overview Screen.png)", () => {
+    for (const environmentName of ["Dev", "QA", "Nightly", "Hotfix", "Prod"]) {
+      // The project list passes neither handler.
+      const view = render(
+        <FluentProvider theme={vsbTheme}>
+          <AppHeader hasError={false} onReportProblem={() => undefined}
+            environmentName={environmentName} appVersion="1.0.0.1" />
+        </FluentProvider>,
+      );
+      expect(screen.queryByTestId("ico_cmp_Header_Info"), environmentName).toBeNull();
+      expect(screen.queryByTestId("ico_cmp_Header_Info_4"), environmentName).toBeNull();
+      view.unmount();
+    }
   });
 
   it("UT-HEADER-004a the band takes the canvas colour per environment (con_cmp_Header.Fill, 17 Nov 2026)", () => {
@@ -163,7 +224,8 @@ describe("AppHeader environment info icon", () => {
     expect(screen.getByTestId("con_cmp_Header").style.backgroundColor).toMatch(/^rgba\(230, 108, 55, 0\.5\d*\)$/);
     expect(screen.getByTestId("con_cmp_Header_Title_4")).toHaveTextContent("Quality Assurance");
     expect(screen.getByTestId("con_cmp_Header_Version_4")).toHaveTextContent("Version 1.21.780");
-    expect(screen.getByTestId("ico_cmp_Header_Info_4")).toBeInTheDocument();
+    // No (i) before Help: the PM canvas does not show it (UT-HEADER-004d).
+    expect(screen.queryByTestId("ico_cmp_Header_Info_4")).toBeNull();
     // The only version line is the one before Help — none under "Cloud".
     expect(screen.getAllByText("Version 1.21.780")).toEqual([screen.getByTestId("con_cmp_Header_Version_4")]);
   });

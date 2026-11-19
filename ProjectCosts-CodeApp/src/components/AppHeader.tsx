@@ -30,7 +30,7 @@ import type { Ref } from "react";
 import { layout, media, palette, space } from "@/theme/tokens";
 import { VsbLogo } from "./VsbLogo";
 import {
-  brandVersionVisible, environmentHeaderFill, environmentInfoColor, environmentVersionVisible,
+  brandInfoColor, brandVersionVisible, environmentHeaderFill, environmentInfoColor, environmentVersionVisible,
   projectStatusColour, projectStatusIcon, projectStatusLabel, projectStatusVisible,
 } from "./headerRules";
 
@@ -45,7 +45,37 @@ const useStyles = makeStyles({
     borderBottomColor: tokens.colorNeutralStroke2,
   },
   brand: { display: "flex", alignItems: "center", gap: space.s, flexShrink: 0 },
-  brandText: { display: "flex", flexDirection: "column", lineHeight: 1.15 },
+  /*
+   * `con_cmp_Header_Logo_Title`: a full-height ManualLayout that stretches to the 70 px brand.
+   * The PM header keeps "Cloud" and the version as a centred column. The Cost header places them,
+   * and its (i) icon, with the `cost*` and `brandIcon` styles below.
+   */
+  brandText: {
+    position: "relative", alignSelf: "stretch",
+    display: "flex", flexDirection: "column", justifyContent: "center", lineHeight: 1.15,
+  },
+  /*
+   * The Cost `con_cmp_Header_Logo_Title` is a ManualLayout: "Cloud" (`Y: =Parent.Height/2-Self.Height/2`)
+   * never moves, and the version label sits at the (i) icon's own X / Y (`X: =ico_cmp_Header_Info.X`,
+   * `Y: =ico_cmp_Header_Info.Y`). So in Dev the icon is drawn over the first letters of "Version".
+   * The positions below are relative to the 70 px brand. They were measured against a Cost canvas
+   * screenshot (Dev, 19 Nov 2026): logo-relative, "Cloud" is 8 px lower and the version 7 px lower
+   * than the old centred column. The PM `cmp_Header` uses other numbers (a 70 px band, and its
+   * version at `ico_cmp_Header_Info.Y+1`), so the PM header keeps the centred column.
+   */
+  costBrandText: { flexGrow: 1, minWidth: 0 },
+  costTitle: { position: "absolute", left: 0, top: "22px", whiteSpace: "nowrap" },
+  costVersionLine: { position: "absolute", left: 0, top: "50px", whiteSpace: "nowrap" },
+  /*
+   * The Cost `ico_cmp_Header_Info`: `Icon.Information`, 14 x 14, `X: =5`,
+   * `Y: =Parent.Height-Self.Height-6`. The canvas glyph's circle is 12 px. Fluent's `InfoRegular`
+   * circle is 0.8 em, so the icon is 15 px. Its centre is 0.5 px right of where "Cloud" starts,
+   * and level with the version's middle (the same screenshot).
+   */
+  brandIcon: {
+    position: "absolute", left: "-7px", bottom: "3.5px",
+    width: "15px", height: "15px", fontSize: "15px",
+  },
   /** The logo as a click target: no padding or minimum width, so the logo keeps its place. */
   logoButton: {
     minWidth: 0, paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
@@ -55,9 +85,8 @@ const useStyles = makeStyles({
   // class names, so the canvas.css rule never reached it; the look lives here.
   title: { fontWeight: tokens.fontWeightSemibold, fontSize: "24px", lineHeight: "1.2", color: palette.themePrimary },
   version: { color: tokens.colorNeutralForeground3, fontSize: tokens.fontSizeBase100 },
-  /** The (i) icon then the version, 4 px apart. The icon is 14 x 14 in the canvas. */
+  /** The version under "Cloud". The (i) icon is not inline here; it is placed by `brandIcon`. */
   versionLine: { display: "inline-flex", alignItems: "center", gap: space.xs },
-  versionIcon: { fontSize: "14px", flexShrink: 0 },
   /**
    * Where the screen's command bar lands. Takes the slack so Help stays right-aligned.
    * `CommandBar` has no leading inset of its own (21 Oct 2026), so the slot keeps the 20 px the
@@ -71,7 +100,8 @@ const useStyles = makeStyles({
   /*
    * `con_cmp_Header_Logo_Title_4` — the environment block first in `con_cmp_Header_Service_ReportError`,
    * before the error icon and Help: a 200-wide, full-height ManualLayout holding
-   *  - `ico_cmp_Header_Info_4`: `Icon.Information`, 16 x 16 at X 5, `Y: =Parent.Height - Self.Height - 6`;
+   *  - `ico_cmp_Header_Info_4`: `Icon.Information`, 16 x 16 at X 5, `Y: =Parent.Height - Self.Height - 6`.
+   *    Drawn on PM and admin screens only (see `headerRules`);
    *  - `con_cmp_Header_Title_4`: right-aligned Semibold 12 pt black, `PaddingLeft 10`, half the band high
    *    and centred on it;
    *  - `con_cmp_Header_Version_4`: right-aligned, `Lighter` ExtraExtraSmall (the brand version's look) at
@@ -81,7 +111,12 @@ const useStyles = makeStyles({
     position: "relative", alignSelf: "stretch", width: "200px", minWidth: 0, flexShrink: 1,
     [media.belowMd]: { width: "140px" },
   },
-  envIcon: { position: "absolute", left: "5px", bottom: "6px", width: "16px", height: "16px", fontSize: "16px" },
+  /*
+   * `ico_cmp_Header_Info_4`. The canvas glyph's circle fills its 16 x 16 box (a PM canvas screenshot,
+   * Edit Project, Dev, 19 Nov 2026). Fluent's `InfoRegular` circle is 0.8 em, inset 0.1 em, so a
+   * 20 px icon at left 3 / bottom 4 puts a 16 px circle at X 5, 6 px above the block's foot.
+   */
+  envIcon: { position: "absolute", left: "3px", bottom: "4px", width: "20px", height: "20px", fontSize: "20px" },
   envTitle: {
     position: "absolute", left: 0, right: 0, top: "25%", height: "50%",
     display: "flex", alignItems: "center", justifyContent: "flex-end",
@@ -285,8 +320,18 @@ export function AppHeader({
 }: AppHeaderProps) {
   const styles = useStyles();
   const badge = environmentBadge(environmentName);
-  // `ico_cmp_Header_Info_4.Color` — transparent (no icon) for Prod and an unknown environment.
-  const envInfoColor = environmentInfoColor(environmentName);
+  /*
+   * Which (i) icon shows, as in the canvas screenshots (see `headerRules`):
+   *  - Cost screens (they pass `onLogoClick`, D90): the one under "Cloud" (`ico_cmp_Header_Info`);
+   *  - PM project and admin screens (they pass `onBack`; the `cmp_Header` component): the one
+   *    before Help (`ico_cmp_Header_Info_4`);
+   *  - the project list (neither handler; Project Main Screen's own header copy): none.
+   * The Cost header also has its own brand layout.
+   */
+  const costHeader = !onBack && onLogoClick !== undefined;
+  // Undefined (canvas `Transparent`) means no icon: Prod, an unknown environment, and Hotfix on Cost.
+  const brandIconColor = costHeader ? brandInfoColor(environmentName) : undefined;
+  const envInfoColor = onBack ? environmentInfoColor(environmentName) : undefined;
 
   return (
     <header
@@ -315,17 +360,20 @@ export function AppHeader({
         ) : (
           <VsbLogo size={60} />
         )}
-        <div className={styles.brandText}>
-          <Text className={`${styles.title} canvas-brand-title`}>Cloud</Text>
-          {/*
-            `ico_cmp_Header_Info.Visible` is a literal `false` in the canvas (its Dev check is
-            commented out, cmp_Header:269-275), so no (i) icon renders beside the version
-            (canvas screenshot, 28 Oct 2026). `environmentInfoColor` keeps its colour switch.
-          */}
+        <div className={mergeClasses(styles.brandText, costHeader && styles.costBrandText)}>
+          <Text className={`${mergeClasses(styles.title, costHeader && styles.costTitle)} canvas-brand-title`}>Cloud</Text>
           {brandVersionVisible(environmentName) ? (
-            <span className={styles.versionLine}>
+            <span className={mergeClasses(styles.versionLine, costHeader && styles.costVersionLine)}>
               <Text className={`${styles.version} canvas-brand-version`}>{versionLabel(appVersion, environmentName)}</Text>
             </span>
+          ) : null}
+          {/*
+            `ico_cmp_Header_Info` on Cost screens (projectcosts `cmp_Header.pa.yaml:210-219`).
+            The PM `cmp_Header` sets this copy's `Visible` to `false`. It comes after the version,
+            as in the canvas, so it is drawn on top of it.
+          */}
+          {brandIconColor ? (
+            <InfoRegular className={styles.brandIcon} color={brandIconColor} aria-hidden="true" data-testid="ico_cmp_Header_Info" />
           ) : null}
         </div>
       </div>

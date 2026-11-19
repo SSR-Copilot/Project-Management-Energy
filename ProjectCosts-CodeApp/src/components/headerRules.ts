@@ -6,19 +6,53 @@ import { canEditSelectedProject } from "@/domain/session";
 import { serverEnforcedProvider, type PrivilegeProvider } from "@/platform/privileges";
 import { palette } from "@/theme/tokens";
 
-/**
- * `ico_cmp_Header_Info.Color` — `Switch(gblEnvironmentName, "Dev", Error, "Nightly", Warning,
- * "QA", Success, "Hotfix", Error, Transparent)`. Undefined means no icon.
+/*
+ * The (i) environment marker. It has no OnSelect and no Tooltip in either canvas app; it only
+ * colours the environment. Each `cmp_Header` has two copies:
  *
- * DIVERGENCE: the 1.21.709 source sets the icon's `Visible` to `false` (its `If(...)` is
- * commented out), but the live app (`UI Screenshots/Main Overview Screen.png`, 1.21.753)
- * shows it. The product owner asked for the live look (20 Oct 2026, X5).
+ *                          brand, under "Cloud"          environment block, before Help
+ *                          `ico_cmp_Header_Info`         `ico_cmp_Header_Info_4` (`_3` in Project Main Screen's copy)
+ *   Cost screens           SHOWN                         hidden (`Visible: false`)
+ *   PM project + admin     hidden (`Visible: false`)     SHOWN (the `cmp_Header` component)
+ *   PM project list        hidden (`Visible: false`)     HIDDEN (Project Main Screen's own header copy)
+ *
+ * "Shown" and "hidden" come from canvas screenshots, because every one of those `Visible`
+ * formulas is only a comment (`=//true`, `=/*If(...)*\/`), so the YAML alone cannot tell them apart:
+ *  - Cost, Dev (19 Nov 2026): the icon under "Cloud";
+ *  - PM Edit Project, Dev (19 Nov 2026): the icon before Help;
+ *  - `UI Screenshots/Main Overview Screen.png` (PM project list, Dev): no (i) anywhere in the header.
+ * The admin screens use the same `cmp_Header` component as the PM project screens (for example
+ * `Admin CAPEX Accounts`), so they show it too. None of the formulas depends on the environment.
+ *
+ * Both apps' `gblAppStyles` / `gblAppColors` (`App.OnStart`) define `Error` as `akzent5` (#d20532),
+ * `Success` as `akzent3` (#82a51e) and `Warning` as #EE940C. These are not `palette.Error` /
+ * `palette.Success` (#B22727 / #3C9856).
+ */
+
+/**
+ * The Cost `cmp_Header`'s `ico_cmp_Header_Info.Color` (projectcosts `cmp_Header.pa.yaml:213`):
+ * `Switch(gblEnvironmentName, "Dev", gblAppStyles.Error, "Nightly", gblAppStyles.Warning,
+ * "QA", gblAppStyles.Success, Color.Transparent)`. It has no Hotfix case, so Hotfix shows no icon.
+ */
+export function brandInfoColor(environmentName: string | undefined): string | undefined {
+  switch (environmentName) {
+    case "Dev": return palette.akzent5;
+    case "Nightly": return palette.Warning;
+    case "QA": return palette.akzent3;
+    default: return undefined;
+  }
+}
+
+/**
+ * The PM `cmp_Header`'s `ico_cmp_Header_Info_4.Color` (projectmanagement `cmp_Header.pa.yaml:639`):
+ * `Switch(gblEnvironmentName, "Dev", gblAppColors.Error, "Nightly", gblAppColors.Warning,
+ * "QA", gblAppColors.Success, "Hotfix", gblAppColors.Error, gblAppColors.Transparent)`.
  */
 export function environmentInfoColor(environmentName: string | undefined): string | undefined {
   switch (environmentName) {
-    case "Dev": case "Hotfix": return palette.Error;
+    case "Dev": case "Hotfix": return palette.akzent5;
     case "Nightly": return palette.Warning;
-    case "QA": return palette.Success;
+    case "QA": return palette.akzent3;
     default: return undefined;
   }
 }
