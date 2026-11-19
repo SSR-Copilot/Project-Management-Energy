@@ -11,6 +11,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import type { WritePlan } from "@/data/writePlan";
 import { CHOICE_PRODUCTION, ES, ES_PRODUCTION } from "@/data/dataverseNames";
+import { qk } from "@/data/keys";
 import { UI, type EnergyYieldRow, type ProductionProject } from "./rules";
 
 const s = vi.hoisted(() => ({
@@ -90,8 +91,20 @@ describe("useProductionWrites (D108)", () => {
     ]);
     // The roll-up was built from the yields as they are after the delete: South alone.
     expect(Object.values(s.runs[1]!.plan.writes[0]!.data!)).toContain(5_000);
-    // One job → the four views are invalidated once (two separate jobs invalidated them twice).
-    expect(h.invalidate).toHaveBeenCalledTimes(4);
+    // One job → the views are invalidated once (two separate jobs invalidated them twice). Three views since
+    // D135: the session project is no longer reloaded (UT-PRODHOOK-005); it was four before.
+    expect(h.invalidate).toHaveBeenCalledTimes(3);
+  });
+
+  it("UT-PRODHOOK-005 a write reloads Production and marks the Milestones and General Data views stale, but never reloads the session project (no yield column in it)", async () => {
+    s.yieldReads.push([row()], [row({ status: 1 })]);
+    s.project = project();
+    const h = held();
+    const { result } = renderHook(() => useProductionWrites("p1"), { wrapper: h.wrapper });
+    await act(async () => { await result.current.changeStatus(row()); });
+    const keys = h.invalidate.mock.calls.map((c) => (c[0] as { queryKey: readonly unknown[] }).queryKey);
+    expect(keys).toEqual([qk.productionAll("p1"), qk.milestoneProject("p1"), qk.generalDataProject("p1")]);
+    expect(keys).not.toContainEqual(qk.project("p1"));
   });
 
   it("UT-PRODHOOK-002 the progress closes once the writes land; `refreshing` holds until the reload ends", async () => {

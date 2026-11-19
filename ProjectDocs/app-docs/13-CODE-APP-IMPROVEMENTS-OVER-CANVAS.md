@@ -455,6 +455,14 @@ Branch `feature/azure-maps-integration`; details in `18-AZURE-MAPS-IN-THE-CODE-A
 | Production | The spinner closes once the writes land; the screen reloads behind it with the command bar off until it has (as Generators) | fixed (DIVERGENCE: the old rows show for about one reload) |
 | Production | Tests UT-PROD-130 and UT-PRODHOOK-001…004 pin the plan shape, the single job and reload, the post-write read and the generation rule | new (tests) |
 
+## Production: the first save's standard-contract generation sends its creates together (D135) — fixed (divergence proposed, not approved)
+
+| Screen | Change | Status |
+|---|---|---|
+| Production | The one-shot generation of the standard Land Lease, Other OPEX and O&M contracts sent every create as its own request, one after the other: 151 requests for 4 land leases over 30 turbines, 831 for 200 turbines. Independent creates now go out together, 8 at a time; a child waits for the run that holds its parent. Same rows, same order, same parent links: 151 requests in 22 awaited round trips, and 831 in 109. The four project flags are still written last and alone | fixed (DIVERGENCE: the canvas created these rows one by one inside `Concurrent` families; the creation order on the server can differ, and a refused create lets the writes already in flight finish, then stops the plan). Switch `PRODUCTION_GENERATION_WAVES` (`rules.ts`), `{ waves: false }` is the old plan |
+| Production | A write no longer reloads the session project query: its select list has no yield column and this screen writes only yield columns and the four flags, so it can never change. About six requests and one round trip less in the window where the command bar is off. Milestones and General Data are still marked stale | fixed |
+| Production | Tests: UT-PRODPLAN-001…009 (rows identical to the sequential plan for 400 random assumption sets, runs never hold a parent and its child, the real engine sends the same bodies and ids, a refused create stops the plan), UT-PRODHOOK-005, UT-PRODBASE-* (the baseline and the golden master taken before the change) | new (tests) |
+
 ## Cost: German number audit, the panel boxes open in the user's language (6 Nov 2026, `pm-validation` 4b832e0) — fixed
 
 | Screen | Change | Status |

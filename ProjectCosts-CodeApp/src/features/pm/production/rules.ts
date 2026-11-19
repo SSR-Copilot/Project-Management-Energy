@@ -1601,6 +1601,62 @@ const monthsOf = (years: number | null, months: number | null) => (years ?? 0) *
 interface Created { index: number; start: Date; years: number | null; months: number | null; key: string; description: string }
 
 /**
+ * Rollout switch of D135 (CONVENTIONS rule 15): the one-shot generation sends its independent creates
+ * together (`groupIntoWaves`) instead of one request each. `false` is today's plan exactly, one write per round trip.
+ * Treat it like `BULK_SAVE` or `CANVAS_PARITY_DELETION`: a live product decision, not dead code.
+ */
+export const PRODUCTION_GENERATION_WAVES = true;
+
+const CREATED_REF = /@created#(\d+)/g;
+
+/** The plan indexes of the creates a write points at (`createdRowRef`), in its `id` and in any string value of its `data`. */
+function createdRefsOf(w: PlannedWrite): number[] {
+  const out: number[] = [];
+  const scan = (v: unknown): void => {
+    if (typeof v === "string") for (const m of v.matchAll(CREATED_REF)) out.push(Number(m[1]));
+  };
+  scan(w.id);
+  for (const v of Object.values(w.data ?? {})) scan(v);
+  return out;
+}
+
+/**
+ * D135: marks the independent creates of a plan as `together()` runs WITHOUT changing the plan.
+ * Same writes, same order, same `createdRowRef` indexes, so the rows are exactly those of the sequential plan.
+ *
+ * A create joins the current run when every row it points at was created BEFORE the run started (the engine hands a
+ * run only the ids created before it, `executePlan.ts`); otherwise it closes the run and opens the next. Any
+ * non-create write (here only the four project flags, which fire the CAPEX plugins) is a barrier, sent alone after
+ * every create has landed. A run of one is left as a plain write. `stopOnFailure`: after the first failure no new
+ * write of the run is started, the closest a concurrent run gets to the sequential stop (writes already in flight
+ * finish and are counted).
+ *
+ * Safe because no plugin or flow fires on these tables (`hooks.ts` header, `04-flow-inventory.md`), so the relative
+ * order of unrelated creates is free. Creation order within a run can differ from the plan's on the server.
+ */
+export function groupIntoWaves(writes: readonly PlannedWrite[]): PlannedWrite[] {
+  const out: PlannedWrite[] = [];
+  let run: PlannedWrite[] = [];
+  let runStart = 0; // creates sent before the current run began
+  let creates = 0;
+  const flush = (): void => {
+    if (run.length === 1) out.push(run[0]!);
+    else if (run.length > 1) out.push(...together(run, { stopOnFailure: true }));
+    run = [];
+  };
+  for (const w of writes) {
+    if (w.op !== "create") { flush(); out.push(w); continue; }
+    const newest = Math.max(-1, ...createdRefsOf(w));
+    if (run.length > 0 && newest >= runStart) flush();
+    if (run.length === 0) runStart = creates;
+    run.push(w);
+    creates += 1;
+  }
+  flush();
+  return out;
+}
+
+/**
  * The generator half of "Recalc" (Y:8259-9112), as one ordered plan: Land Lease costs (each
  * followed by its AllWTG allocations), Land Lease periods, Other OPEX costs and periods, O&M costs
  * and periods per device type, then the four flags. Each family is skipped when the project
@@ -1608,7 +1664,7 @@ interface Created { index: number; start: Date; years: number | null; months: nu
  */
 export function planStandardContracts(
   input: GenerationInputs,
-  options: { otherOpexChain?: "subaccount" | "canvasParity" } = {},
+  options: { otherOpexChain?: "subaccount" | "canvasParity"; waves?: boolean } = {},
 ): WritePlan {
   const { project } = input;
   const writes: PlannedWrite[] = [];
@@ -1773,7 +1829,7 @@ export function planStandardContracts(
   }
 
   writes.push(upd(ES.projects, project.id, markForCapexRecalculationFields(), "the CAPEX recalculation flags"));
-  return { writes, log: [] };
+  return { writes: (options.waves ?? PRODUCTION_GENERATION_WAVES) ? groupIntoWaves(writes) : writes, log: [] };
 }
 
 /**

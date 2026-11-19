@@ -152,11 +152,17 @@ export interface SaveYieldRequest {
  *    Screen holds its commands back while `refreshing`, so nothing acts on the old rows;
  *  - the plans send their independent writes together (`rules.ts`, `together`).
  * The one-shot standard-contract generation (Recalc part 2) stays its own job, with its own progress text.
+ *
+ * D135: (1) `qk.project(id)` is no longer reloaded. It is the session's own project query (always mounted),
+ * and its `$select` (`data/project.ts` `loadProject`) holds no yield column, while this screen writes only yield columns
+ * and the four generation flags, so a Production write can never change it; the reload only lengthened `refreshing` by
+ * about six requests. The Milestones and General Data views stay in the list (marked stale, read on their next visit).
+ * (2) the generation's creates go out together where they do not depend on each other (`rules.ts`, `groupIntoWaves`).
  */
 export function useProductionWrites(projectId: string | undefined) {
   const id = projectId ?? "";
   const w = usePlanWrite({
-    invalidate: [qk.productionAll(id), qk.project(id), qk.milestoneProject(id), qk.generalDataProject(id)],
+    invalidate: [qk.productionAll(id), qk.milestoneProject(id), qk.generalDataProject(id)],
     action: "change this project's energy yields",
     refresh: "background",
   });
