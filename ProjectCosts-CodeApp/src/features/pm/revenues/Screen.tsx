@@ -23,7 +23,7 @@
  * Every branch is a call into `rules.ts`; every caption comes from it. The unsaved-data leave
  * guard is the shell's documented gap (D25/D26); this canvas screen has none of its own.
  */
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Button, Dropdown, Field, Input, MessageBar, MessageBarBody, Option, Spinner,
@@ -69,7 +69,7 @@ import {
   type RevenueTab, type HedgeType, type RevenueFormState, type StoredRevenueContract,
   type BalancingPeriod, type BalancingForm, balancingFormFor, balancingPriceText,
   revenuePanelStandard, touchField, editFieldIfValid, resetStartToCod, negativePriceDisplayMode,
-  showsCountryInflationToggle, hedgePercentForCheck,
+  showsCountryInflationToggle, hedgePercentForCheck, type ContractCardContext,
 } from "./rules";
 import {
   useRevenueProject, useItalyRegion, useRevenueAssumptions, useRevenueContracts,
@@ -77,6 +77,7 @@ import {
   useRevenueCurrency, useCountryInflationProfiles, useRevenueWrites,
   fetchOverlappingContracts, fetchIndividualVolumeIds,
 } from "./hooks";
+import { revenueReloadKeys } from "./reload";
 
 // Layout transcribed from `con_ProjectRevenues_DisplayProjectBodyRightContent` and its children
 // (UI layout pass, 20 Oct 2026). Sizes are canvas points x 1.333: `gblAppSizes.Font` Small 10 =
@@ -630,6 +631,47 @@ const LOCK_BULLETS = ["• General", "• Milestones", "• Generator", "• Pro
 
 /* ═══════════════════════════════════════════════════════════════════ screen ══ */
 
+/**
+ * A contract card's field grid (`contractCardFields`, read-only boxes). Memoized (D136): the Screen holds the
+ * contract form, so every keystroke in the panel re-rendered the Screen and, with it, every card's 10-16 boxes. Its
+ * inputs are the card's own contract row (stable between reloads), the memoized context and the page gate, so a keystroke
+ * now skips every card. Markup, `aria-label`s and test ids are exactly those the grid had inline (rule 16).
+ */
+const ContractCardFields = memo(function ContractCardFields({ contract: c, ctx, blocked }: {
+  contract: StoredRevenueContract; ctx: ContractCardContext; blocked: boolean;
+}) {
+  const s = useStyles();
+  const standardClass = useStandardValueClass();
+  // Blocked, a value box is Disabled: the standard blue goes, the italic stays (as `TextInputField`).
+  const toneClass = (t: CardTone): string | undefined => blocked
+    ? standardClass(t === "standard" ? "italic" : false)
+    : standardClass(t === "standard" ? true : t === "blue" ? "blue" : false);
+  return (
+    <div className={s.cardFields} data-testid={`${CONTRACT_CARD_CONTROL.body}-${c.id}`}>
+      {contractCardFields(c, ctx).map((f) => (
+        <div key={f.key} className={s.cardField} data-testid={`${f.container}-${c.id}`}>
+          <Text className={mergeClasses(s.cardCaption, blocked && s.cardTextBlocked)} title={f.caption}
+            data-testid={`${f.labelControl}-${c.id}`}>{f.caption}</Text>
+          <div className={s.cardValues}>
+            {f.values.map((v) => (
+              <input
+                key={v.control}
+                readOnly
+                tabIndex={-1}
+                className={mergeClasses(s.cardValue, toneClass(v.tone), blocked && s.cardValueBlocked)}
+                data-blocked={blocked || undefined}
+                value={v.text}
+                aria-label={v.accessibleLabel}
+                data-testid={`${v.control}-${c.id}`}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+});
+
 export default function ProjectRevenuesScreen() {
   const s = useStyles();
   const { projectId, locale: lang } = useSession();
@@ -642,7 +684,7 @@ export default function ProjectRevenuesScreen() {
   const periodsQ = useBalancingPrices(projectId);
   const productionQ = useNegativePriceProduction(projectId);
   const subaccountQ = useRevenueSubaccount();
-  const currencyQ = useRevenueCurrency(project?.countryName ?? null);
+  const currencyQ = useRevenueCurrency(project?.countryName ?? null, project !== null);
   const inflationQ = useCountryInflationProfiles(project?.countryCode ?? null);
   const writes = useRevenueWrites(projectId);
 
@@ -731,11 +773,14 @@ export default function ProjectRevenuesScreen() {
   const runContractSave = async (f: RevenueFormState) => {
     if (!project) return;
     closeContract();
-    const ids = await writes.run(saveContractJob(async () => planSaveContract({
-      form: f, project, currencyId: currencyQ.data?.id ?? null,
-      storedVolumeIds: f.mode === "Edit" && f.contractId ? await fetchIndividualVolumeIds(f.contractId) : [],
-      language: lang,
-    })));
+    const ids = await writes.run({
+      ...saveContractJob(async () => planSaveContract({
+        form: f, project, currencyId: currencyQ.data?.id ?? null,
+        storedVolumeIds: f.mode === "Edit" && f.contractId ? await fetchIndividualVolumeIds(f.contractId) : [],
+        language: lang,
+      })),
+      invalidate: revenueReloadKeys(projectId, "contract"),
+    });
     if (ids !== null) {
       const savedId = f.mode === "Edit" ? f.contractId : ids[0] ?? null;
       setSelectedContractId(savedId);
@@ -810,13 +855,19 @@ export default function ProjectRevenuesScreen() {
     if (!balancing) return;
     const plan = planSaveBalancing({ form: balancing, periods, project, language: lang });
     closeBalancing();
-    await writes.run(saveBalancingJob(plan));
+    await writes.run({ ...saveBalancingJob(plan), invalidate: revenueReloadKeys(projectId, "balancing") });
   };
 
   /* ─────────────────────────────────────────────────────────── commands ──── */
 
   const bar = contractCommandBar(selectedContract, blocked);
-  const cardCtx = { country, technology, currencyName: currencyQ.data?.name ?? null, region, language: lang };
+  // Stable between renders (D136): `ContractCardFields` is memoized on it, so a keystroke in the panel does
+  // not rebuild every card's fields. The same five values as before.
+  const currencyName = currencyQ.data?.name ?? null;
+  const cardCtx = useMemo<ContractCardContext>(
+    () => ({ country, technology, currencyName, region, language: lang }),
+    [country, technology, currencyName, region, lang],
+  );
   const balancingBar = balancingCommandBar(periods, null, project?.clusterStateOrder ?? null);
   const clusterReached = balancingClusterReached(project?.clusterStateOrder);
 
@@ -848,14 +899,8 @@ export default function ProjectRevenuesScreen() {
    * Rule 20, shared style. `"blue"` (FontColor without FontItalic) is kept for any card value the
    * canvas colours without italics (`cardTone` in rules.ts); since D35 no live card value does.
    */
-  const standardClass = useStandardValueClass();
   /* Rule 20 — the panel fields that carry the canvas standard-assumption pair. */
   const panelStd = form ? revenuePanelStandard(form) : null;
-  // Blocked, a value box is Disabled: the standard blue goes, the italic stays (as `TextInputField`).
-  const toneClass = (t: CardTone): string | undefined => blocked
-    ? standardClass(t === "standard" ? "italic" : false)
-    : standardClass(t === "standard" ? true : t === "blue" ? "blue" : false);
-
   const balancingHeaders: string[] = [
     SCREEN_LABEL.name,
     SCREEN_LABEL.shiftFromCod,
@@ -975,28 +1020,7 @@ export default function ProjectRevenuesScreen() {
                           ariaLabel={CONTRACT_CARD_CONTROL.commandBar}
                           testIdPrefix={`${CONTRACT_CARD_CONTROL.commandBar}-${c.id}`} />
                       </div>
-                      <div className={s.cardFields} data-testid={`${CONTRACT_CARD_CONTROL.body}-${c.id}`}>
-                        {contractCardFields(c, cardCtx).map((f) => (
-                          <div key={f.key} className={s.cardField} data-testid={`${f.container}-${c.id}`}>
-                            <Text className={mergeClasses(s.cardCaption, blocked && s.cardTextBlocked)} title={f.caption}
-                              data-testid={`${f.labelControl}-${c.id}`}>{f.caption}</Text>
-                            <div className={s.cardValues}>
-                              {f.values.map((v) => (
-                                <input
-                                  key={v.control}
-                                  readOnly
-                                  tabIndex={-1}
-                                  className={mergeClasses(s.cardValue, toneClass(v.tone), blocked && s.cardValueBlocked)}
-                                  data-blocked={blocked || undefined}
-                                  value={v.text}
-                                  aria-label={v.accessibleLabel}
-                                  data-testid={`${v.control}-${c.id}`}
-                                />
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                      <ContractCardFields contract={c} ctx={cardCtx} blocked={blocked} />
                     </div>
                   )}
                 </div>
@@ -1558,7 +1582,7 @@ export default function ProjectRevenuesScreen() {
         onConfirm={async () => {
           const target = selectedContract;
           setConfirm("none");
-          const ids = await writes.run(deleteContractJob(target));
+          const ids = await writes.run({ ...deleteContractJob(target), invalidate: revenueReloadKeys(projectId, "contract") });
           if (ids !== null) setSelectedContractId(null);
         }}
       />
@@ -1577,7 +1601,7 @@ export default function ProjectRevenuesScreen() {
         onConfirm={async () => {
           const target = selectedPeriod;
           setConfirm("none");
-          await writes.run(deleteBalancingJob(target));
+          await writes.run({ ...deleteBalancingJob(target), invalidate: revenueReloadKeys(projectId, "balancing") });
           setSelectedPeriodId(null);
         }}
       />

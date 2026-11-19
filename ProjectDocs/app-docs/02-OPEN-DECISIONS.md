@@ -7920,3 +7920,46 @@ Tests: UT-MSTONE-081 (all eleven keys LongAbbreviated), 082 (the canvas twin: Lo
 
 **Needs a live check (DEV):** a generation on a project with several land leases and a few dozen turbines: time it before and after with `[VSB] ACTION`, check there is no HTTP 429 at 8 requests in flight on `vsb_landleaseallocationwtgs`, that the three CAPEX plugins still fire once from the flags write, that every generated row carries the owning business unit, and the order in which the generated rows appear in the OPEX and Land Lease lists (the readers without `$orderby`).
 **Next increments (not started):** bulk allocations behind a flag (after Finance lands and the DEV probe); the Edit-panel loading flicker and, only if a Profiler run shows it matters, the panel's state isolation.
+
+## D136 — Revenues: faster contract Save, a lighter reload and cheaper loads (19 Nov 2026)
+
+**Status:** implemented in the worktree `optimize-revenue-perf` (branch `sub/optimize-revenue-perf`), uncommitted until approved; NOT product-approved; not run against DEV; not seen in a browser; no live timing. Request and round-trip counts below come from a mock SDK with a fixed 10 ms per request, not from DEV. Analysis: four read-only reviews (canvas workflow, bulk patterns, client state and rendering, QA baseline) plus a network trace; the Canvas reference is `Project Revenues Screen.pa.yaml`.
+
+**1. What changed (file 13, section "Revenues: faster contract Save, a lighter reload and cheaper loads")**
+- P1, `planSaveContract` (`rules.ts`): the stored-volume deletes are one `together()` group (`LEAF_DELETE_CONCURRENCY`, 16) and the new volumes another (`WRITE_CONCURRENCY`, 8). Contract write first; every delete before the first create; volumes bind the contract as before. Counts: Edit 12 + 12 volumes 25 → 4 round trips, 36 + 36 73 → 9 (same request counts).
+- P2, `reload.ts` + the four `writes.run` calls: a job names the keys it reloads (`PlanJob.invalidate`). Contract: contracts + volumes. Balancing: balancing prices (the date-sync plugin writes the dates on the server, so it must reload).
+- P3, `findCurrency(code, { onlyThisCode })` and `useRevenueCurrency(country, enabled)`: one filtered read, after the project is known.
+- P4, `loadRevenueProject(id, readStates)` and `useRevenueProject`: the states come from `qk.generalDataProjectStates` (30 minutes), the entry General Data uses.
+- P5, `ContractCardFields` (`Screen.tsx`): memoized card grid on a memoized context.
+
+**2. DIVERGENCE (proposed, not approved), `REVENUE_PERF.parallelVolumeWrites` in `data/revenuesFlags.ts`** — the Canvas, and the code until now, send the volume deletes and creates one request at a time and stop at the first failure. With the switch on, a failure inside a group lets the other rows of that group run, then the Save stops, so after a failed delete the contract may be updated, more old volumes gone and no new volume created (before: fewer old volumes gone). Nothing is ever created after a failed delete, and the contract write is never reordered. The Save stays non-transactional, as before; the message still counts "N of M changes saved". The switch is **on** because the same trade is already live on Production (`together()`, D108); **decision needed:** keep it on, or ship it off until a DEV check. Off = the exact old plan, no other change (UT-REVPERF-001).
+
+**3. Smaller changes and their risk**
+- P2 narrows what reloads. Another user's change to the project is still picked up by the window-focus refetch after 30 s. The volumes key stays in the contract list on purpose (a reopened contract must not show the rows a Save replaced).
+- P4: the project states are cached for 30 minutes, so an admin who changes a state's `Order` is seen on the Revenue screen after the cache expires or a reload (General Data already behaves this way).
+- P3: `findCurrency` without the new option is unchanged (the Milestones screen). The filtered read takes the first row whose code equals the argument, as the whole-table read did (UT-REVPERF-041).
+
+**4. Not done, with the reason**
+- `createMany` for the new volumes: a bulk request has a floor of about 0.6–1.9 s through the host (D51 / the Generators analysis), so at 12–37 rows parallel single requests are probably as fast (an inference). It needs the `registerBulkTables` change the Finance session is making in `generatorsBulk.ts`, the Generators bulk path has never run on DEV, and it needs an owner-business-unit guard (the bulk backend refuses a row without it). Left as a later step behind a default-off switch, after a live timing.
+- Moving the post-save reload to the background: stale rows would show; for balancing the plugin dates would be stale.
+- Skipping the volume-id read on Saves of non-Individual contracts: the stored contract may have been Individual, and its old volumes would be orphaned.
+- Parallel or batched balancing creates: period N probably depends on N-1's dates (plugin); inference.
+- Prefetching the Revenue screen's chunk: needs `bootPlan.ts` / `bootPrefetch.ts`, shared by every screen; not in scope without approval.
+- Mounting the assumptions and inflation reads from the session project (removes a second load stage): medium risk, needs a test that the session project's country values equal the Revenue project's.
+
+**5. Noticed, not changed (CONVENTIONS rule 8)**
+- The type dropdown runs the engine on an empty assumptions list when the Fabric read has not returned yet.
+- Reopening a contract within about 5 minutes of a failed volume read can show cached volumes (the volumes key is invalidated, not refetched, while disabled).
+- The Save error text names `vsb_projectrevenues` even when a volume write failed.
+- The overlap check's `catch {}` swallows a failed read and the Save goes on.
+- The code reads country inflation profiles at load; the Canvas screen does not (grep finds no match in the YAML).
+- `PlanJob.invalidate` is honoured on a failed job too (`onSettled`), as before.
+
+**6. Tests**
+- `src/features/pm/revenues/writePerf.test.ts`: UT-REVPERF-001…003 (the oracle, with the measured baseline), 010…018 (counts, a 24-case equivalence matrix, order, binds, owner, refusals, totals), 020…023 (failure part-way), 030…034 (what a write reloads).
+- `src/data/revenues.perf.test.ts`: UT-REVPERF-040…044, 050…053.
+- `src/features/pm/revenues/hooks.perf.test.tsx`: UT-REVPERF-060…064, 070…072.
+- `src/features/pm/revenues/Screen.perf.test.tsx`: UT-REVPERF-080…086.
+- Each speed, order, cache and memo test was shown to fail when the code it pins is broken (five mutations, restored). No existing test was edited.
+
+**7. Verification** (19 Nov 2026, worktree `optimize-revenue-perf`): `npm run verify` stopped at exit 1 in its test step, with no test failing. It had passed check:power (96 registered, 0 problems), typecheck, lint (no warning in the changed files), control labels (0 missing, 0 duplicate) and canvas identities (C1..C5 all 0); 280 test files and 5,680 tests passed (3 todo); 23 jsdom files failed to start a worker ("Timeout waiting for worker to respond", the known flake, on a machine with several other runs going). Those 23 files were re-run alone: 21 files / 726 tests passed, the other two (admin-capex-accounts, admin-default-checklists Screen tests) passed in a separate run, 79 tests. `npm run build`: passed. Together: 303 files, 6,485 tests passed, none failed. NOT run: the E2E parity suite, knip, any DEV run, any browser check, any live timing. One re-run was disturbed while another session reinstalled the shared `node_modules` (not by this work); it was repeated after the install finished.

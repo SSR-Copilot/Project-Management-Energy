@@ -35,8 +35,9 @@
  * PERMISSIONS: `CanEditSelectedProject` and `RecordInfo(…, Edit/DeletePermission)` have no SDK
  * equivalent (D1): they pass and Dataverse refuses what the user may not do.
  */
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ES, ES_FINANCE, ES_PRODUCTION } from "@/data/dataverseNames";
+import { listProjectStates } from "@/data/generalData";
 import { qk } from "@/data/keys";
 import type { ScreenData } from "@/data/notConnected";
 import { usePlanWrite } from "@/data/usePlanWrite";
@@ -70,11 +71,21 @@ const out = <T,>(q: { data?: T; isLoading: boolean; error: unknown }, empty: T):
 
 const REFERENCE_STALE = 30 * 60 * 1000;
 
-/** `Set(gblRecordSelectedProject, LookUp(Projects, …))` (`OnVisible`). */
+/**
+ * `Set(gblRecordSelectedProject, LookUp(Projects, …))` (`OnVisible`).
+ *
+ * The project states (the cluster state's `Order`, the balancing gate) are read through the SAME cache entry General
+ * Data uses (`qk.generalDataProjectStates`, `listProjectStates`, 30 minutes), so a project (re)load, which also
+ * happens on every window focus, no longer re-reads the whole table: one request instead of two (D136).
+ * The entry sits outside `["pmRevenues", …]`, so a write's reload does not refetch it either.
+ */
 export function useRevenueProject(projectId: string | undefined): ScreenData<RevenueProject | null> {
+  const qc = useQueryClient();
   const q = useQuery({
     queryKey: qk.revenues(projectId ?? "", "project"),
-    queryFn: () => loadRevenueProject(projectId!),
+    queryFn: () => loadRevenueProject(projectId!, () => qc.fetchQuery({
+      queryKey: qk.generalDataProjectStates, queryFn: listProjectStates, staleTime: REFERENCE_STALE,
+    })),
     enabled: Boolean(projectId),
   });
   return out<RevenueProject | null>(q, null);
@@ -158,12 +169,21 @@ export function useRevenueSubaccount(): ScreenData<{ id: string; name: string } 
   return out<{ id: string; name: string } | null>(q, null);
 }
 
-/** `drp_…_Currency_1` — `LookUp(Currencies, 'Currency Code' = "PLN" | "EUR")` (source ambiguity 7). */
-export function useRevenueCurrency(countryName: string | null): ScreenData<{ id: string; name: string } | null> {
+/**
+ * `drp_…_Currency_1` — `LookUp(Currencies, 'Currency Code' = "PLN" | "EUR")` (source ambiguity 7).
+ *
+ * D136: it waits for the project (`enabled`), so the "EUR" default is no longer read first and then the
+ * "PLN" code of a Polish project read again, and it asks the server for that one ISO code instead of the whole table.
+ * A project with no country still reads the default code once: `enabled` follows the project, not the country.
+ */
+export function useRevenueCurrency(
+  countryName: string | null, enabled = true,
+): ScreenData<{ id: string; name: string } | null> {
   const code = revenueCurrencyCode(countryName);
   const q = useQuery({
     queryKey: qk.revenuesReference("currency", code),
-    queryFn: () => findCurrency(code),
+    queryFn: () => findCurrency(code, { onlyThisCode: true }),
+    enabled,
     staleTime: REFERENCE_STALE,
   });
   return out<{ id: string; name: string } | null>(q, null);

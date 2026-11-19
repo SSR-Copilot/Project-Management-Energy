@@ -65,7 +65,9 @@ import { addDays, addMonths, addYears } from "@/domain/dates";
 import { forLanguage } from "@/features/pm/generators/rules";
 import { CHOICE_FINANCE, ES, ES_FINANCE } from "@/data/dataverseNames";
 import { bind, dateOnly } from "@/data/odata";
-import { createdRowRef, refusePlan, type WritePlan } from "@/data/writePlan";
+import { createdRowRef, refusePlan, together, type PlannedWrite, type WritePlan } from "@/data/writePlan";
+import { LEAF_DELETE_CONCURRENCY } from "@/data/concurrency";
+import { REVENUE_PERF, type RevenuePerfOverrides } from "@/data/revenuesFlags";
 import type { PlanJob } from "@/data/usePlanWrite";
 
 /* ═════════════════════════════════════════════════════════════════════ types ════ */
@@ -3003,6 +3005,8 @@ export interface SaveContractInput {
   /** `buildStandardFlags` (default) or its canvas twin. */
   flags?: (form: RevenueFormState) => StandardFlags;
   language?: Lang;
+  /** Overrides of `REVENUE_PERF` for this plan (tests, a caller that decided differently). */
+  perf?: RevenuePerfOverrides;
 }
 
 /**
@@ -3012,6 +3016,11 @@ export interface SaveContractInput {
  *  3. for Individual Volumes, one create per row `{Year, RevenueContract, StartDate, EndDate,
  *     'Owning Business Unit', IndividualContractedmwhpa}`.
  * A new contract's volumes bind the contract the plan's first write creates.
+ *
+ * DIVERGENCE (D136, `REVENUE_PERF.parallelVolumeWrites`): the canvas sends steps 2 and 3 one row at a
+ * time. Here step 2 is one concurrent group and step 3 another, the contract write and the order of the three steps
+ * unchanged, so a Save with N years costs about 1 + N/16 + N/8 round trips instead of 1 + 2N. Same rows, same
+ * payloads, same owner bind. With the switch off, the plan is exactly the sequential one.
  */
 export function planSaveContract(input: SaveContractInput): WritePlan {
   const { form, project, currencyId } = input;
@@ -3026,14 +3035,14 @@ export function planSaveContract(input: SaveContractInput): WritePlan {
   plan.writes.push(editId
     ? { op: "update", entitySet: ES_FINANCE.projectRevenues, id: editId, data, reason: "save the revenue contract" }
     : { op: "create", entitySet: ES_FINANCE.projectRevenues, data, reason: "create the revenue contract" });
-  if (editId) {
-    input.storedVolumeIds.forEach((id) => plan.writes.push({
+  const volumeDeletes: PlannedWrite[] = editId
+    ? input.storedVolumeIds.map((id) => ({
       op: "delete", entitySet: ES_FINANCE.revenueIndividualHedgeVolumes, id,
       reason: "remove the contract's individual hedge volumes",
-    }));
-  }
+    }))
+    : [];
   const contractRef = bind(ES_FINANCE.projectRevenues, editId ?? createdRowRef(0));
-  payload.individualVolumes.forEach((row) => plan.writes.push({
+  const volumeCreates: PlannedWrite[] = payload.individualVolumes.map((row) => ({
     op: "create",
     entitySet: ES_FINANCE.revenueIndividualHedgeVolumes,
     data: {
@@ -3046,6 +3055,13 @@ export function planSaveContract(input: SaveContractInput): WritePlan {
     },
     reason: `create the individual hedge volume ${row.year}`,
   }));
+  if ({ ...REVENUE_PERF, ...input.perf }.parallelVolumeWrites) {
+    // Two groups, one after the other: every delete finishes before the first create is sent, and a create sees the
+    // contract the plan's first write made (a group sees the ids created BEFORE it).
+    plan.writes.push(...together(volumeDeletes, { limit: LEAF_DELETE_CONCURRENCY }), ...together(volumeCreates));
+  } else {
+    plan.writes.push(...volumeDeletes, ...volumeCreates);
+  }
   return plan;
 }
 

@@ -19,6 +19,7 @@ import { Vsb_balancingpricesService } from "@/generated/services/Vsb_balancingpr
 import { Vsb_revenueindividualhedgevolumesService } from "@/generated/services/Vsb_revenueindividualhedgevolumesService";
 import { Vsb_revenuesubaccountsService } from "@/generated/services/Vsb_revenuesubaccountsService";
 import { Vsb_energyyieldsService } from "@/generated/services/Vsb_energyyieldsService";
+import { TransactioncurrenciesService } from "@/generated/services/TransactioncurrenciesService";
 import {
   BALANCING_COL, FLAG_COL, HEDGE_VOLUME_COL, PROJECT_COL, REVENUE_COL, ALL_STANDARD_FLAG_KEYS,
   type AssumptionRow, type BalancingPeriod, type CountryInflationProfileRow, type IndividualVolumeRow,
@@ -61,14 +62,22 @@ export const PROJECT_SELECT = Object.values(PROJECT_COL);
  * `Set(gblRecordSelectedProject, LookUp(Projects, …))` (`OnVisible`, L31-37), with the cluster
  * state's `Order` (`'Cluster State'.Order`, the balancing gate) from `Project States`.
  */
-export async function loadRevenueProject(projectId: string): Promise<RevenueProject | null> {
+export async function loadRevenueProject(
+  projectId: string,
+  /**
+   * Where the project states come from. Defaults to a direct read; the screen's hook passes a read through the shared
+   * 30-minute `qk.generalDataProjectStates` cache, so a project (re)load no longer reads the whole table again
+   * (D136). Still read in parallel with the project row.
+   */
+  readStates: () => Promise<readonly { id: string; order: number | null }[]> = listProjectStates,
+): Promise<RevenueProject | null> {
   const [rows, states] = await Promise.all([
     fetchPage(
       "load the project",
       (o) => Vsb_projectsService.getAll(o),
       { select: PROJECT_SELECT, filter: `${PROJECT_COL.id} eq ${guid(projectId)}`, top: 1 },
     ),
-    listProjectStates(),
+    readStates(),
   ]);
   const r = raw(rows)[0];
   return r ? toRevenueProject(r, states) : null;
@@ -263,9 +272,25 @@ export async function listRevenueAssumptionRows(countryName: string): Promise<As
   }));
 }
 
-/** `LookUp(Currencies, 'Currency Code' = <code>)` — through the shared `loadCurrencies` (Land Lease). */
-export async function findCurrency(code: string): Promise<{ id: string; name: string } | null> {
-  const c = (await loadCurrencies()).find((x) => x.code === code);
+/**
+ * `LookUp(Currencies, 'Currency Code' = <code>)` — through the shared `loadCurrencies` (Land Lease).
+ *
+ * `onlyThisCode` (D136, the Revenue screen passes it): the server filters on the ISO code, so one small read
+ * replaces the whole `transactioncurrencies` table. The same `x.code === code` test then picks the row, so the row
+ * found is the one the unfiltered read finds (the filtered rows keep the table's own order). The Milestones screen
+ * calls this without the option and is unchanged.
+ */
+export async function findCurrency(
+  code: string, opts: { onlyThisCode?: boolean } = {},
+): Promise<{ id: string; name: string } | null> {
+  const rows = opts.onlyThisCode
+    ? (await fetchAll(
+      "find the revenue currency",
+      (o) => TransactioncurrenciesService.getAll(o),
+      { select: ["transactioncurrencyid", "currencyname", "isocurrencycode"], filter: eq("isocurrencycode", code) },
+    )).map((r) => ({ id: r.transactioncurrencyid, name: r.currencyname ?? "", code: r.isocurrencycode ?? "" }))
+    : await loadCurrencies();
+  const c = rows.find((x) => x.code === code);
   return c ? { id: c.id, name: c.name } : null;
 }
 
