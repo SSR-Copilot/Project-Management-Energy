@@ -15,7 +15,7 @@
  *   | bodyGap     | 16                                 | 12 (+ `bodyPaddingBottom={20}`)        |
  *   | savingLabel | —                                  | "Saving…"                              |
  *   | footerGap   | 20 (CAX:2302)                      | — (10)                                 |
- *   | listProps   | inline labels, draggable, no period | showPosition, describedby, emptyText  |
+ *   | listProps   | inline labels, draggable, no period | draggable, describedby, emptyText      |
  *
  * Wave C: `footerGap` (optional, default 10 = the shared footer) is passed to `PanelButtons gap`;
  * CAPEX Accounts' canvas reorder footer places Save 20 px left of Cancel
@@ -64,6 +64,8 @@ export interface ReorderPanelProps<T> {
   /** `data-testid` of the footer Save / Cancel buttons (`PanelButtons`); kebab defaults. */
   saveTestId?: string;
   cancelTestId?: string;
+  /** The header ✕ icon's resting colour (`FormPanel closeIconColor`). */
+  closeIconColor?: string;
   /** The Save button's hover hint (`PanelButtons saveTooltip`). */
   saveTooltip?: string;
   /** Passed through to `ReorderItems` (`showPosition`, `draggable`, `buttonLabels`, …). */
@@ -75,7 +77,7 @@ export interface ReorderPanelProps<T> {
 export function ReorderPanel<T>({
   open, title, items, getId, getLabel, listAriaLabel, hint, hintClassName, saving, error, warning,
   canSave = (changed) => changed, onSave, onCancel, savingLabel, bodyGap = 16, bodyPaddingBottom = 0, footerGap, listProps,
-  onOrderChange, saveTestId = "reorder-save", cancelTestId = "reorder-cancel", saveTooltip,
+  onOrderChange, saveTestId = "reorder-save", cancelTestId = "reorder-cancel", saveTooltip, closeIconColor,
 }: ReorderPanelProps<T>) {
   const styles = useStyles();
   const [initial] = useState<readonly T[]>(() => [...items]);
@@ -87,6 +89,7 @@ export function ReorderPanel<T>({
     <FormPanel
       open={open} width="narrow" title={title} onDismiss={onCancel}
       busy={saving} dirty={changed}
+      {...(closeIconColor !== undefined ? { closeIconColor } : {})}
       footer={(
         <PanelButtons
           look="brand" disabled={!canSave(changed)} saving={saving} onSave={() => onSave(working)}

@@ -384,6 +384,15 @@ describe("CountryTechnologyPicker — canvas look", () => {
     expect(screen.getByRole("button", { name: "Collapse France" })).toHaveAttribute("aria-expanded", "true");
   });
 
+  it("UT-CTPICK-034 startCollapsed (Project Gates): the selected country starts collapsed; a new selection still expands", async () => {
+    render(<Harness countries={pickerCountries(ROWS, COST_COUNTRY_RULE)} technologies={COST_TECHNOLOGIES}
+      countryClick="select" startCollapsed initial={{ countryId: "de", technology: TECHNOLOGY.wind }} />);
+    expect(screen.getByRole("button", { name: "Expand Germany" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("button", { name: "Germany Wind" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "France" }));
+    expect(screen.getByRole("button", { name: "Collapse France" })).toHaveAttribute("aria-expanded", "true");
+  });
+
   it("UT-CTPICK-028 The name button (select / toggle) fills the row after the +/-, keeping its accessible name", () => {
     render(<Harness countries={pickerCountries(ROWS, GATE_COUNTRY_RULE)} technologies={GATE_TECHNOLOGIES}
       countryClick="select" initial={{ countryId: "de", technology: TECHNOLOGY.wind }} />);

@@ -2,7 +2,7 @@ export { AppHeader, environmentBadge, versionLabel, ERROR_TOOLTIP } from "./AppH
 export type { AppHeaderProps } from "./AppHeader";
 export { AppShell } from "./AppShell";
 export { pmHeaderTitle, projectPermissionLabel } from "./headerRules";
-export { CommandBar, useCommandBarStyles } from "./CommandBar";
+export { CommandBar, DeactivateOrdersIcon, useCommandBarStyles } from "./CommandBar";
 export { useCommandRowStyles } from "./commandRow";
 export { CommandSlot, CommandSlotProvider } from "./CommandSlot";
 export type { Command, CommandIcon } from "./CommandBar";

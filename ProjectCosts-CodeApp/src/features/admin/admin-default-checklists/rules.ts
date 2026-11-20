@@ -67,12 +67,11 @@ export const MAX_TEXT_LENGTH = 256;
 export const HOLDING_CUT = 110;
 
 /**
- * DIVERGENCE: `TextCanvas1.Text` reads "To reorder drag and drop listed items" (L1542), because
- * `pcf_ReorderTaskList_AdminScreen` was a PowerDragDrop list. This panel is the shared
- * `ReorderPanel` without dragging (Move up / Move down buttons only), so the hint says that
- * instead. Restore the canvas text if dragging is enabled here (`listProps.draggable`).
+ * `TextCanvas1.Text` (L1542) — verbatim, as the CAPEX Accounts reorder hint (`admin-capex-accounts/Panels.tsx`
+ * REORDER_HINT). The panel drags and drops as the canvas PowerDragDrop list (`listProps.draggable`, D149); the
+ * Move up / Move down buttons stay for the keyboard and touch (D18 b).
  */
-export const REORDER_HELP = "Use Move up and Move down to change the order of the listed items.";
+export const REORDER_HELP = "To reorder drag and drop listed items";
 
 /**
  * `lblAdmin_Reorder_Title.Text` — verbatim, INCLUDING the canvas misspelling "Reoder" (L1463).
@@ -114,9 +113,11 @@ export function truncateHolding(text: string | null | undefined): string {
  * `ico_EnablelCompletionDate_….Text: If(ThisItem.'Is Completion Date', "Yes", "No")` — verbatim
  * (L630); a blank reads "No", as in the canvas.
  *
- * DIVERGENCE: the Gate Relevance cell uses this too. The canvas
- * `lbl_GateRelevanceValue_….Text: =ThisItem.'Gate Relevance'` (L646) prints the Yes/No column's
- * raw boolean text ("true" / "false"); this app shows "Yes" / "No" in both columns.
+ * The Gate Relevance cell uses this too, and that is the canvas text, not a divergence:
+ * `lbl_GateRelevanceValue_….Text: =ThisItem.'Gate Relevance'` (L646) shows a Dataverse Yes/No
+ * column by its option labels, and `vsb_gaterelevance`'s are "Yes" (1) / "No" (0)
+ * (`customizations.xml`, option set `vsb_projectdefaultchecklists_vsb_gaterelevance`). The user's
+ * canvas screenshot (20 Nov 2026) shows "Yes".
  */
 export function yesNo(value: boolean | null | undefined): "Yes" | "No" {
   return value === true ? "Yes" : "No";
@@ -125,13 +126,29 @@ export function yesNo(value: boolean | null | undefined): "Yes" | "No" {
 /* ════════════════════════════════════════════════════════════════ tabs ══ */
 
 /**
- * `tab_Admin_Project_Checklist_Association.Items: Sort('Checklist Country And Technologies',
- * Order, SortOrder.Ascending)` (L231-236).
+ * The tab strip's order: by NAME, A → Z (D151, 21 Nov 2026).
  *
- * SOURCE DEFECT (D18 e): `vsb_order` on this table is TEXT, so the canvas sorts "10" before "2".
- * Here the numeric value is compared when the text is a number; non-numeric or blank Orders sort
- * last, then by the raw text, then by name. The pre-port parity twin (`sortScopesCanvasParity`,
- * UT-ADCHK-003c) was not carried over by the port.
+ * The live canvas app (VSBCloud_Dev, the user's screenshot of 21 Nov 2026 and the parity run of
+ * 29 Oct 2026, O5) lists the tabs alphabetically — Croatia PV, Croatia Wind, Finland PV, … — and opens
+ * on the first. The extracted YAML (1.21.709) still sorts by Order
+ * (`tab_Admin_Project_Checklist_Association.Items: Sort(…, Order, SortOrder.Ascending)`, L231-236),
+ * which in DEV begins with Germany Wind; the live app was changed after that extract. The live app
+ * wins (the user, 21 Nov 2026). Ties by name (none in practice) fall back to the Order key.
+ */
+export function sortTabs<T extends Pick<ChecklistTab, "order" | "name">>(tabs: readonly T[]): T[] {
+  return [...tabs].sort((a, b) => {
+    const byName = a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+    if (byName !== 0) return byName;
+    return tabSortKey(a.order) - tabSortKey(b.order);
+  });
+}
+
+/**
+ * The extracted canvas order (`Sort(…, Order, Ascending)`, L231-236), kept as the parity twin of `sortTabs`.
+ *
+ * SOURCE DEFECT (D18 e): `vsb_order` on this table is TEXT, so that canvas sorts "10" before "2".
+ * This twin compares the numeric value when the text is a number; non-numeric or blank Orders sort
+ * last, then by the raw text, then by name.
  */
 export function tabSortKey(order: string | null | undefined): number {
   const text = (order ?? "").trim();
@@ -140,7 +157,7 @@ export function tabSortKey(order: string | null | undefined): number {
   return Number.isFinite(n) ? n : Number.POSITIVE_INFINITY;
 }
 
-export function sortTabs<T extends Pick<ChecklistTab, "order" | "name">>(tabs: readonly T[]): T[] {
+export function sortTabsByOrderCanvasParity<T extends Pick<ChecklistTab, "order" | "name">>(tabs: readonly T[]): T[] {
   return [...tabs].sort((a, b) => {
     const ka = tabSortKey(a.order);
     const kb = tabSortKey(b.order);
@@ -155,11 +172,10 @@ export function sortTabs<T extends Pick<ChecklistTab, "order" | "name">>(tabs: r
  * The tab shown: the `?tab=` param when it names a known tab, otherwise the FIRST tab in display
  * order.
  *
- * SOURCE DEFECT (D18 f): the canvas `OnVisible` sets `locSelectedCountryAndTechnology:
- * First(SortByColumns('Checklist Country And Technologies', "vsb_name"))` (L23-28) — the first BY
- * NAME — while the strip is sorted BY ORDER, so the pre-selected tab need not be the left-most.
- * Here it is the left-most. The pre-port twin `defaultScopeCanvasParity` (UT-ADCHK-003b) was not
- * carried over by the port.
+ * The canvas `OnVisible` sets `locSelectedCountryAndTechnology: First(SortByColumns('Checklist Country
+ * And Technologies', "vsb_name"))` (L23-28), the first BY NAME. With the strip sorted by name too
+ * (`sortTabs`, D151) that IS the left-most tab, as the live app shows (Croatia PV). D18 f recorded the
+ * mismatch against the extracted Order-sorted strip; it no longer arises.
  *
  * DIVERGENCE: the selected tab lives in the URL (`?tab=`); the canvas kept it in a context
  * variable, so it did not survive a reload or a deep link.
@@ -519,22 +535,21 @@ export function statusDialog(task: Pick<ChecklistTask, "name" | "isActive">) {
 }
 
 /**
- * `cmp_DeleteChecklistItem_AdminScreen` (L1700-1756): `Title` "Delete checklist item?" and
- * `ConfirmButtonText` "Delete" — verbatim.
+ * `cmp_DeleteChecklistItem_AdminScreen` (L1700-1756): `Title` "Delete checklist item?" (L1754),
+ * `ConfirmButtonText` "Delete" (L1705) and `Description: ="Are you sure that you want to
+ * permanently delete task """ & locSelectedChecklistEntity.Name & """?"` (L1706) — all verbatim.
  *
- * DIVERGENCE: the canvas `Description` reads `"Are you sure that you want to permanently delete
- * task """ & Name & """?"`. Nothing is deleted permanently by the click: the row is flagged
- * `To Delete` and the sync flow `SynchroniseProjectTaskList-Add_Update` does the deleting. The
- * text here says what really happens (UT-ADCHK-048).
+ * Restored to the canvas description on 20 Nov 2026 (user: Application Settings must match the
+ * canvas). The D36 port had replaced it with an explanation of the soft delete, a DIVERGENCE that
+ * no product decision covered. The click flags the row `To Delete`; the sync flow
+ * `SynchroniseProjectTaskList-Add_Update` then deletes the project copies and the row itself, so
+ * "permanently" holds (UT-ADCHK-048).
  */
 export function deleteDialog(task: Pick<ChecklistTask, "name">) {
   return {
     title: "Delete checklist item?",
     confirmText: "Delete",
-    description:
-      `Are you sure that you want to delete task "${task.name}"? ` +
-      "It is removed from this list straight away. The synchronisation process then removes it " +
-      "from the checklists of projects that are not yet approved, and deletes the item itself.",
+    description: `Are you sure that you want to permanently delete task "${task.name}"?`,
   };
 }
 

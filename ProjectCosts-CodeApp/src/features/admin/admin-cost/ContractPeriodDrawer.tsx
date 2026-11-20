@@ -27,8 +27,8 @@ import { CONTRACT_TYPE } from "@/domain/costStandards";
 import { AGGREGATION_OPTIONS, FREQUENCY_OPTIONS, MONTH_OPTIONS, MSG, YEAR_OPTIONS } from "./constants";
 import { useDrawerStyles } from "./drawerStyles";
 import {
-  canSaveOpex, currencyCode, currencyIssue, hiddenValues, isDirty, isContractLevelEditable, opexPanelTitle, opexStandardDefaults,
-  validateOpexForm, withCountryInflation, withInflation, withYears,
+  canSaveOpex, currencyCode, currencyIssue, hiddenValues, isDirty, isContractLevelEditable, opexFieldStandard, opexPanelTitle,
+  opexStandardDefaults, validateOpexForm, withCountryInflation, withInflation, withYears,
   type CostSelection, type HiddenValues, type OpexFieldKey, type OpexForm, type OpexPanelContext,
 } from "./rules";
 
@@ -93,10 +93,14 @@ export function ContractPeriodDrawer(props: ContractPeriodDrawerProps) {
     return { ...(message ? { error: message } : {}), errorClassName: styles.error, validationIcon: null };
   };
 
-  /** The value / change / error props of one money figure (`label` and `testId` stay at the call site). */
+  /**
+   * The value / change / error props of one money figure (`label` and `testId` stay at the call site).
+   * `txt_…_FixedCosts_1` … `txt_…_EuroWTG_1` carry the blue italic pair (ACS:5807-6338, `opexFieldStandard`).
+   */
   const figure = (key: "fixCosts" | "ofRevenues" | "eurMwh" | "eurMw" | "eurWtg") => ({
     value: form[key],
     inputMode: "decimal" as const,
+    standard: opexFieldStandard(key),
     ...fieldError(key),
     onChange: (v: string) => setForm((f) => ({ ...f, [key]: v })),
   });
@@ -135,11 +139,18 @@ export function ContractPeriodDrawer(props: ContractPeriodDrawerProps) {
         ) : null}
         <div className={styles.columns}>
           <div className={styles.column}>
-            {/* `lbl_LandLease_RightPanel_NewEditCost_BodyContentDescription_1.Text` — "Description" (derived, locked). */}
-            <ReadOnlyField skin="plain" label="Description" value={form.description} required disabled={false}
+            {/*
+              `lbl_LandLease_RightPanel_NewEditCost_BodyContentDescription_1.Text` — "Description" (derived, locked);
+              blue italic (`txt_…_Description_1`, ACS:5092-93). No required mark: the canvas asterisk
+              `lbl_…_DescriptionAsterisk_1.Visible: =//IsBlank(locSelectedLandLeasePeriod)` (ACS:5192) is
+              commented out, so it is never visible.
+            */}
+            <ReadOnlyField skin="plain" label="Description" value={form.description} disabled={false}
+              standard={opexFieldStandard("description")}
               testId="txt_LandLease_RightPanel_NewEditCost_BodyContent_Description_1" />
-            {/* `lbl_LandLease_RightPanel_NewEditCost_BodyContent_StartDate_1.Text` — "Start Date" (derived, locked). */}
+            {/* `lbl_LandLease_RightPanel_NewEditCost_BodyContent_StartDate_1.Text` — "Start Date" (derived, locked); blue italic (ACS:5315-16). */}
             <ReadOnlyField skin="plain" label="Start Date" value={form.startDate} disabled={false}
+              standard={opexFieldStandard("startDate")}
               testId="txt_LandLease_RightPanel_NewEditCost_BodyContent_StartDate" />
             {/* `lbl_LandLease_RightPanel_NewEditPeriod_BodyContent_DurationYears_1.Text` — "Duration". */}
             <Field label="Duration" required {...errorProps("duration")}>
@@ -161,8 +172,12 @@ export function ContractPeriodDrawer(props: ContractPeriodDrawerProps) {
                 </Dropdown>
               </div>
             </Field>
-            {/* `lbl_LandLease_RightPanel_NewEditCost_BodyContent_Currency_1.Text` — "Currency" (locked to EUR / PLN). */}
+            {/*
+              `lbl_LandLease_RightPanel_NewEditCost_BodyContent_Currency_1.Text` — "Currency" (locked to EUR / PLN).
+              Plain: `drp_…_Currency_1` (ACS:5578) sets no `FontColor` / `FontItalic`.
+            */}
             <ReadOnlyField skin="plain" label="Currency" value={currencyName} disabled={false}
+              standard={opexFieldStandard("currency")}
               testId="drp_LandLease_RightPanel_NewEditCost_BodyContent_Currency_1" />
             {/* `lbl_…_FixedCosts_1.Text` — `"Fix Costs p.a. [" & {EUR|PLN} & "]"`. */}
             <TextField skin="plain" label={`Fix Costs p.a. [${cur}]`}
@@ -228,8 +243,9 @@ export function ContractPeriodDrawer(props: ContractPeriodDrawerProps) {
                   disabled={!contractLevel}
                   onChange={(_, d) => setForm((f) => withCountryInflation(f, d.checked, pristine))}
                 />
-                {/* `lbl_…_InflationStartYear_1.Text` — "Inflation Start Year"; the value is `MSG.inflationStartYear`. */}
+                {/* `lbl_…_InflationStartYear_1.Text` — "Inflation Start Year"; the value is `MSG.inflationStartYear`; blue italic (ACS:7189-90). */}
                 <ReadOnlyField skin="plain" label="Inflation Start Year" value={MSG.inflationStartYear} required disabled={false}
+                  standard={opexFieldStandard("inflationStartYear")}
                   testId="txt_LandLease_RightPanel_NewEditCost_BodyContent_InflationStartYear_1" />
               </>
             ) : null}
@@ -252,17 +268,20 @@ export function ContractPeriodDrawer(props: ContractPeriodDrawerProps) {
             {/*
               `txt_LandLease_RightPanel_NewEditCost_BodyContent_InflationProfile_1` is ONE canvas input
               whose caption (`lbl_…_InflationProfile_1.Text`) switches: `If(Country toggle, "Country
-              Inflation Profile", "Custom Inflation Profile [%]")`. Both branches carry its name.
+              Inflation Profile", "Custom Inflation Profile [%]")`. Both branches carry its name and its
+              blue italic pair (ACS:7506-07).
             */}
             {form.useInflation ? (
               form.useCountryInflation ? (
                 <ReadOnlyField skin="plain" label="Country Inflation Profile" value="Country Inflation Profile" disabled={false}
+                  standard={opexFieldStandard("inflationProfile")}
                   testId="txt_LandLease_RightPanel_NewEditCost_BodyContent_InflationProfile_1" />
               ) : (
                 <TextField skin="plain"
                   label="Custom Inflation Profile [%]"
                   testId="txt_LandLease_RightPanel_NewEditCost_BodyContent_InflationProfile_1"
                   required
+                  standard={opexFieldStandard("inflationProfile")}
                   value={form.customInflation}
                   inputMode="decimal"
                   disabled={!contractLevel}

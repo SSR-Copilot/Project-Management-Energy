@@ -12,22 +12,22 @@
  * blue filler block.
  * SOURCE DEFECT (not reproduced): the canvas Save carries `Tooltip: "Filter projects details list
  * view."`, copied from another screen; this Save has no tooltip.
- * DIVERGENCE: the canvas inputs take `MaxLength: gblAppConstants.DefaultDefMaxLength` (256);
- * here 10 characters.
- * DIVERGENCE: the canvas paints every input red while it fails its check, including a blank one
- * on open; here only an input the user changed is validated.
+ * The inputs take the canvas `MaxLength` (`gblAppConstants.DefaultDefMaxLength` = 256, `INPUT_MAX_LENGTH`)
+ * and paint the canvas 1 px `BorderColor` (`INVALID_BORDER`, #BD3133) while the SHOWN value fails
+ * its check — including a blank one on open (`CellState.invalid`); the section message and Save
+ * still wait for a change (`rules.ts evaluateCell`).
+ * The ✕ is the canvas command-bar item's `ItemIconColor: themeTertiary` (AMS:1073) through
+ * `FormPanel closeIconColor`.
  */
 import { useId } from "react";
 import { Input, Text, makeStyles, tokens } from "@fluentui/react-components";
 import { FormPanel, HINTS, InlineEmpty } from "@/components";
 import {
-  DURATION_FIELDS, HEADING, MSG, PANEL_FIELD_PART, PANEL_TEST_ID, RATE_FIELDS, TYPOGRAPHY, technologyLabel,
-  technologyName, type MatrixKind,
+  CLOSE_ICON_COLOR, DURATION_FIELDS, HEADING, INPUT_MAX_LENGTH, INVALID_BORDER, MESSAGE_COLOR, MSG, PANEL_FIELD_PART,
+  PANEL_TEST_ID, RATE_FIELDS, TYPOGRAPHY, technologyLabel, technologyName, type MatrixKind,
 } from "./constants";
 import type { MilestoneField } from "@/domain/milestones";
 import { cellKey, type PanelColumn, type PanelState } from "./rules";
-
-const ERROR_BORDER = tokens.colorPaletteRedBorder2;
 
 const useStyles = makeStyles({
   /** Content starts 16 px from the panel edge: the canvas labels and headings carry `PaddingLeft: 16` and the form has no side padding (AMS:1190, 1141). */
@@ -42,8 +42,8 @@ const useStyles = makeStyles({
   techLabel: { ...TYPOGRAPHY.panelLabel, textAlign: "center" },
   /** `Width: Min(TemplateWidth, 60)` at `X: 10` inside the 80 px template, so the input is centred under its label. */
   input: { width: "60px", minWidth: "60px", justifySelf: "center", "& input": { textAlign: "center" } },
-  // Canvas Small, 14 px high (AMS:1909, 1914, 2372).
-  message: { color: tokens.colorPaletteRedForeground1, ...TYPOGRAPHY.panelMessage },
+  // Canvas Small, 14 px high, `FontColor: gblAppColors.Error` = akzent5 (AMS:1908-1914, 2366-2372).
+  message: { color: MESSAGE_COLOR, ...TYPOGRAPHY.panelMessage },
   messageSlot: { minHeight: "14px" },
 });
 
@@ -82,14 +82,15 @@ export function EditMilestonesPanel({
       busy={saving}
       dirty={state.touched}
       discardText={{
-        // NEW — no canvas equivalent (see the DIVERGENCE above).
+        // NEW — no canvas equivalent (see the DIVERGENCE above); not destructive (no red), a
+        // CheckMark confirm, as there is no canvas instance to transcribe a look from.
         description: `Your changes to the milestone assumptions for ${countryName || "this country"} have not been saved. Discard them?`,
         cancelText: "Cancel",
-        destructive: true,
         confirmIcon: "checkmark",
       }}
       onDismiss={onClose}
       closeTestId="pcf_com_Admin_ProjectGates_Approvals_Form_CommandBar_2-closeKey"
+      closeIconColor={CLOSE_ICON_COLOR}
       // Shared footer (Cancel in the canvas brand outline); Cancel goes through the dirty guard.
       actions={{
         onSave, canSave: canEdit && state.canSave, saving,
@@ -214,7 +215,8 @@ function RowInputs({
       {columns.map((c) => {
         const key = cellKey(c.row.id, field);
         const cell = state.cells.get(key);
-        const invalid = Boolean(cell?.error);
+        // The canvas `BorderThickness` state: red while the shown value fails, typed or not.
+        const invalid = Boolean(cell?.invalid);
         return (
           <Input
             key={key}
@@ -223,16 +225,18 @@ function RowInputs({
             placeholder={cell?.placeholder}
             disabled={disabled}
             inputMode={unit === "success rate" ? "decimal" : "numeric"}
-            maxLength={10}
+            maxLength={INPUT_MAX_LENGTH}
             // The canvas sets no AccessibleLabel; the name joins the column caption (technology)
             // and the row caption, so each input in the grid stays distinguishable.
             aria-label={`${technologyName(c.technology)} ${label} ${unit}`}
             // The canvas inputs repeat per technology (a gallery), so the id adds `-<row id>`.
             data-testid={`txt_Admin_MilestoneAssumption_Form_Fields_${section}_${part}_Input-${c.row.id}`}
             aria-invalid={invalid}
-            aria-describedby={invalid ? messageId : undefined}
+            // The section message describes the input only once it shows (a touched cell).
+            aria-describedby={cell?.error ? messageId : undefined}
             title={cell?.error}
-            style={invalid ? { border: `1px solid ${ERROR_BORDER}` } : undefined}
+            // `BorderColor: RGBA(189, 49, 51, 1)`, `BorderThickness: 1` while invalid (AMS:1364-1371).
+            style={invalid ? { border: `1px solid ${INVALID_BORDER}` } : undefined}
             onChange={(_, data) => onChange(key, data.value)}
           />
         );

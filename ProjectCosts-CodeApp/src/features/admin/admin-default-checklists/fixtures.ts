@@ -6,10 +6,15 @@ import type {
   ChecklistCluster, ChecklistTab, ChecklistTask,
 } from "@/data/adminDefaultChecklists";
 
+/**
+ * The strip sorts A → Z by name (D151): DE Wind, DK PV, FR Wind, so the screen opens on DE Wind, whose
+ * tasks the fixtures hold. The Orders are deliberately out of name order, so the tests also show that
+ * Order no longer drives the strip.
+ */
 export const FIXTURE_TABS: ChecklistTab[] = [
-  { id: "aaaaaaaa-0000-0000-0000-000000000010", name: "FR Wind", order: "10", owningBusinessUnitId: "bbbbbbbb-0000-0000-0000-000000000001" },
-  { id: "aaaaaaaa-0000-0000-0000-000000000002", name: "DE PV", order: "2", owningBusinessUnitId: "bbbbbbbb-0000-0000-0000-000000000001" },
-  { id: "aaaaaaaa-0000-0000-0000-000000000001", name: "DE Wind", order: "1", owningBusinessUnitId: null },
+  { id: "aaaaaaaa-0000-0000-0000-000000000010", name: "FR Wind", order: "1", owningBusinessUnitId: "bbbbbbbb-0000-0000-0000-000000000001" },
+  { id: "aaaaaaaa-0000-0000-0000-000000000002", name: "DK PV", order: "3", owningBusinessUnitId: "bbbbbbbb-0000-0000-0000-000000000001" },
+  { id: "aaaaaaaa-0000-0000-0000-000000000001", name: "DE Wind", order: "2", owningBusinessUnitId: null },
 ];
 
 export const FIXTURE_CLUSTERS: ChecklistCluster[] = [

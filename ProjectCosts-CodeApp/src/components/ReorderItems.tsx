@@ -3,7 +3,7 @@
  * the canvas `pdd_CustomControl.PowerDragDrop` control. What CAPEX Accounts (`Panels.tsx` ReorderPanel)
  * and Check List Settings (`ReorderDrawer.tsx`) each built: Move up / Move down buttons, focus that follows the
  * moved item (or the other arrow once it reaches an edge), a polite live-region announcement per
- * move, and optional native drag-and-drop (CAPEX).
+ * move, and optional native drag-and-drop (both screens, as the canvas PowerDragDrop).
  *
  * CONTROLLED: the parent owns the order and applies `onMove(from, to)` (e.g. with
  * `domain/reorder.ts` `moveItem`). Both screens' differences are props:
@@ -11,8 +11,8 @@
  *   | prop              | Check List Settings        | CAPEX Accounts                 |
  *   |-------------------|----------------------------|--------------------------------|
  *   | `buttonLabels`    | "describedby" (Move up)    | "inline" (Move <label> up)     |
- *   | `showPosition`    | true ("1.")                | false                          |
- *   | `draggable`       | false                      | true                           |
+ *   | `showPosition`    | false (canvas has none)    | false                          |
+ *   | `draggable`       | true                       | true                           |
  *   | `announcePeriod`  | true                       | false                          |
  */
 import { useEffect, useId, useRef, useState, type DragEvent } from "react";
@@ -23,16 +23,17 @@ import { useVisuallyHiddenStyles } from "@/theme/visuallyHidden";
 
 const useStyles = makeStyles({
   list: { listStyleType: "none", margin: "0", paddingLeft: "0", display: "flex", flexDirection: "column", rowGap: "4px" },
+  /** PowerDragDrop `BorderWidth: =0` (ADCS:1548, CA:2150): no line between the rows. */
   item: {
     display: "flex", alignItems: "center", columnGap: "8px",
     paddingTop: "4px", paddingBottom: "4px", paddingLeft: "8px", paddingRight: "4px",
-    borderBottomWidth: "1px", borderBottomStyle: "solid", borderBottomColor: tokens.colorNeutralStroke2,
     backgroundColor: tokens.colorNeutralBackground1,
   },
   dragging: { opacity: 0.5 },
   grip: { flexShrink: 0, color: tokens.colorNeutralForeground3, cursor: "grab" },
   position: { width: "28px", color: tokens.colorNeutralForeground3, flexShrink: 0 },
-  name: { flexGrow: 1, minWidth: "0", fontWeight: tokens.fontWeightSemibold, overflowWrap: "anywhere" },
+  /** `ItemTemplate: ="<p><b>{{…}}</b></p>"`, `ItemFontSize: =15` (ADCS:1557-1558, CA:2164-2165): 15 px bold. */
+  name: { flexGrow: 1, minWidth: "0", fontSize: "15px", fontWeight: tokens.fontWeightBold, overflowWrap: "anywhere" },
 });
 
 export interface ReorderItemsProps<T> {
@@ -52,13 +53,15 @@ export interface ReorderItemsProps<T> {
   emptyText?: string;
   /** `data-testid` per row (both screens' tests address rows this way). */
   itemTestId?: (item: T) => string;
+  /** `data-testid` on the `<ol>`: the canvas PowerDragDrop control's name (e.g. `pcf_ReorderTaskList_AdminScreen`). */
+  listTestId?: string;
   /** Stem of the Move up / Move down buttons' `data-testid` (`${stem}-up-${id}`); default `"reorder-move"`. */
   buttonTestIdPrefix?: string;
 }
 
 export function ReorderItems<T>({
   items, getId, getLabel, onMove, ariaLabel, disabled = false, buttonLabels = "describedby",
-  showPosition = false, draggable = false, announcePeriod = true, emptyText, itemTestId,
+  showPosition = false, draggable = false, announcePeriod = true, emptyText, itemTestId, listTestId,
   buttonTestIdPrefix = "reorder-move",
 }: ReorderItemsProps<T>) {
   const styles = useStyles();
@@ -102,7 +105,7 @@ export function ReorderItems<T>({
       {items.length === 0 && emptyText ? (
         <Text role="status">{emptyText}</Text>
       ) : (
-        <ol ref={listRef} className={styles.list} aria-label={ariaLabel}>
+        <ol ref={listRef} className={styles.list} aria-label={ariaLabel} {...(listTestId ? { "data-testid": listTestId } : {})}>
           {items.map((item, index) => {
             const id = getId(item);
             const label = getLabel(item);
@@ -115,7 +118,12 @@ export function ReorderItems<T>({
                 data-testid={itemTestId?.(item)}
                 draggable={dnd}
                 {...(dnd ? {
-                  onDragStart: (e: DragEvent<HTMLLIElement>) => { setDragIndex(index); e.dataTransfer.effectAllowed = "move"; },
+                  onDragStart: (e: DragEvent<HTMLLIElement>) => {
+                    setDragIndex(index);
+                    e.dataTransfer.effectAllowed = "move";
+                    // Firefox starts no drag unless the drag carries data.
+                    e.dataTransfer.setData("text/plain", id);
+                  },
                   onDragOver: (e: DragEvent<HTMLLIElement>) => onDragOver(e, index),
                   onDrop: (e: DragEvent<HTMLLIElement>) => { e.preventDefault(); setDragIndex(null); },
                   onDragEnd: () => setDragIndex(null),

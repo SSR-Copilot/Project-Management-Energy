@@ -123,7 +123,9 @@ export const MSG = {
   subaccountExists: "Subaccount number already in use. Please choose different number.",
   /**
    * NEW — no canvas equivalent: the canvas only disables Save on a blank name
-   * (`pcf_Account_RightPanel_NewEditAccount_BodyButtons_Save.DisplayMode`, CA:1411-1421).
+   * (`pcf_Account_RightPanel_NewEditAccount_BodyButtons_Save.DisplayMode`, CA:1411-1421). It is the
+   * Save gate's reason (`nameError`) and is NOT shown in the panels, as the canvas shows nothing
+   * (`visibleNameError`, 20 Nov 2026).
    */
   nameRequired: "Name is required.",
   /** NEW — no canvas equivalent: a pasted-over-limit guard; the input's `MaxLength` caps typing. */
@@ -177,20 +179,27 @@ export const BUSY = {
 /**
  * Digits only, after trim.
  *
- * DIVERGENCE: the canvas test is `Or(Not(IsNumeric(v)), IsMatch(v, ","), IsMatch(v, "\."))`
- * (CA:1274-1282), so `-5`, `+5` and `1e3` passed it. This app accepts digits only.
+ * SOURCE DEFECT (fix kept, D150): the canvas test is `Or(Not(IsNumeric(v)), IsMatch(v, ","), IsMatch(v, "\."))`
+ * (CA:1274-1282, CA:1817-1826), so "-5", "+5" and "1e3" passed it as account / subaccount numbers. This app
+ * accepts digits only. The canvas behaviour is `isCanvasNumberCanvasParity`.
  */
 export function isDigitsOnly(value: string): boolean {
   return /^\d+$/.test(value.trim());
 }
 
+/** The canvas number test (sign and exponent accepted), kept as the parity twin of `isDigitsOnly` (UT-ADCAPEX-942). */
+export function isCanvasNumberCanvasParity(value: string): boolean {
+  return /^\s*[+-]?\d+(?:[eE][+-]?\d+)?\s*$/.test(value);
+}
+
 /**
  * `lbl_Account_RightPanel_NewEditAccount_BodyContent_Number_ErrorMessageNotNumbers.Visible`
- * (CA:1274-1282) — shown only when the field is non-blank.
+ * (CA:1274-1282): shown only when the field is non-blank.
  *
- * SOURCE DEFECT: the canvas account label has no edit-mode gate (the subaccount label tests
- * `DisplayMode = Edit`), and the Save gate disables on it, so an account with a legacy non-numeric
- * number could never be renamed. Here the rule applies to a new account only.
+ * SOURCE DEFECT (needs a product-owner decision; there is no D entry): the canvas account label
+ * has no edit-mode gate (the subaccount label tests `DisplayMode = Edit`), and the Save gate
+ * disables on it, so an account with a legacy non-numeric number could never be renamed. Here
+ * the rule applies to a new account only. With numeric account numbers the two behave the same.
  */
 export function accountNumberError(value: string, editable: boolean): string | undefined {
   if (!editable || value.trim() === "") return undefined;
@@ -199,7 +208,7 @@ export function accountNumberError(value: string, editable: boolean): string | u
 
 /**
  * `lbl_Account_RightPanel_NewEditSubaccount_BodyContent_Number_ErrorMessageNotNumbers.Visible`
- * (CA:1817-1826) — evaluated only while the suffix is editable (New), as the canvas.
+ * (CA:1817-1826): evaluated only while the suffix is editable (New), as the canvas.
  */
 export function subaccountSuffixError(value: string, editable: boolean): string | undefined {
   if (!editable || value.trim() === "") return undefined;
@@ -215,6 +224,15 @@ export function nameError(value: string): string | undefined {
   if (t === "") return MSG.nameRequired;
   if (t.length > NAME_MAX_LENGTH) return MSG.nameTooLong;
   return undefined;
+}
+
+/**
+ * The name message a panel SHOWS. The canvas shows none for a blank name (its Save is just
+ * disabled, CA:1411-1421, CA:1955-1964), so neither does this app; only the NEW over-limit guard
+ * (a legacy name longer than `MaxLength: =55`) is shown.
+ */
+export function visibleNameError(value: string): string | undefined {
+  return nameError(value) === MSG.nameTooLong ? MSG.nameTooLong : undefined;
 }
 
 /** `Number: locSelectedAccount.Number & "_" & Trim(txt_…_Subaccount…_Number.Value)` (CA:1980) — `<account number>_<trim(suffix)>`. */
@@ -340,14 +358,15 @@ export interface SubaccountCommands { reorder: CommandState; add: CommandState }
  * The subaccount command bar — `pcf_Account_AccountCardBody_SubAccountsCommandBar.Items`
  * (CA:477-492). "Add subaccount": `ItemEnabled: DataSourceInfo(…, CreatePermission)`.
  *
- * DIVERGENCE: "Reorder subaccounts" needs ≥ 2 subaccounts and write privilege here. The canvas item
- * has NO `ItemEnabled` (its test is commented out, CA:483-484), so it is always enabled — which
- * the product owner had confirmed before the port (D19: "always enabled, exactly as the canvas").
- * The port changed it back without a recorded decision.
+ * "Reorder subaccounts" has NO `ItemEnabled` (its test is commented out, CA:483-484), so it is
+ * always enabled, whatever the number of subaccounts and the privileges: the product owner's
+ * decision (D19, "always enabled, exactly as the canvas"; Dataverse refuses the write for a user
+ * without the privilege). The port had made it need 2 or more subaccounts and write privilege
+ * without a recorded decision; restored to the canvas on 20 Nov 2026.
  */
-export function subaccountCommands(account: CapexNode, p: TablePrivileges): SubaccountCommands {
+export function subaccountCommands(p: TablePrivileges): SubaccountCommands {
   return {
-    reorder: { visible: true, enabled: account.children.length >= 2 && p.canWrite },
+    reorder: { visible: true, enabled: true },
     add: { visible: true, enabled: p.canCreate },
   };
 }
@@ -365,8 +384,9 @@ export interface RowActions { edit: boolean; activate: boolean; deactivate: bool
  * subaccount could not be reactivated from the grid. Here it appears for an inactive subaccount.
  * The pre-port twin `subaccountActivateIconCanvasParity` (UT-ADCAPEX-021) was not carried over.
  *
- * DIVERGENCE: Activate is offered only while the PARENT account is active (`parent.active`); the
- * canvas has no such condition (an inactive parent with an active subaccount is otherwise possible).
+ * SOURCE DEFECT (fix kept, D150): Activate is offered only while the PARENT account is active
+ * (`parent.active`). The canvas formula reads the row only, so a subaccount could be activated under an
+ * inactive account, leaving an active subaccount below an inactive parent (doc 09 §1).
  */
 export function subaccountRowActions(
   sub: Pick<CapexNode, "active">,
@@ -406,9 +426,9 @@ export interface DialogText { title: string; description: string; confirmText: s
  * Account?" / "Activate Account?", `ConfirmButtonText` "Deactivate" / "Activate" and the
  * Deactivate `Description` — verbatim.
  *
- * DIVERGENCE: the Activate `Description` is `"Are you sure that you want to activate """ & Name &
- * """ account?"` in the canvas (CA:2416). This app adds "Subaccounts keep their current status and
- * previously removed forecast costs are not restored." — which is what activating does.
+ * SOURCE DEFECT (fix kept, D150): the canvas Activate `Description` is `"Are you sure that you want to
+ * activate """ & Name & """ account?"` (CA:2416), which hides what activating does. This app adds
+ * "Subaccounts keep their current status and previously removed forecast costs are not restored."
  */
 export function accountStatusDialog(account: Pick<CapexNode, "name" | "active">): DialogText {
   return account.active
@@ -437,8 +457,8 @@ export function accountStatusDialog(account: Pick<CapexNode, "name" | "active">)
  * (CA:2455-2460) — while the description and button read the subaccount's. All three read the
  * subaccount here.
  *
- * DIVERGENCE: the Activate `Description` is `"Are you sure that you want to activate """ & Name &
- * """ subaccount?"` in the canvas (CA:2447); this app adds "Previously removed forecast costs are
+ * SOURCE DEFECT (fix kept, D150): the canvas Activate `Description` is `"Are you sure that you want to
+ * activate """ & Name & """ subaccount?"` (CA:2447); this app adds "Previously removed forecast costs are
  * not restored."
  */
 export function subaccountStatusDialog(sub: Pick<CapexNode, "name" | "active">): DialogText {
@@ -463,9 +483,9 @@ export function subaccountStatusDialog(sub: Pick<CapexNode, "name" | "active">):
  * `cmp_Account_PopUpConfirmation_DeleteAccount` (CA:2367-2400): `Title` "Delete Account?" and
  * `ConfirmButtonText` "Confirm" — verbatim.
  *
- * DIVERGENCE: the canvas `Description` is `"Are you sure that you want to permanently delete """ &
- * Name & """ account with its all related subaccounts?"` (CA:2373). Delete is only offered for an
- * account WITHOUT subaccounts and deletes nothing else, so the text here drops that claim.
+ * SOURCE DEFECT (fix kept, D150): the canvas `Description` is `"Are you sure that you want to permanently
+ * delete """ & Name & """ account with its all related subaccounts?"` (CA:2373). Delete is only offered for an
+ * account WITHOUT subaccounts and deletes nothing else, so the text here drops that wrong claim.
  */
 export function deleteAccountDialog(name: string): DialogText {
   return {

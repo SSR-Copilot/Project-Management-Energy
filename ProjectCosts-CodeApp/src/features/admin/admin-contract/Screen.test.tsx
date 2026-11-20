@@ -64,7 +64,7 @@ import { ContractSaveError, DevCoTableUnavailableError, OwnershipConflictError }
 import { DataError, RecordGoneError } from "@/platform/errors";
 import { CONTRACT_ALREADY_DELETED_MESSAGE, CONTRACT_GONE_MESSAGE } from "./messages";
 import ContractsSettingsScreen from "./Screen";
-import { CONTRACT_TYPE, INCOMPLETE_CLOSED_WARNING, TECHNOLOGY } from "./rules";
+import { CONTRACT_TYPE, INCOMPLETE_CLOSED_WARNING, MARGIN_TYPE, TECHNOLOGY } from "./rules";
 import {
   FRANCE_ID, GERMANY_ID, contract, fixtureAccounts, fixtureContracts, fixtureCountries, fixtureDevCo,
 } from "./fixtures";
@@ -562,7 +562,7 @@ describe("Gap closure", () => {
     expect(screen.getByTestId("search").textContent).toBe(`?country=not-a-guid&tech=${TECHNOLOGY.Wind}`);
   });
 
-  it("UT-ADCONTR-926 the range message is locale-formatted and switching Margin Type clears the input", async () => {
+  it("UT-ADCONTR-926 the range message is locale-formatted and switching Margin Type resets the input to the canvas 0", async () => {
     const user = userEvent.setup();
     renderScreen();
     await screen.findByText("Development Contract - Turbine");
@@ -570,11 +570,13 @@ describe("Gap closure", () => {
     await focusDrawer(user);
     await user.click(screen.getByRole("radio", { name: "Yes" }));
     const pct = screen.getByRole("textbox", { name: /Margin \[%\]/ });
+    expect(pct).toHaveValue("0");
+    await user.clear(pct);
     await user.type(pct, "100.5");
     expect(await screen.findByText("Please select a value between 0 and 100.0")).toBeInTheDocument();
     await user.click(screen.getByRole("radio", { name: "Fixed Value" }));
     await user.click(screen.getByRole("radio", { name: "Percentage" }));
-    expect(screen.getByRole("textbox", { name: /Margin \[%\]/ })).toHaveValue("");
+    expect(screen.getByRole("textbox", { name: /Margin \[%\]/ })).toHaveValue("0");
   });
 
   it("UT-ADCONTR-927 a partially selected root checkbox is exposed as mixed (native indeterminate)", async () => {
@@ -587,7 +589,7 @@ describe("Gap closure", () => {
     expect((root as HTMLInputElement).indeterminate).toBe(true);
   });
 
-  it("UT-ADCONTR-928 an inactive standard contract shows an Inactive badge (kept unfiltered)", async () => {
+  it("UT-ADCONTR-928 an inactive standard contract shows an Inactive badge (kept unfiltered; SOURCE DEFECT fix kept, D150)", async () => {
     api.listStandardContracts.mockResolvedValue([
       fixtureContracts[0]!, { ...fixtureContracts[1]!, stateCode: 1 },
     ]);
@@ -761,7 +763,7 @@ describe("Canvas parity pass: list view", () => {
     expect(screen.getByTestId("btn_Delete_AdminContracts-c-con")).toBeInTheDocument();
   });
 
-  it("UT-ADCONTR-937 card chrome: blue chevron, 0 left inset, cards touch; fields are 16 px headings over 15 px semibold values", async () => {
+  it("UT-ADCONTR-937 card chrome: blue chevron, 0 left inset, cards touch; fields are 16 px headings over 14.67 px (11 pt) semibold values", async () => {
     const user = userEvent.setup();
     renderScreen();
     await user.click(await screen.findByRole("button", { name: "Expand Construction Contract - Grid" }));
@@ -779,7 +781,7 @@ describe("Canvas parity pass: list view", () => {
     expect(appliedRules(heading)["font-size"]).toBe("var(--fontSizeBase400)"); // 16 px
     expect(appliedRules(heading)["min-height"]).toBe("30px");
     const value = within(card).getByText("Grid");
-    expect(appliedRules(value)["font-size"]).toBe("15px");
+    expect(appliedRules(value)["font-size"]).toBe("14.6667px");
     expect(appliedRules(value)["font-weight"]).toBe("var(--fontWeightSemibold)");
   });
 });
@@ -906,12 +908,113 @@ describe("Canvas parity pass: panel", () => {
     const label = screen.getByTitle("10102 Environmental study");
     expect(declared(label, "text-overflow")).toContain("ellipsis");
     expect(declared(label, "white-space")).toContain("nowrap");
-    expect(declared(label, "font-size")).toContain("11px");
+    expect(declared(label, "font-size")).toContain("10.6667px"); // `ExtraExtraSmall`, 8 pt (ACS:3301)
     // `labelPosition="before"`: the input stays first in the DOM (tab order unchanged) and the
     // label precedes the box, so the box is at the row's right end.
     expect(leaf.compareDocumentPosition(label) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const box = leaf.parentElement!.querySelector(".fui-Checkbox__indicator")!;
     expect(label.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+describe("Canvas parity pass (20 Nov 2026): dialogs, standard values and the form", () => {
+  it("UT-ADCONTR-947 the delete pop-up is the canvas cmp_PopUp_Confirmation: themePrimary CheckMark Confirm 128 wide, never red; Cancel with its icon", async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await user.click(await screen.findByRole("button", { name: "Expand Development Contract - Turbine" }));
+    await user.click(screen.getByTestId("btn_Delete_AdminContracts-c-dev"));
+    const confirm = await screen.findByRole("button", { name: "Confirm", hidden: true });
+    // `pcf_PopUpConfirmation_BodyButtons_Confirm`: `FillColor: themePrimary` (#006eb9), not `palette.Error` (#B22727).
+    expect(appliedRules(confirm)["background-color"]).toBe("rgb(0, 110, 185)");
+    expect(declared(confirm, "background-color")).not.toContain("rgb(178, 39, 39)");
+    expect(confirm.style.width).toBe("128px");
+    expect(confirm.querySelector("svg")).not.toBeNull();
+    const cancel = screen.getByRole("button", { name: "Cancel", hidden: true });
+    expect(cancel.querySelector("svg")).not.toBeNull();
+    // The PM component's 490-wide box (`con_PopUpConfirmation_Body.Width: =Min(490, …)`).
+    expect(declared(confirm.closest(".fui-DialogSurface")!, "width")).toContain("490px");
+  });
+
+  it("UT-ADCONTR-948 the five panel inputs are standard-assumption blue + italic (CONVENTIONS rule 20; ACS:2027, 2401, 2547, 2780, 2993)", async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await screen.findByText("Development Contract - Turbine");
+    await user.click(screen.getByRole("button", { name: "Add Development Contract" }));
+    await focusDrawer(user);
+    await user.click(screen.getByRole("radio", { name: "Yes" }));
+    const root = (el: HTMLElement) => el.closest(".fui-Input, .fui-Textarea")!;
+    const isStandard = (el: HTMLElement) => {
+      expect(declared(root(el), "font-style")).toContain("italic");
+      expect(declared(root(el), "color")).toContain("rgb(0, 110, 185)");
+    };
+    isStandard(screen.getByRole("textbox", { name: /^Description/ }));
+    isStandard(screen.getByRole("textbox", { name: "Month Difference" }));
+    isStandard(screen.getByRole("textbox", { name: /Margin \[%\]/ }));
+    isStandard(screen.getByRole("textbox", { name: /^Comment/ }));
+    await user.click(screen.getByRole("radio", { name: "Fixed Value" }));
+    isStandard(screen.getByRole("textbox", { name: /Margin Fixed Value/ }));
+    // The radios and the sign drop-down carry no pair.
+    expect(declared(screen.getByRole("combobox", { name: "Month Difference" }), "font-style")).not.toContain("italic");
+  });
+
+  it("UT-ADCONTR-949 the panel fields are the canvas ones: no placeholder, no suffix, no Margin Type caption, the * left of the caption, no blank message", async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await screen.findByText("Development Contract - Turbine");
+    await user.click(screen.getByRole("button", { name: "Add Development Contract" }));
+    await focusDrawer(user);
+    expect(screen.getByRole("textbox", { name: "Month Difference" })).not.toHaveAttribute("placeholder");
+    await user.click(screen.getByRole("radio", { name: "Yes" }));
+    const pct = screen.getByRole("textbox", { name: /Margin \[%\]/ });
+    expect(pct.closest(".fui-Input")!.querySelector(".fui-Input__contentAfter")).toBeNull();
+    // `rad_AddEdit_AdminContracts_RightPanel_MarginType` has no caption and no `*`; it keeps its accessible name.
+    const type = screen.getByRole("radiogroup", { name: "Margin Type" });
+    expect(type.closest(".fui-Field")!.querySelector(".fui-Field__label")).toBeNull();
+    // `lbl_…_Aestrik`: `palette.Error`, hung 10 px left of the caption.
+    const columns = screen.getByRole("region", { name: "DevCo Cost Form" }).parentElement!.parentElement!;
+    const mark = nestedRules(columns, "fui-Label__required");
+    expect(mark["color"]).toBe("rgb(178, 39, 39)");
+    expect(mark["position"]).toBe("absolute");
+    expect(mark["left"]).toBe("-10px");
+    const message = nestedRules(columns, "fui-Field__validationMessage");
+    expect(message["color"]).toBe("rgb(178, 39, 39)");
+    expect(message["font-size"]).toBe("10.6667px");
+    // A blank field only greys Save: the canvas error labels need a non-blank value.
+    const description = screen.getByRole("textbox", { name: /^Description/ });
+    await user.type(description, "x");
+    await user.clear(description);
+    await user.tab();
+    expect(screen.queryByText("Input must not be blank")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    // The DevCo caption: `*` first; no "Select at least one…" line under the tree.
+    const devCo = screen.getByTestId("lbl_Add_Edit_AdminContracts_DevCoCostForm");
+    expect(devCo.firstElementChild).toHaveTextContent("*");
+    expect(screen.queryByText("Select at least one DevCo cost account.")).not.toBeInTheDocument();
+  });
+
+  it("UT-ADCONTR-950 currencies: the card heading uses the ISO code, the panel caption the canvas Poland → PLN / EUR rule; blanks are empty labels", async () => {
+    const user = userEvent.setup();
+    api.countriesGetAll.mockResolvedValue({
+      success: true,
+      data: fixtureCountries.map((c) => ({
+        vsb_countryid: c.id, vsb_name: c.name, vsb_isocurrencycode: c.name === "Germany" ? "USD" : c.isoCurrencyCode, statecode: 0,
+      })),
+    });
+    api.listStandardContracts.mockResolvedValue([
+      { ...fixtureContracts[0]!, marginType: MARGIN_TYPE.FixedValue, marginFixedValue: 1234.5, marginPercentage: undefined, description: "" },
+    ]);
+    renderScreen();
+    await user.click(await screen.findByRole("button", { name: "Expand Construction Contract - Grid" }));
+    const card = screen.getByRole("article", { name: "Construction Contract - Grid" });
+    expect(within(card).getByText("Margin Fixed Value [USD]")).toBeInTheDocument();
+    // `Value(…)`: the raw number, no thousands separator.
+    expect(within(card).getByText("1234.5")).toBeInTheDocument();
+    expect(within(card).queryByText("-", { exact: true })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Add Construction Contract" }));
+    await focusDrawer(user);
+    await user.click(screen.getByRole("radio", { name: "Yes" }));
+    await user.click(screen.getByRole("radio", { name: "Fixed Value" }));
+    expect(screen.getByRole("textbox", { name: "Margin Fixed Value [EUR]" })).toBeInTheDocument();
   });
 });
 

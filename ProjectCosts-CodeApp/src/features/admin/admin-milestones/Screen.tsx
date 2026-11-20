@@ -230,10 +230,12 @@ export default function MilestonesSettingsScreen() {
             `gal_CountriesMilestonesStandardAssumptions`. The shared accordion takes no root id, and
             its header button (canvas `btn_Select_MilestonesStandardAssumptions_AdminScreen` with
             `ico_Down_…` / `ico_Up_…`) takes no canvas id either.
+            `shp_BottomLine_….Visible = ThisItem.IsFolded` (AMS:855): the 1 px rule shows only while
+            the section is folded (`border="folded"`).
           */
           <SettingsAccordion
             variant="light"
-            border="always"
+            border="folded"
             panelPadding={PANEL_PADDING}
             openItems={openItems}
             onToggle={toggleSection}

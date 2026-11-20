@@ -16,8 +16,9 @@
  * image has no caption or AccessibleLabel).
  * DIVERGENCE: an account another contract claimed while this panel was open, but that is still
  * selected here (`isStaleSelection`), can be unchecked; the canvas rows are fixed at open.
- * DIVERGENCE: "No sub-accounts", "Loading accounts…", the Retry bar and the
- * `validationMessage` line have no canvas equivalent.
+ * DIVERGENCE: "No sub-accounts", "Loading accounts…" and the Retry bar have no canvas equivalent.
+ * Save's `CountIf(Filter(col_Edit_DevCoCosts, Selected = true)) > 0` term only greys the button:
+ * no "Select at least one…" line is drawn under the tree (canvas parity, 20 Nov 2026).
  *
  * Hard-coded colours with no theme token: `#323130` (the canvas label colour) and
  * `rgba(238, 148, 12, 0.125)` (the USED box fill, `rec_Contracts_RightPanel_NewEdit_CostssRow_Used`).
@@ -36,8 +37,13 @@ import {
 
 const useStyles = makeStyles({
   root: { display: "flex", flexDirection: "column", minWidth: "0" },
-  label: { fontWeight: tokens.fontWeightSemibold, marginBottom: "6px" },
-  required: { color: palette.Error, marginLeft: "4px" },
+  /* `lbl_Add_Edit_AdminContracts_DevCoCostForm`: `gblAppStyles.Label` (black), `Size: Medium` (11 pt), Semibold. */
+  label: { color: palette.black, fontSize: "14.6667px", fontWeight: tokens.fontWeightSemibold, marginBottom: "6px" },
+  /*
+   * `lbl_Add_Edit_AdminContracts_DevCoCostForm_Aestrik` (ACS:3693): `*` in `palette.Error`, Semibold, a
+   * 10-wide box at `X: =caption.X - Self.Width` — hung LEFT of the caption, the caption itself unmoved.
+   */
+  required: { color: palette.Error, display: "inline-block", width: "10px", marginLeft: "-10px" },
   list: { listStyleType: "none", margin: "0", paddingLeft: "0", paddingRight: "0" },
   rootRow: {
     display: "flex", alignItems: "center", minHeight: "32px",
@@ -56,10 +62,13 @@ const useStyles = makeStyles({
   childRow: { display: "flex", alignItems: "center", minHeight: "32px", paddingRight: "24px", minWidth: "0" },
   // Fluent's checkbox root is `max-width: fit-content`, which would stop it filling the row.
   childBox: { flexGrow: 1, minWidth: "0", width: "100%", maxWidth: "none" },
-  /* ~11 px regular name, ellipsis at the real available width; the full text is in `title`. */
+  /*
+   * `lbl_Contracts_RightPanel_NewEdit_CostssRow_Name`: `Size: ExtraExtraSmall` (8 pt = 10.67 px), regular,
+   * `Wrap: false` (ACS:3301) — ellipsis at the real available width; the full text is in `title`.
+   */
   childLabel: {
     flexGrow: 1, minWidth: "0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-    fontSize: "11px", fontWeight: tokens.fontWeightRegular, paddingLeft: "0",
+    fontSize: "10.6667px", fontWeight: tokens.fontWeightRegular, paddingLeft: "0",
   },
   /* USED (ACS:3200-3212): pale orange box, 1 px orange border, orange tick. Fluent greys a disabled
      checked box with higher-specificity state selectors, hence `!important`. */
@@ -91,7 +100,6 @@ const useStyles = makeStyles({
     },
   },
   empty: { color: tokens.colorNeutralForeground3, paddingLeft: "8px", paddingTop: "4px", paddingBottom: "8px" },
-  error: { color: palette.Error, fontSize: tokens.fontSizeBase200, marginTop: "4px" },
 });
 
 export interface DevCoCostFormProps {
@@ -103,12 +111,11 @@ export interface DevCoCostFormProps {
   /** When set, the tree cannot be used; the message explains why. */
   errorText?: string;
   onRetry?: () => void;
-  validationMessage?: string;
   disabled?: boolean;
 }
 
 export function DevCoCostForm({
-  roots, selected, classes, onChange, loading, errorText, onRetry, validationMessage, disabled,
+  roots, selected, classes, onChange, loading, errorText, onRetry, disabled,
 }: DevCoCostFormProps) {
   const styles = useStyles();
   const usedDescriptionId = useId();
@@ -119,8 +126,9 @@ export function DevCoCostForm({
       className={styles.root} aria-label={CARD_TEXT.devCoCostForm}
       data-testid="con_Add_Edit_AdminContracts_Right_Panel_BodyContent_DeCostsvCo"
     >
+      {/* The `*` is FIRST: the canvas asterisk label sits left of the caption (ACS:3693). */}
       <Text className={styles.label} data-testid="lbl_Add_Edit_AdminContracts_DevCoCostForm">
-        {CARD_TEXT.devCoCostForm}<span className={styles.required} aria-hidden="true">*</span>
+        <span className={styles.required} aria-hidden="true">*</span>{CARD_TEXT.devCoCostForm}
       </Text>
       <VisuallyHidden id={usedDescriptionId}>Used by another standard contract</VisuallyHidden>
 
@@ -207,8 +215,6 @@ export function DevCoCostForm({
           })}
         </ul>
       )}
-
-      {validationMessage ? <Text className={styles.error} role="alert">{validationMessage}</Text> : null}
     </section>
   );
 }

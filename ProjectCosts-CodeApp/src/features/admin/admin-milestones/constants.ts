@@ -67,6 +67,24 @@ export const TYPOGRAPHY = {
   panelMessage: { fontSize: "10px" },
 } as const;
 
+/**
+ * Edit-panel colours, transcribed (CONVENTIONS rule 6).
+ */
+/**
+ * `txt_…_Input.BorderColor = RGBA(189, 49, 51, 1)` (AMS:1364, 2074): the 1 px border every input
+ * shows while its value fails the canvas check. Not Fluent's red (#d13438).
+ */
+export const INVALID_BORDER = "#BD3133";
+/**
+ * `…_InvalidMessage.FontColor = gblAppColors.Error` (AMS:1908, 2366) = `ColorValue(gblAppTheme.palette.akzent5)`
+ * (App:1266, 1368) — NOT `palette.Error` (#B22727), which `gblAppColors.ErrorBg` derives from.
+ */
+export const MESSAGE_COLOR = palette.akzent5;
+/** The panel ✕: `pcf_com_Admin_ProjectGates_Approvals_Form_CommandBar_2.Items` → `ItemIconColor: gblAppTheme.palette.themeTertiary` (AMS:1073). */
+export const CLOSE_ICON_COLOR = palette.themeTertiary;
+/** `txt_…_Input.MaxLength = gblAppConstants.DefaultDefMaxLength` (AMS:1375, 2085) = 256. */
+export const INPUT_MAX_LENGTH = 256;
+
 /** The two edit-panel matrices. */
 export type MatrixKind = "durations" | "successRates";
 

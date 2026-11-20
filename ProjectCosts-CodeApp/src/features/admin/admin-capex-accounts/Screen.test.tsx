@@ -8,8 +8,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { FluentProvider } from "@fluentui/react-components";
+import {
+  CheckmarkRegular, DismissRegular, DocumentCheckmarkRegular,
+} from "@fluentui/react-icons";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import type { ReactElement, ReactNode } from "react";
 import { FIXTURE_ROWS, IDS } from "./fixtures";
 
 const client = vi.hoisted(() => ({
@@ -47,9 +50,10 @@ vi.mock("@microsoft/power-apps/data", () => ({
 }));
 
 import { vsbTheme } from "@/theme/fluent";
-import { AppToaster, FormPanel } from "@/components";
+import { AppToaster, ConfirmDialog, FormPanel } from "@/components";
 import { qk } from "@/data/keys";
 import { ERROR_HINT } from "@/platform/userMessage";
+import { appliedRules } from "@/test/appliedRules";
 import CAPEXAccountsSettingsScreen from "./Screen";
 import { CONTRACT_CHECK_FAILED, GONE, GONE_STATUS, MSG, OUT_OF_SCOPE } from "./rules";
 
@@ -150,7 +154,7 @@ describe("CAPEXAccountsSettingsScreen", () => {
   });
   afterEach(() => vi.clearAllMocks());
 
-  it("UT-ADCAPEX-901 renders one tab per category in order, first selected, with an empty state for a category without accounts", async () => {
+  it("UT-ADCAPEX-901 renders one tab per category in order, first selected", async () => {
     renderScreen();
     const tabs = await screen.findAllByRole("tab");
     const names = [
@@ -162,7 +166,6 @@ describe("CAPEXAccountsSettingsScreen", () => {
     // each tab's text by prefix rather than verbatim.
     tabs.forEach((t, i) => expect(t.textContent?.startsWith(names[i]!)).toBe(true));
     expect(tabs[0]).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByText("No accounts in this category")).toBeInTheDocument();
   });
 
   it("UT-ADCAPEX-902 lists the category's accounts collapsed, and drives the command bar from the selection", async () => {
@@ -217,14 +220,18 @@ describe("CAPEXAccountsSettingsScreen", () => {
     await user.type(screen.getByTestId("txt_Account_RightPanel_NewEditAccount_BodyContent_Number"), "12a");
     expect(await screen.findByText("Account number must contain numbers only.")).toBeInTheDocument();
     expect(screen.getByTestId("txt_Account_RightPanel_NewEditAccount_BodyContent_Number")).toHaveValue("12a");
-    expect(screen.getByDisplayValue("Development Expenses")).toBeDisabled();
+    const category = screen.getByTestId("drp_Account_RightPanel_NewEditAccount_BodyContent_Category");
+    expect(category).toBeDisabled();
+    expect(category).toHaveTextContent("Development Expenses");
   });
 
   it("UT-ADCAPEX-906 deletes a free account after confirmation, re-checking the guards first", async () => {
     const user = await openDevelopmentTab();
     await user.click(screen.getByRole("button", { name: "Select account 80010 - Permits" }));
     await user.click(await screen.findByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-deleteAccount"));
-    expect(await screen.findByText('Are you sure that you want to permanently delete "Permits" account?')).toBeInTheDocument();
+    expect(await screen.findByText(
+      'Are you sure that you want to permanently delete "Permits" account?',
+    )).toBeInTheDocument();
     // Dialog motion: see the drawer note above.
     await user.click(screen.getByRole("button", { name: "Confirm", hidden: true }));
     await waitFor(() => expect(client.deleteRecordAsync).toHaveBeenCalledWith("vsb_capexaccountlists", IDS.permits));
@@ -417,11 +424,12 @@ describe("CAPEXAccountsSettingsScreen", () => {
     await user.click(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-orderAccounts"));
     expect(await screen.findByText("'Capex Accounts' order")).toBeInTheDocument();
 
-    await user.click(hiddenButton("Move 80010 - Permits up"));
-    expect(screen.getByTestId("reorder-announcement")).toHaveTextContent("80010 - Permits moved to position 1 of 2");
+    // The rows carry the canvas template, the name only (`<p><b>{{vsb_name}}</b></p>`, CA:2165).
+    await user.click(hiddenButton("Move Permits up"));
+    expect(screen.getByTestId("reorder-announcement")).toHaveTextContent("Permits moved to position 1 of 2");
     // Permits is now first, so its Up button is disabled: focus moved to its Down button.
-    await waitFor(() => expect(hiddenButton("Move 80010 - Permits down")).toHaveFocus());
-    expect(hiddenButton("Move 80010 - Permits up")).toBeDisabled();
+    await waitFor(() => expect(hiddenButton("Move Permits down")).toHaveFocus());
+    expect(hiddenButton("Move Permits up")).toBeDisabled();
 
     await user.click(hiddenButton("Save"));
     // No bulk services (doc 09 §1): each changed row is one guarded PATCH (existence read by
@@ -720,7 +728,7 @@ describe("CAPEXAccountsSettingsScreen", () => {
     expect(await screen.findByText("'Capex Accounts' order")).toBeInTheDocument();
     // CA:2245-2246: Save is enabled before any move.
     expect(hiddenButton("Save")).not.toBeDisabled();
-    expect(screen.getByText("To reorder drag and drop listed items, or use the move up / move down buttons.")).toBeInTheDocument();
+    expect(screen.getByText("To reorder drag and drop listed items")).toBeInTheDocument();
     expect(screen.getByRole("list", { name: "Accounts in order", hidden: true })).toBeInTheDocument();
     // Unmoved: not dirty, so Cancel closes without the discard prompt.
     await user.click(hiddenButton("Cancel"));
@@ -796,4 +804,177 @@ describe("CAPEXAccountsSettingsScreen", () => {
     await waitFor(() => expect(client.createRecordAsync).toHaveBeenCalled());
     expect(screen.queryByText(OUT_OF_SCOPE)).not.toBeInTheDocument();
   });
+
+  /* ── canvas parity pass, 20 Nov 2026 ── */
+
+  it("UT-ADCAPEX-947 the account commands carry the canvas ItemIconNames and the header the canvas radio image", async () => {
+    const dismiss = "DeactivateOrders";
+    const checkmark = iconPath(<DocumentCheckmarkRegular />);
+    const list = "NumberedList";
+    const user = await openDevelopmentTab();
+    const bar = "pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar";
+    // "NumberedList" (CA:208).
+    expect(screen.getByTestId(`${bar}-orderAccounts`).querySelector("svg")?.getAttribute("data-icon-name")).toBe(list);
+
+    const land = screen.getByRole("button", { name: "Select account 80000 - Land" });
+    // "CircleEmpty": one black ring; "CircleDotBlue": the ring and a #006eb9 dot.
+    expect(land.querySelectorAll("circle")).toHaveLength(1);
+    expect(land.querySelector("circle")).toHaveAttribute("stroke", "black");
+    await user.click(land);
+    expect(land.querySelectorAll("circle")).toHaveLength(2);
+    expect(land.querySelectorAll("circle")[1]).toHaveAttribute("fill", "#006eb9");
+    // "DeactivateOrders" for an Active account (CA:257).
+    expect(screen.getByTestId(`${bar}-deactivateAccount`).querySelector("svg")?.getAttribute("data-icon-name")).toBe(dismiss);
+
+    await user.click(screen.getByRole("button", { name: "Select account 80010 - Permits" }));
+    // "ActivateOrders" for an Inactive account (CA:244).
+    expect(pathIn(screen.getByTestId(`${bar}-activateAccount`))).toBe(checkmark);
+  });
+
+  it("UT-ADCAPEX-948 the subaccount grid: canvas status icons per state, Reorder subaccounts always on, no invented empty line", async () => {
+    const dismiss = "DeactivateOrders";
+    const checkmark = iconPath(<DocumentCheckmarkRegular />);
+    const list = "NumberedList";
+    const user = await openDevelopmentTab();
+    await user.click(screen.getByRole("button", { name: "Expand account 80000 - Land" }));
+    const grid = "pcf_Account_AccountCardBody_SubAccounts";
+    // "icon:DeactivateOrders" on an Active row, "icon:ActivateOrders" on an Inactive one (CA:546-568).
+    expect((await screen.findByTestId(`${grid}-ChangeStatusIcon-${IDS.land1}`)).querySelector("svg")?.getAttribute("data-icon-name")).toBe(dismiss);
+    expect(pathIn(screen.getByTestId(`${grid}-ChangeStatusIcon-${IDS.land2}`))).toBe(checkmark);
+    // `HeaderVisible: =false`: no column headers.
+    expect(screen.queryAllByRole("columnheader", { hidden: true })).toHaveLength(0);
+
+    // Permits has no subaccounts: Reorder subaccounts is still enabled (D19) and no "No subaccounts yet." line.
+    await user.click(screen.getByRole("button", { name: "Expand account 80010 - Permits" }));
+    const reorder = await screen.findByTestId(`pcf_Account_AccountCardBody_SubAccountsCommandBar-${IDS.permits}-orderSubaccounts`);
+    expect(reorder).toBeEnabled();
+    expect(reorder.querySelector("svg")?.getAttribute("data-icon-name")).toBe(list);
+    expect(screen.queryByText("No subaccounts yet.")).not.toBeInTheDocument();
+    expect(screen.queryByTestId(`${grid}-${IDS.permits}`)).not.toBeInTheDocument();
+    await user.click(reorder);
+    expect(await screen.findByText("Subaccounts order")).toBeInTheDocument();
+  });
+
+  it("UT-ADCAPEX-949 every confirmation is the canvas pop-up: themePrimary CheckMark Confirm 128 wide, deletes included (no red)", async () => {
+    // Reference classes (jsdom computes no Griffel styles, so compare the atomic class lists).
+    const reference = (destructive: boolean) => {
+      const { unmount } = render(
+        <Harness>
+          <ConfirmDialog
+            open title="Reference" description="d" confirmText="Confirm" confirmWidth={128}
+            classicPopUp darkScrim destructive={destructive} onConfirm={() => {}} onCancel={() => {}}
+          />
+        </Harness>,
+      );
+      const classes = {
+        confirm: screen.getByTestId("confirm-dialog-confirm").className,
+        cancel: screen.getByTestId("confirm-dialog-cancel").className,
+        confirmPath: pathIn(screen.getByTestId("confirm-dialog-confirm")),
+      };
+      unmount();
+      return classes;
+    };
+    const canvas = reference(false);
+    const red = reference(true);
+    expect(canvas.confirm).not.toBe(red.confirm);
+
+    const user = await openDevelopmentTab();
+    await user.click(screen.getByRole("button", { name: "Select account 80010 - Permits" }));
+    await user.click(await screen.findByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-deleteAccount"));
+    expect(await screen.findByText("Delete Account?")).toBeInTheDocument();
+    const confirm = screen.getByTestId("confirm-dialog-confirm");
+    expect(confirm.className).toBe(canvas.confirm);
+    expect(confirm).toHaveStyle({ width: "128px" });
+    expect(confirm).toHaveTextContent("Confirm");
+    expect(pathIn(confirm)).toBe(iconPath(<CheckmarkRegular />));
+    expect(pathIn(confirm)).toBe(canvas.confirmPath);
+    const cancel = screen.getByTestId("confirm-dialog-cancel");
+    expect(cancel.className).toBe(canvas.cancel);
+    expect(cancel).toHaveTextContent("Cancel");
+    expect(pathIn(cancel)).toBe(iconPath(<DismissRegular />));
+    await user.click(dialogButton("Cancel"));
+    await waitFor(() => expect(screen.queryByText("Delete Account?")).not.toBeInTheDocument());
+
+    // A subaccount delete is the same button.
+    await user.click(hiddenButton("Expand account 80000 - Land"));
+    const row = await screen.findByTestId("subaccount-row-80000_1");
+    await user.click(await within(row).findByRole("button", { name: "Delete", hidden: true }));
+    expect(await screen.findByText("Delete Subaccount?")).toBeInTheDocument();
+    expect(screen.getByText('Are you sure that you want to permanently delete "Substation" subaccount?')).toBeInTheDocument();
+    expect(screen.getByTestId("confirm-dialog-confirm").className).toBe(canvas.confirm);
+  });
+
+  it("UT-ADCAPEX-950 the account panel fields: a disabled Category dropdown, no counter under Name, no message for a blank name", async () => {
+    const user = await openDevelopmentTab();
+    await user.click(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-newAccount"));
+    expect(await screen.findByText("New Account")).toBeInTheDocument();
+    const category = screen.getByTestId("drp_Account_RightPanel_NewEditAccount_BodyContent_Category");
+    expect(category).toHaveAttribute("role", "combobox");
+    expect(category).toBeDisabled();
+    expect(category).toHaveAttribute("aria-label", "Category");
+    const name = screen.getByTestId("txt_Account_RightPanel_NewEditAccount_BodyContent_Name");
+    expect(name).toHaveAttribute("maxLength", "55");
+    await user.type(name, "Roads");
+    expect(screen.queryByText("5/55")).not.toBeInTheDocument();
+    await user.clear(name);
+    expect(screen.queryByText(MSG.nameRequired)).not.toBeInTheDocument();
+    expect(hiddenButton("Save")).toBeDisabled();
+    // Digits only (SOURCE DEFECT fix kept, D150): a sign, which the canvas let through, shows the message.
+    await user.type(screen.getByTestId("txt_Account_RightPanel_NewEditAccount_BodyContent_Number"), "-5");
+    expect(screen.getByText(MSG.accountNotNumeric)).toBeInTheDocument();
+  });
+
+  it("UT-ADCAPEX-953 the account form starts at the panel's own 20 px padding and lays each field in a 70 px block (CA:1049, 1063)", async () => {
+    const user = await openDevelopmentTab();
+    await user.click(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-newAccount"));
+    expect(await screen.findByText("New Account")).toBeInTheDocument();
+    const category = screen.getByTestId("drp_Account_RightPanel_NewEditAccount_BodyContent_Category");
+    const field = category.closest(".fui-Field") as HTMLElement;
+    const form = field.parentElement as HTMLElement;
+    const formRules = appliedRules(form);
+    // No second top padding on top of `.canvas-panel-body`'s 20 px, and no gap between the 70 px blocks.
+    expect(formRules["padding-top"]).toBeUndefined();
+    expect(formRules["row-gap"]).toMatch(/^0(px)?$/);
+    // Every atomic class on the form resolves "& .fui-Field" → min-height 70px; read it off the stylesheet rules.
+    const sheetText = Array.from(document.styleSheets).flatMap((s) => Array.from(s.cssRules ?? []))
+      .map((r) => r.cssText).filter((t) => Array.from(form.classList).some((c) => t.includes(`.${c} `)));
+    expect(sheetText.some((t) => t.includes(".fui-Field") && t.includes("min-height: 70px"))).toBe(true);
+    expect(sheetText.some((t) => t.includes(".fui-Field__label") && t.includes("padding-bottom: 5px"))).toBe(true);
+  });
+
+  it("UT-ADCAPEX-951 the reorder panel lists names only, draggable, under the verbatim canvas hint", async () => {
+    const user = await openDevelopmentTab();
+    await user.click(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-orderAccounts"));
+    expect(await screen.findByText("'Capex Accounts' order")).toBeInTheDocument();
+    expect(screen.getByText("To reorder drag and drop listed items")).toBeInTheDocument();
+    const land = screen.getByTestId("reorder-item-80000");
+    const permits = screen.getByTestId("reorder-item-80010");
+    expect(land).toHaveTextContent(/^Land$/);
+    expect(permits).toHaveTextContent(/^Permits$/);
+    expect(land).toHaveAttribute("draggable", "true");
+    // The category's accounts, by Order (CA:2166-2181).
+    const items = within(screen.getByRole("list", { name: "Accounts in order", hidden: true })).getAllByRole("listitem", { hidden: true });
+    expect(items.map((li) => li.textContent)).toEqual(["Land", "Permits"]);
+  });
+
+  it("UT-ADCAPEX-952 a category without accounts shows nothing under the command bar (gallery Visible: AllItemsCount>0)", async () => {
+    renderScreen();
+    expect(await screen.findAllByRole("tab")).toHaveLength(6);
+    expect(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-newAccount")).toBeEnabled();
+    expect(screen.queryByText("No accounts in this category")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("gal_Account_Accounts")).not.toBeInTheDocument();
+  });
 });
+
+/** The `d` of the first `<path>` an element draws (Fluent icons are one-path SVGs). */
+function pathIn(el: Element): string | null {
+  return el.querySelector("path")?.getAttribute("d") ?? null;
+}
+
+/** The `d` of a Fluent icon, rendered on its own. */
+function iconPath(icon: ReactElement): string | null {
+  const { container, unmount } = render(icon);
+  const d = pathIn(container);
+  unmount();
+  return d;
+}

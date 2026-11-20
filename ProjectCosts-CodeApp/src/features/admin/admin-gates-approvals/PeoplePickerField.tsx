@@ -1,152 +1,111 @@
 /**
- * A multi-person picker over enabled Entra accounts — replaces the PowerCAT PeoplePicker
+ * One people field of the Approvers panel — the canvas PowerCAT PeoplePicker PCFs
  * (`pcf_Admin_ProjectGates_Approvals_Form_Fields_PortfolioManger` / `…_Approval2` / `…_Approvals` /
- * `…_Notifications`; the screen passes the canvas name as `testId`). Already-selected people are
- * excluded from the suggestions (SOURCE DEFECT fixed, see `pickerSuggestions`).
+ * `…_Notifications`, PGAS:3080-3527; the panel passes the canvas name as `testId`), rendered with the
+ * SHARED `PeoplePicker` (`@/components`, the D25 look: the selected people as chips inside one box,
+ * the "Suggested People" list under it). This file owns the search (`usePeopleSearch`) and the
+ * `PersonRef` ↔ `PickerPerson` mapping; the look is the shared component's (CONVENTIONS rule 17).
  *
- * The search box's `aria-label` is the field caption (the canvas sets no `AccessibleLabel`).
- * DIVERGENCE: the search starts at 2 characters, debounced (`usePeopleSearch`); the canvas
- * `OnSearch` searches any non-blank trimmed text. The canvas `Tooltip`s ("Search for portfolio
- * manager", "Select Contributors", …) are not shown. The status texts ("Searching…", "No
- * matches", "People search failed. Try again.") and the maximum hint are NEW; the PowerCAT
- * control stopped taking input at `MaxPeople`.
+ * Canvas parity (20 Nov 2026): the PCF `HintText` is the placeholder, its `Tooltip` the hover hint on
+ * the search box (`ROLE_TOOLTIP`, rule 22). At `MaxPeople` the PCF just stops taking input — the
+ * shared box disables its search input; there is NO "Maximum of N…", "Searching…" or "No matches" text.
+ * SOURCE DEFECT fix kept: already-selected people are excluded from the suggestions (`pickerSuggestions`).
+ * NEW (kept so a failure is not silent): a failed search says "People search failed. Try again.".
+ * DIVERGENCE: the search is debounced and needs 2 characters (`usePeopleSearch`); the canvas `OnSearch`
+ * searches any non-blank trimmed text.
  *
- * Keyboard access: built on Fluent `Combobox` (freeform) so the search box is a real
- * ARIA combobox with a listbox of options. Focus stays in the input while ArrowUp/ArrowDown
- * move the active option (`aria-activedescendant`), so moving "into" the list can never
- * dismiss it; Enter adds the active person; Esc closes the suggestion list and Fluent stops the
- * event there, so the surrounding drawer stays open. The listbox renders inline (`inlinePopup`)
- * to stay inside the drawer's focus trap. The selected people stay a dismissible `TagGroup`.
+ * Keyboard: ArrowDown / ArrowUp move the highlighted suggestion, Enter adds it (the shared picker).
+ * Escape closes the suggestions, and while suggestions exist the key is marked handled here
+ * (`preventDefault` + `stopPropagation`), so the surrounding drawer stays open — Fluent's
+ * `DialogSurface` ignores a default-prevented Escape. The typed text stays, as in the PCF.
  */
-import { useId, useState } from "react";
-import {
-  Combobox, Field, makeStyles, Option, Spinner, Tag, TagGroup, Text, tokens,
-} from "@fluentui/react-components";
-import { SearchRegular } from "@fluentui/react-icons";
+import { useMemo, useState } from "react";
+import { makeStyles, Text, tokens } from "@fluentui/react-components";
+import { PeoplePicker, type PickerPerson } from "@/components";
 import { space } from "@/theme/tokens";
 import type { PersonRef } from "@/data/adminGatesApprovals";
 import { usePeopleSearch } from "./hooks";
 import { pickerSuggestions } from "./rules";
 
+/** NEW — no canvas equivalent: the PCF's `OnSearch` failure was silent. */
+const SEARCH_FAILED_MESSAGE = "People search failed. Try again.";
+
 const useStyles = makeStyles({
-  wrap: { position: "relative", display: "flex", flexDirection: "column", rowGap: space.xs },
-  tags: { flexWrap: "wrap", rowGap: space.xs },
-  combobox: { width: "100%", minWidth: "0px" },
-  listbox: { maxHeight: "240px" },
-  status: { fontSize: tokens.fontSizeBase200, color: tokens.colorNeutralForeground3 },
-  hint: { fontSize: tokens.fontSizeBase200, color: tokens.colorNeutralForeground3 },
-  mail: { color: tokens.colorNeutralForeground3 },
+  root: { display: "flex", flexDirection: "column", rowGap: space.xs, minWidth: 0 },
+  status: { fontSize: tokens.fontSizeBase200, lineHeight: tokens.lineHeightBase200, color: tokens.colorPaletteRedForeground1 },
 });
 
 /** Kebab test-id stem from the field caption (`Portfolio Manager` -> `portfolio-manager`), used without a `testId`. */
 const testIdStem = (label: string) => label.trim().toLowerCase().replace(/\s+/g, "-");
 
+const toPicker = (p: PersonRef): PickerPerson => ({ id: p.entraId, displayName: p.name, mail: p.mail });
+const fromPicker = (p: PickerPerson): PersonRef => ({ entraId: p.id, name: p.displayName, mail: p.mail });
+
 export interface PeoplePickerFieldProps {
   label: string;
   people: readonly PersonRef[];
+  /** The PCF `MaxPeople`. */
   max: number;
   onChange: (people: PersonRef[]) => void;
   required?: boolean;
   error?: string;
   disabled?: boolean;
+  /** The PCF `HintText`. */
   placeholder?: string;
+  /** The PCF `Tooltip` — the search box's hover hint. */
+  tooltip?: string;
   /** The search box's `data-testid`: the canvas `pcf_…` picker name. Default `people-picker-search-<label>`. */
   testId?: string;
 }
 
 export function PeoplePickerField({
-  label, people, max, onChange, required, error, disabled, placeholder, testId,
+  label, people, max, onChange, required, error, disabled, placeholder, tooltip, testId,
 }: PeoplePickerFieldProps) {
   const styles = useStyles();
-  const statusId = useId();
-  const [query, setQuery] = useState("");
-  const [wantOpen, setWantOpen] = useState(false);
+  const [term, setTerm] = useState("");
   const full = people.length >= max;
-  const search = usePeopleSearch(full ? "" : query);
-  const suggestions = pickerSuggestions(search.data ?? [], people);
-  const searching = !full && query.trim().length >= 2;
-  const open = wantOpen && searching && suggestions.length > 0 && !disabled;
+  const search = usePeopleSearch(full || disabled ? "" : term);
+  const suggestions = useMemo(() => pickerSuggestions(search.data ?? [], people), [search.data, people]);
+  /** The shared picker shows its list only with a term and suggestions, while not full / disabled. */
+  const suggesting = term.trim().length > 0 && suggestions.length > 0 && !full && !disabled;
 
-  let status = "";
-  if (searching) {
-    if (search.isError) status = "People search failed. Try again.";
-    else if (search.isFetching && suggestions.length === 0) status = "Searching…";
-    else if (search.isSuccess && suggestions.length === 0) status = "No matches";
-  }
-
-  const add = (entraId: string | undefined) => {
-    const person = suggestions.find((p) => p.entraId === entraId);
-    if (person && people.length < max) onChange([...people, person]);
-    setQuery("");
-    setWantOpen(false);
-  };
+  /** Every person the picker can hand back, by Entra id, so a pick / removal keeps the full `PersonRef`. */
+  const known = useMemo(() => {
+    const map = new Map<string, PersonRef>();
+    for (const p of [...people, ...suggestions]) map.set(p.entraId, p);
+    return map;
+  }, [people, suggestions]);
 
   return (
-    <Field
-      label={label} required={required}
-      validationState={error ? "error" : "none"} validationMessage={error}
+    <div
+      className={styles.root}
+      onKeyDown={(e) => {
+        if (e.key === "Escape" && suggesting) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }}
     >
-      <div className={styles.wrap}>
-        {people.length > 0 ? (
-          <TagGroup
-            className={styles.tags}
-            aria-label={`Selected ${label}`}
-            onDismiss={(_, data) => onChange(people.filter((p) => p.entraId !== data.value))}
-          >
-            {people.map((p) => (
-              <Tag
-                key={p.entraId} value={p.entraId} size="small" shape="circular"
-                dismissible={!disabled}
-                dismissIcon={{ "aria-label": `Remove ${p.name}` }}
-                secondaryText={p.mail || undefined}
-                disabled={disabled}
-              >
-                {p.name || p.mail || p.entraId}
-              </Tag>
-            ))}
-          </TagGroup>
-        ) : null}
-        {!full ? (
-          <Combobox
-            className={styles.combobox}
-            listbox={{ className: styles.listbox, "aria-label": `Suggested ${label}` }}
-            freeform
-            inlinePopup
-            value={query}
-            selectedOptions={[]}
-            open={open}
-            disabled={disabled}
-            placeholder={placeholder ?? "Search by name or email…"}
-            aria-label={label}
-            data-testid={testId ?? `people-picker-search-${testIdStem(label)}`}
-            aria-describedby={status ? statusId : undefined}
-            expandIcon={search.isFetching ? <Spinner size="extra-tiny" aria-label="Searching" /> : <SearchRegular />}
-            onOpenChange={(_, d) => setWantOpen(d.open)}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setWantOpen(true);
-            }}
-            onOptionSelect={(_, d) => add(d.optionValue)}
-          >
-            {suggestions.map((p) => (
-              <Option key={p.entraId} value={p.entraId} text={p.name || p.mail}>
-                {p.name}{p.mail ? <span className={styles.mail}>&nbsp;— {p.mail}</span> : null}
-              </Option>
-            ))}
-          </Combobox>
-        ) : (
-          <Text className={styles.hint}>Maximum of {max} {max === 1 ? "person" : "people"} reached.</Text>
-        )}
-        {status ? (
-          <Text
-            id={statusId}
-            className={styles.status}
-            role={search.isError ? "alert" : "status"}
-          >
-            {status}
-          </Text>
-        ) : null}
-      </div>
-    </Field>
+      <PeoplePicker
+        label={label}
+        placeholder={placeholder ?? ""}
+        {...(tooltip !== undefined ? { tooltip } : {})}
+        testId={testId ?? `people-picker-search-${testIdStem(label)}`}
+        value={people.map(toPicker)}
+        onChange={(next) => onChange(next.map((p) => known.get(p.id) ?? fromPicker(p)))}
+        // At the maximum the PCF takes no more input; the cap is re-checked here in case of a race.
+        onPick={(picked) => (people.length < max ? [...people.map(toPicker), picked] : people.map(toPicker))}
+        maxPeople={max}
+        term={term}
+        onTermChange={setTerm}
+        suggestions={suggestions.map(toPicker)}
+        {...(required !== undefined ? { required } : {})}
+        {...(error ? { errorMessage: error } : {})}
+        {...(disabled !== undefined ? { disabled } : {})}
+      />
+      {search.isError ? (
+        <Text role="alert" className={styles.status}>{SEARCH_FAILED_MESSAGE}</Text>
+      ) : null}
+    </div>
   );
 }

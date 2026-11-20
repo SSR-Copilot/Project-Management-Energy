@@ -174,11 +174,11 @@ describe("MatrixCells", () => {
     expect(cell(wind, "salesEnd")).toMatchObject({ duration: "24", rate: "-" });
   });
 
-  it("UT-ADMILE-024 blanks render '-' including Cluster 1–4 when the success row is missing (AC-3b)", () => {
+  it("UT-ADMILE-024 a missing success row leaves Cluster 1–4 rates EMPTY and Operational Lifetime '-' (AC-3b, AMS:665-737)", () => {
     const fr = groupAssumptions(FIXTURE_ASSUMPTIONS).get(FRANCE)![0]!;
     const cells = matrixCells(fr, "en-US");
-    expect(cell(cells, "cluster1")).toMatchObject({ duration: "3", rate: "-" });
-    expect(cell(cells, "cluster2")).toMatchObject({ duration: "-", rate: "-" });
+    expect(cell(cells, "cluster1")).toMatchObject({ duration: "3", rate: "" });
+    expect(cell(cells, "cluster2")).toMatchObject({ duration: "", rate: "" });
     expect(cell(cells, "operationalLifetime")).toMatchObject({ duration: "-", rate: "-" });
   });
 
@@ -186,6 +186,23 @@ describe("MatrixCells", () => {
     expect(formatValue(0.755, "de-DE")).toBe("0,76");
     expect(formatValue(1000, "en-US")).toBe("1000");
     expect(formatValue(undefined)).toBe("-");
+    expect(formatValue(undefined, "en-US", "")).toBe("");
+  });
+
+  it("UT-ADMILE-934 blank Cluster 1–5 cells render EMPTY (`$\"{record.Duration}\"`, AMS:569, 665-737); Operational Lifetime and Sales keep '-'", () => {
+    // France BESS: Cluster 1 duration only, no success row.
+    const fr = groupAssumptions(FIXTURE_ASSUMPTIONS).get(FRANCE)![0]!;
+    const cells = matrixCells(fr, "en-US");
+    for (const key of ["cluster2", "cluster3", "cluster4"]) expect(cell(cells, key)).toEqual({ key, duration: "", rate: "" });
+    expect(cell(cells, "cluster5")).toEqual({ key: "cluster5", duration: "", rate: "1" });
+    expect(cell(cells, "fid")).toEqual({ key: "fid", duration: "-", rate: "1" });
+    expect(cell(cells, "operationalLifetime")).toEqual({ key: "operationalLifetime", duration: "-", rate: "-" });
+    expect(cell(cells, "salesStart")).toEqual({ key: "salesStart", duration: "-", rate: "-" });
+    expect(cell(cells, "salesEnd")).toEqual({ key: "salesEnd", duration: "-", rate: "-" });
+    // Germany PV: durations stored, FID blank, success rates stored.
+    const pv = matrixCells(groupAssumptions(FIXTURE_ASSUMPTIONS).get(GERMANY)![1]!, "en-US");
+    expect(cell(pv, "cluster1")).toEqual({ key: "cluster1", duration: "6", rate: "0.9" });
+    expect(cell(pv, "salesStart")).toEqual({ key: "salesStart", duration: "-", rate: "-" });
   });
 });
 
@@ -262,8 +279,33 @@ describe("InitialText / evaluateCell", () => {
     expect(evaluateCell("durations", "cluster1", 12, "012")).toMatchObject({ touched: true, dirty: false });
   });
 
-  it("UT-ADMILE-052 an untouched invalid stored value is not validated (FID 0.75)", () => {
-    expect(evaluateCell("durations", "fid", 0.75, undefined, "en-US")).toEqual({ text: "0.75", touched: false, dirty: false });
+  it("UT-ADMILE-052 an untouched invalid stored value (FID 0.75) is marked invalid but carries no message and is not dirty", () => {
+    expect(evaluateCell("durations", "fid", 0.75, undefined, "en-US")).toEqual({ text: "0.75", invalid: true, touched: false, dirty: false });
+  });
+
+  it("UT-ADMILE-935 the red state follows the SHOWN value from open (AMS:1358-1371, 2068-2085); message and Save wait for a change", () => {
+    // Blank Cluster 1 duration: shown "", fails `^\d+$` → red, no message.
+    expect(evaluateCell("durations", "cluster1", undefined, undefined)).toEqual({ text: "", invalid: true, touched: false, dirty: false });
+    // Blank success rate: `Not(IsBlank(…))` fails → red, no message.
+    expect(evaluateCell("successRates", "cluster1", undefined, undefined)).toEqual({ text: "", invalid: true, touched: false, dirty: false });
+    // A blank blank-as-zero duration showed `Coalesce(…, "0")` in the canvas — here the "0" placeholder — so it is not red.
+    expect(evaluateCell("durations", "cluster5", undefined, undefined)).toEqual({ text: "", placeholder: "0", invalid: false, touched: false, dirty: false });
+    // A valid stored value is not red; a typed failing value is red AND carries the message.
+    expect(evaluateCell("durations", "cluster1", 12, undefined)).toMatchObject({ invalid: false, touched: false });
+    expect(evaluateCell("durations", "cluster1", 12, "x")).toMatchObject({ invalid: true, touched: true, error: MSG.durationInvalid, dirty: false });
+    expect(evaluateCell("durations", "cluster1", 12, "13")).toMatchObject({ invalid: false, touched: true, dirty: true, value: 13 });
+    // Clearing a stored value is red with the message; typing into a blank clears the red.
+    expect(evaluateCell("successRates", "cluster1", 0.5, "")).toMatchObject({ invalid: true, touched: true, error: MSG.rateInvalid });
+    expect(evaluateCell("successRates", "cluster1", undefined, "0.5")).toMatchObject({ invalid: false, touched: true, dirty: true, value: 0.5 });
+    // On open, Germany PV's blank FID is red, yet no section message shows and Save stays disabled.
+    const de = groupAssumptions(FIXTURE_ASSUMPTIONS).get(GERMANY) ?? [];
+    const opened = evaluatePanel(de, {});
+    expect(opened.cells.get(cellKey("de-pv-m", "fid"))).toMatchObject({ invalid: true, touched: false });
+    expect(opened.cells.get(cellKey("de-wind-m", "fid"))).toMatchObject({ invalid: false });
+    expect(opened.durationErrors).toEqual([]);
+    expect(opened.rateErrors).toEqual([]);
+    expect(opened.touched).toBe(false);
+    expect(opened.canSave).toBe(false);
   });
 
   it("UT-ADMILE-053 a touched invalid value carries its message", () => {

@@ -45,7 +45,7 @@ import { useCountries } from "@/data/countries";
 import { GATE_COUNTRY_RULE, GATE_DEFAULT, pickerCountries } from "@/domain/countryPicker";
 import { GATE_TECHNOLOGIES } from "@/domain/technology";
 import { userErrorText } from "@/platform/userMessage";
-import { space } from "@/theme/tokens";
+import { palette, space } from "@/theme/tokens";
 import { ApprovalsPanel } from "./ApprovalsPanel";
 import { GateTable } from "./GateTable";
 import {
@@ -54,8 +54,8 @@ import {
 import {
   buildGateRows, collapseScope, deleteConfirmationText, deletingText, emptyTaskForm,
   gateEditorTarget, gateLabel, hasGateConflict, headline, LABELS, NO_PERMISSION_MESSAGE, resetConfirmationText,
-  resettingGateText, savingGateText, savingTaskText, seedGateForm, seedTaskForm, taskCandidates, toChecklistPayload,
-  toGatePayload, type ApprovalForm, type EditorTarget, type GateContext, type GateRow, type TaskRow,
+  resettingGateText, SAVED_MESSAGE, savingGateText, savingTaskText, seedGateForm, seedTaskForm, taskCandidates,
+  toChecklistPayload, toGatePayload, type ApprovalForm, type EditorTarget, type GateContext, type GateRow, type TaskRow,
 } from "./rules";
 
 /**
@@ -78,9 +78,14 @@ const useStyles = makeStyles({
     paddingLeft: space.l, paddingRight: "10px", paddingBottom: space.l,
     overflowX: "auto", overflowY: "auto",
   },
+  /**
+   * `lbl_Admin_ProjectGates_Approvals_Headline` (PGAS:389-426): 64 high, `Size: =gblAppSizes.Font.Large`
+   * (12 pt = 16 px), `Color: =gblAppColors.Label.Color` (black), normal weight. It was 20 px (canvas
+   * parity pass, 20 Nov 2026).
+   */
   headline: {
     display: "flex", alignItems: "center", minHeight: "64px",
-    fontSize: tokens.fontSizeBase500, fontWeight: tokens.fontWeightRegular,
+    fontSize: "16px", lineHeight: "16px", fontWeight: tokens.fontWeightRegular, color: palette.black,
   },
 });
 
@@ -168,9 +173,10 @@ export default function ProjectGatesSettingsScreen() {
    * DIVERGENCE: the canvas closes and resets the panel whatever the outcome and reports a failure
    * with `Notify("Error: Approvals type could not be saved. Internal error: originated on
    * {FirstError.Source}. …")`. Here a failure keeps the panel open with the form intact and shows
-   * the shared `userErrorText` (the raw detail is traced, not shown) (doc 09 §2). The success toasts
-   * are NEW: the canvas only set "Approvals was successfully saved." on the loading pop-up and
-   * closed it at once.
+   * the shared `userErrorText` (the raw detail is traced, not shown) (doc 09 §2; D36 §4, awaiting a
+   * product decision). The success toast is the canvas text verbatim, `SAVED_MESSAGE` ("Approvals
+   * was successfully saved.", PGAS:3891, D22): the canvas set it on the loading pop-up and closed it
+   * at once.
    */
   const handleSave = async (form: ApprovalForm) => {
     if (!editor.panel || !ctx) return;
@@ -189,7 +195,7 @@ export default function ProjectGatesSettingsScreen() {
             kind: "gate", id,
             payload: toGatePayload(form, { countryId: ctx.countryId, technology: ctx.technology, state: t.row.state, label: t.label, isCreate: !id }),
           });
-          notify.success(`Approvals for '${t.label ?? t.row.description}' were saved.`);
+          notify.success(SAVED_MESSAGE);
           editor.close();
         } catch (error) {
           failed(error);
@@ -207,7 +213,7 @@ export default function ProjectGatesSettingsScreen() {
           kind: "task", id,
           payload: toChecklistPayload(form, { checklist, state: t.row.state, isCreate: !id }),
         });
-        notify.success(`Approvals for check list '${checklist.name}' were saved.`);
+        notify.success(SAVED_MESSAGE);
         editor.close();
       } catch (error) {
         failed(error);
@@ -218,10 +224,10 @@ export default function ProjectGatesSettingsScreen() {
   /*
    * Reset Gate — `btn_Admin_ProjectGates_Approvals_Form_Fields_ResetGateApproval.OnSelect`, run after
    * the confirmation below.
-   * DIVERGENCE: the canvas patches at once, with no confirmation and no progress text, and closes
-   * the panel; here the user confirms first ("Reset Gate?"), a progress text and a success toast are
-   * shown, and a failure keeps the panel open (doc 09 §2). D22 recorded "keep Reset Gate as the
-   * canvas has it" for its payload; the confirmation still needs a product decision.
+   * SOURCE DEFECT (fix kept, D150): the canvas patches at once, with no confirmation, although the write
+   * removes every gate participant and cannot be undone; here the user confirms first ("Reset Gate?").
+   * DIVERGENCE: a progress text and a success toast are NEW (the canvas shows neither), and a failure
+   * keeps the panel open (the canvas closes it whatever the outcome; doc 09 §2, D36 §4).
    */
   const runReset = async () => {
     const t = editor.panel?.target;
@@ -367,6 +373,8 @@ export default function ProjectGatesSettingsScreen() {
           countryClick="select"
           toggleLabel={toggleLabel}
           highlightCollapsedSelection
+          // Every country starts collapsed: the rail's `AddColumns(…, Expanded, false)` (PGAS:118-119).
+          startCollapsed
           emptyText="No configured countries were found."
           testIdPrefix="cmp_Admin_ProjectGates_NestedCountryTechnologyPicker"
         />
@@ -405,24 +413,40 @@ export default function ProjectGatesSettingsScreen() {
         />
       ) : null}
 
-      {/* `cmp_DeleteChecklistApprovalItem_AdminScreen` (`cmp_PopUp_Confirmation`); Cancel is the dialog's default "Cancel" (`CancelButtonText`). */}
+      {/*
+        * `cmp_DeleteChecklistApprovalItem_AdminScreen` — the PM app's `cmp_PopUp_Confirmation`
+        * (`Components/cmp_PopUp_Confirmation.pa.yaml`), drawn at its own look (as PM Checklist draws it):
+        * `classicPopUp` (490 wide, 40-high header, 12-pt title), `darkScrim` (`Fill: =RGBA(0, 0, 0, 0.7)`),
+        * `canvasFooter` (flat card, regular-weight captions, no divider).
+        * Confirm: `FillColor: =themePrimary`, `IconName: ="CheckMark"`, `Width: =128` (`:193-219`). The
+        * instance passes `IconRightButton: ="Trash"` (PGAS:3963), but the component never reads that input
+        * (its Confirm icon is the literal "CheckMark"), so the canvas shows a check mark, in blue — never
+        * the red `destructive` fill, which has no canvas counterpart (canvas parity pass, 20 Nov 2026).
+        * Cancel: `IconLeftButton: ="Cancel"`, `CancelButtonText: ="Cancel"`, `Width: =96` (the dialog's defaults).
+        */}
       {confirmState?.kind === "delete" && confirmState.payload && ctx ? (
         <ConfirmDialog
           open
           title={LABELS.deleteTitle}
           description={deleteConfirmationText(ctx, confirmState.payload.row.description, confirmState.payload.task.checklist.name)}
-          confirmText={LABELS.deleteConfirm} confirmIcon="delete" destructive
+          confirmText={LABELS.deleteConfirm} confirmIcon="checkmark" confirmWidth={128}
+          classicPopUp darkScrim canvasFooter footerDivider={false}
           onConfirm={() => void dialog.confirm(runDelete, { closeFirst: true })}
           onCancel={dialog.cancel}
         />
       ) : null}
-      {/* DIVERGENCE: NEW — the canvas has no Reset Gate confirmation (see `runReset`); its texts have no canvas source. */}
+      {/*
+        * SOURCE DEFECT fix kept (D150): the canvas has no Reset Gate confirmation (see `runReset`); its texts
+        * have no canvas source. Drawn as the screen's other dialog, the canvas `cmp_PopUp_Confirmation` look:
+        * blue ✓ Confirm, 128 px (it was red `destructive` before 20 Nov 2026).
+        */}
       {confirmState?.kind === "reset" && ctx && editorTarget?.kind === "gate" ? (
         <ConfirmDialog
           open
           title="Reset Gate?"
           description={resetConfirmationText(ctx, editorTarget.label ?? editorTarget.row.description)}
-          confirmText="Reset Gate" confirmWidth={120} destructive
+          confirmText="Reset Gate" confirmIcon="checkmark" confirmWidth={128}
+          classicPopUp darkScrim canvasFooter footerDivider={false}
           onConfirm={() => void dialog.confirm(runReset, { closeFirst: true })}
           onCancel={dialog.cancel}
         />

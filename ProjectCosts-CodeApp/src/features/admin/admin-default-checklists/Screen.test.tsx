@@ -11,10 +11,13 @@
  * requests of each plan are in `writes.test.ts`.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { Button, FluentProvider } from "@fluentui/react-components";
+import {
+  CheckmarkRegular, DeleteRegular, DismissRegular, DocumentCheckmarkRegular,
+} from "@fluentui/react-icons";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 
@@ -63,6 +66,7 @@ import { PlanError } from "@/data/executePlan";
 import type { WritePlan } from "@/data/writePlan";
 import { DataError, RecordGoneError } from "@/platform/errors";
 import { vsbTheme } from "@/theme/fluent";
+import { palette } from "@/theme/tokens";
 import { FIXTURE_CLUSTERS, FIXTURE_LOCKED, FIXTURE_TABS, FIXTURE_TASKS } from "./fixtures";
 import { qk } from "@/data/keys";
 import { LOCK_LOADING_TOOLTIP, LOCK_TOOLTIP, LOCK_UNKNOWN_TOOLTIP, REORDER_STALE_MESSAGE } from "./rules";
@@ -142,11 +146,12 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("CheckListSettingsScreen", () => {
-  it("UT-ADCHK-901 tabs in numeric Order, left-most selected by default", async () => {
+  it("UT-ADCHK-901 tabs A → Z by name, not by Order (D151, the live canvas); left-most selected by default", async () => {
     renderScreen();
     const tabs = await screen.findAllByRole("tab");
+    // Orders are FR Wind 1, DE Wind 2, DK PV 3; the strip still reads DE Wind, DK PV, FR Wind.
     expect(tabs.map((t) => t.getAttribute("value"))).toEqual([DE_WIND, DE_PV, "aaaaaaaa-0000-0000-0000-000000000010"]);
-    expect(tabs[1]).toHaveAccessibleName("DE PV");
+    expect(tabs[1]).toHaveAccessibleName("DK PV");
     expect(tabs[0]).toHaveAttribute("aria-selected", "true");
     await waitFor(() => expect(api.loadTasks).toHaveBeenCalledWith(DE_WIND));
   });
@@ -186,7 +191,7 @@ describe("CheckListSettingsScreen", () => {
     renderScreen();
     await expandDraft(u);
     expect(await screen.findByText("Site identified")).toBeInTheDocument();
-    await u.click(screen.getByRole("tab", { name: "DE PV" }));
+    await u.click(screen.getByRole("tab", { name: "DK PV" }));
     await waitFor(() => expect(screen.getByTestId("location").textContent).toBe(`?tab=${DE_PV}`));
     await waitFor(() => expect(api.loadTasks).toHaveBeenCalledWith(DE_PV));
     await waitFor(() => expect(screen.queryByText("Site identified")).not.toBeInTheDocument());
@@ -194,7 +199,7 @@ describe("CheckListSettingsScreen", () => {
 
   it("UT-ADCHK-906 ?tab= opens that tab", async () => {
     renderScreen(`/admin/default-checklists?tab=${DE_PV}`);
-    await waitFor(() => expect(screen.getByRole("tab", { name: "DE PV" })).toHaveAttribute("aria-selected", "true"));
+    await waitFor(() => expect(screen.getByRole("tab", { name: "DK PV" })).toHaveAttribute("aria-selected", "true"));
   });
 
   it("UT-ADCHK-907 a locked row has its four actions disabled with the Project Gate tooltip", async () => {
@@ -288,14 +293,14 @@ describe("CheckListSettingsScreen", () => {
     })]));
   });
 
-  it("UT-ADCHK-912 delete explains the soft delete and renumbers the later rows", async () => {
+  it("UT-ADCHK-912 delete asks with the canvas text and renumbers the later rows", async () => {
     const u = user();
     renderScreen();
     await expandDraft(u);
     const row = await screen.findByTestId("con_Details_TasksInClusterDefaultChecklist_AdminScreen-dddddddd-0000-0000-0000-000000000001");
     await waitFor(() => expect(within(row).getByRole("button", { name: "Delete" })).not.toBeDisabled());
     await u.click(within(row).getByRole("button", { name: "Delete" }));
-    expect(await screen.findByText(/synchronisation process then removes it/)).toBeInTheDocument();
+    expect(await screen.findByText('Are you sure that you want to permanently delete task "Site identified"?')).toBeInTheDocument();
     await u.click(within(await screen.findByRole("alertdialog", PORTAL)).getByRole("button", { name: "Delete", ...PORTAL }));
     await waitFor(() => expect(api.softDeleteTask).toHaveBeenCalledWith(
       "dddddddd-0000-0000-0000-000000000001",
@@ -323,6 +328,38 @@ describe("CheckListSettingsScreen", () => {
       { id: "dddddddd-0000-0000-0000-000000000002", order: 3 },
     ]));
     expect(await screen.findByText("New order was successfully saved.")).toBeInTheDocument();
+  });
+
+  it("UT-ADCHK-941 reorder by drag-and-drop, as the canvas PowerDragDrop list; Save writes 1-based Orders", async () => {
+    const u = user();
+    renderScreen();
+    await expandDraft(u);
+    await screen.findByText("Site identified");
+    await u.click(screen.getAllByRole("button", { name: "Reorder" })[0] as HTMLElement);
+    // `TextCanvas1.Text` (L1542), verbatim.
+    expect(await screen.findByText("To reorder drag and drop listed items")).toBeInTheDocument();
+    const item = (id: string) => screen.getByTestId(`reorder-item-${id}`);
+    for (const id of [T1, T2, T3]) expect(item(id)).toHaveAttribute("draggable", "true");
+    // The list carries the canvas control name; rows show the name only, no "1." position (the PowerDragDrop template).
+    expect(screen.getByTestId("pcf_ReorderTaskList_AdminScreen").tagName).toBe("OL");
+    expect(within(item(T1)).queryByText("1.")).not.toBeInTheDocument();
+
+    // Drag "Site identified" (Order 1) down past the other two.
+    const dataTransfer = { effectAllowed: "", setData: vi.fn() };
+    fireEvent.dragStart(item(T1), { dataTransfer });
+    fireEvent.dragOver(item(T2), { dataTransfer });
+    fireEvent.dragOver(item(T3), { dataTransfer });
+    fireEvent.drop(item(T3), { dataTransfer });
+    expect(screen.getAllByTestId(/^reorder-item-/).map((el) => el.getAttribute("data-testid"))).toEqual([
+      `reorder-item-${T2}`, `reorder-item-${T3}`, `reorder-item-${T1}`,
+    ]);
+
+    const save = screen.getByRole("button", { name: "Save", ...PORTAL });
+    expect(save).not.toBeDisabled();
+    await u.click(save);
+    await waitFor(() => expect(api.writeOrders).toHaveBeenCalledWith([
+      { id: T2, order: 1 }, { id: T3, order: 2 }, { id: T1, order: 3 },
+    ]));
   });
 });
 
@@ -368,7 +405,7 @@ describe("CheckListSettingsScreen — gap closure", () => {
     const u = user();
     renderScreen();
     await waitFor(() => expect(api.loadLockedTaskIds).toHaveBeenCalledTimes(1));
-    await u.click(await screen.findByRole("tab", { name: "DE PV" }));
+    await u.click(await screen.findByRole("tab", { name: "DK PV" }));
     await waitFor(() => expect(api.loadTasks).toHaveBeenCalledWith(DE_PV));
     expect(api.loadLockedTaskIds).toHaveBeenCalledTimes(1);
   });
@@ -687,7 +724,7 @@ describe("CheckListSettingsScreen — reusable components: visual unifications",
     const small = reference(<Button size="small" data-testid="ref-small">Retry</Button>, "ref-small");
     expect(tabsRetry.className).toBe(small.className);
     await u.click(tabsRetry);
-    expect(await screen.findByRole("tab", { name: "DE PV" })).toBeInTheDocument();
+    expect(await screen.findByRole("tab", { name: "DK PV" })).toBeInTheDocument();
   });
 
   it("UT-ADCHK-935 a disabled Add Task / Reorder uses the CommandBar canvas greys", async () => {
@@ -792,5 +829,254 @@ describe("CheckListSettingsScreen — admin access", () => {
     for (const name of ["Delete", "No", "Active"]) {
       expect(within(row).getByRole("button", { name })).not.toBeDisabled();
     }
+  });
+});
+
+describe("CheckListSettingsScreen — canvas parity, 20 Nov 2026 (row icons, Add/Edit form, dialogs)", () => {
+  /** `#rrggbb` / `#rgb` → the `rgb(r, g, b)` jsdom reports. */
+  const rgb = (hex: string) => {
+    const h = hex.replace("#", "");
+    const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+    const n = (i: number) => parseInt(full.slice(i, i + 2), 16);
+    return `rgb(${n(0)}, ${n(2)}, ${n(4)})`;
+  };
+  const pathOf = (root: Element | null | undefined) => root?.querySelector("svg path")?.getAttribute("d") ?? null;
+  /** The outline of a Fluent icon, rendered on its own, to compare a button's glyph with. */
+  const iconPath = (node: ReactNode) => pathOf(render(<FluentProvider theme={vsbTheme}><span>{node}</span></FluentProvider>).container);
+  const iconOf = (button: HTMLElement) => button.querySelector(".fui-Button__icon") as HTMLElement;
+  /** The canvas `IconName` of an MDL2 glyph drawn as its own outline (`data-icon-name`, as the canvas DOM carries it). */
+  const mdl2Of = (button: HTMLElement) => button.querySelector("svg")?.getAttribute("data-icon-name") ?? null;
+  /**
+   * The `color` of every plain style rule (no @media, no :hover) whose selector matches `el`, in sheet order.
+   * jsdom's `getComputedStyle` ignores selector specificity, so a colour is checked through the rules that match.
+   */
+  const rulesOn = (el: Element, prop: string): [selector: string, value: string][] => {
+    const out: [string, string][] = [];
+    for (const sheet of Array.from(document.styleSheets)) {
+      for (const rule of Array.from(sheet.cssRules)) {
+        if (!(rule instanceof CSSStyleRule)) continue;
+        const value = rule.style.getPropertyValue(prop);
+        let hit = false;
+        try { hit = el.matches(rule.selectorText); } catch { hit = false; }
+        if (hit && value) out.push([rule.selectorText, value]);
+      }
+    }
+    return out;
+  };
+  const colorRulesOn = (el: Element): string[] => rulesOn(el, "color").map(([, value]) => value);
+  /**
+   * The value Griffel's atomic classes give `el` itself for `prop`: the last single-class `.f…` rule on it. In a
+   * browser the atomic bucket follows Fluent's reset (`.r…`) bucket, so it wins over the reset's base value.
+   */
+  const atomicValue = (el: Element, prop: string): string | undefined => {
+    let value: string | undefined;
+    for (const sheet of Array.from(document.styleSheets)) {
+      for (const rule of Array.from(sheet.cssRules)) {
+        if (!(rule instanceof CSSStyleRule)) continue;
+        const m = /^\.(f[\w-]+)$/.exec(rule.selectorText);
+        const v = rule.style.getPropertyValue(prop);
+        if (m && el.classList.contains(m[1] as string) && v) value = v;
+      }
+    }
+    return value;
+  };
+  const atomicColor = (el: Element) => atomicValue(el, "color");
+  const rowOf = (id: string) => screen.getByTestId(`con_Details_TasksInClusterDefaultChecklist_AdminScreen-${id}`);
+  /** T1 with Completion Date on, so the grid shows both the "Yes" and the "No" variant. */
+  const withT1Completion = () => api.loadTasks.mockImplementation(async (tabId: string) =>
+    FIXTURE_TASKS.filter((t) => t.tabId === tabId).map((t) => (t.id === T1 ? { ...t, isCompletionDate: true } : t)));
+
+  it("UT-ADCHK-942 the Completion Date / Active buttons show the canvas IconName per value, 16 px, in akzent3 / themePrimary", async () => {
+    const u = user();
+    const glyph = {
+      calendarReply: "CalendarReply", calendar: "Calendar",
+      deactivateOrders: "DeactivateOrders", activateOrders: iconPath(<DocumentCheckmarkRegular />),
+    };
+    expect(new Set(Object.values(glyph)).size).toBe(4);
+    withT1Completion();
+    renderScreen();
+    await expandDraft(u);
+    await waitFor(() => expect(within(rowOf(T1)).getByRole("button", { name: "Yes" })).not.toHaveAttribute("aria-disabled", "true"));
+    const yes = within(rowOf(T1)).getByRole("button", { name: "Yes" });
+    const active = within(rowOf(T1)).getByRole("button", { name: "Active" });
+    const no = within(rowOf(T3)).getByRole("button", { name: "No" });
+    const inactive = within(rowOf(T3)).getByRole("button", { name: "Inactive" });
+    // `IconName: If('Is Completion Date', "CalendarReply", "Calendar")`; `If(Status = Active, "DeactivateOrders", "ActivateOrders")`.
+    expect(mdl2Of(yes)).toBe(glyph.calendarReply);
+    expect(mdl2Of(no)).toBe(glyph.calendar);
+    expect(mdl2Of(active)).toBe(glyph.deactivateOrders);
+    expect(pathOf(inactive)).toBe(glyph.activateOrders);
+    // `FontColor` / `IconColor`: akzent3 for Yes / Active, themePrimary for No / Inactive. The icon sets no colour of
+    // its own, so it takes the button's (before the fix the grid's `td span` rule painted it #242424).
+    for (const b of [yes, active]) expect(atomicColor(b)).toBe(rgb(palette.akzent3));
+    for (const b of [no, inactive]) expect(atomicColor(b)).toBe(rgb(palette.themePrimary));
+    for (const b of [yes, no, active, inactive]) expect(colorRulesOn(iconOf(b))).toEqual([]);
+    // The cells' own text keeps the measured #242424.
+    expect(colorRulesOn(within(rowOf(T1)).getByText("Site identified"))).toContain(rgb("#242424"));
+    // No `IconSize` / `FontSize`: Fluent v8's 16 px button icon, 8 px before a 14 px regular label.
+    for (const b of [yes, no, active, inactive]) {
+      expect(getComputedStyle(iconOf(b)).fontSize).toBe("16px");
+      expect(getComputedStyle(iconOf(b)).marginRight).toBe("8px");
+      expect(atomicValue(b, "font-size")).toBe("14px");
+      expect(atomicValue(b, "font-weight")).toBe("var(--fontWeightRegular)");
+    }
+    // `ico_ActivateDeactivate_…` keeps the default TextAlignment (Center) in its 90 px; Completion Date sets Left.
+    expect(getComputedStyle(active).width).toBe("90px");
+    expect(getComputedStyle(active).justifyContent).toBe("center");
+    // Gate Relevance is plain text, the column's Yes / No labels.
+    expect(within(rowOf(T2)).getAllByRole("cell")[2]).toHaveTextContent(/^Yes$/);
+    expect(within(within(rowOf(T2)).getAllByRole("cell")[2] as HTMLElement).queryByRole("button")).toBeNull();
+  });
+
+  it("UT-ADCHK-943 a row locked by a Project Gate greys BOTH the flag label (#a19f9d) and its icon (#bbb); a free row keeps its colours", async () => {
+    const u = user();
+    renderScreen();
+    await expandDraft(u);
+    await waitFor(() => expect(within(rowOf(T1)).getByRole("button", { name: "Active" })).not.toHaveAttribute("aria-disabled", "true"));
+    for (const name of ["No", "Active"]) {
+      const locked = within(rowOf(T2)).getByRole("button", { name });
+      expect(locked).toHaveAttribute("aria-disabled", "true");
+      expect(atomicColor(locked)).toBe(rgb("#a19f9d"));
+      expect(colorRulesOn(iconOf(locked))).toEqual([rgb("#bbb")]);
+    }
+    const free = within(rowOf(T1)).getByRole("button", { name: "Active" });
+    expect(atomicColor(free)).toBe(rgb(palette.akzent3));
+    expect(colorRulesOn(iconOf(free))).toEqual([]);
+  });
+
+  it("UT-ADCHK-944 Edit / Delete are the canvas pencil and bin in 34 x 34 boxes with 16 px icons; a locked one is #bbb", async () => {
+    const u = user();
+    const pencil = "Edit";
+    const bin = iconPath(<DeleteRegular />);
+    renderScreen();
+    await expandDraft(u);
+    await waitFor(() => expect(within(rowOf(T1)).getByRole("button", { name: "Edit" })).not.toHaveAttribute("aria-disabled", "true"));
+    const edit = within(rowOf(T1)).getByRole("button", { name: "Edit" });
+    const del = within(rowOf(T1)).getByRole("button", { name: "Delete" });
+    expect(mdl2Of(edit)).toBe(pencil);
+    expect(pathOf(del)).toBe(bin);
+    for (const b of [edit, del]) {
+      expect(getComputedStyle(b).width).toBe("34px");
+      expect(getComputedStyle(b).height).toBe("34px");
+      expect(getComputedStyle(iconOf(b)).fontSize).toBe("16px");
+      // `IconColor: akzent3` (L503, L537) and nothing else — the grid's `td span` rule used to add #242424.
+      expect(colorRulesOn(iconOf(b))).toEqual([rgb(palette.akzent3)]);
+    }
+    const lockedEdit = within(rowOf(T2)).getByRole("button", { name: "Edit" });
+    expect(colorRulesOn(iconOf(lockedEdit))).toContain(rgb("#bbb"));
+    expect(colorRulesOn(iconOf(lockedEdit))).not.toContain(rgb(palette.akzent3));
+  });
+
+  it("UT-ADCHK-945 Add Task: 'Value cannot be blank.' shows at once (canvas Visible: IsBlank), red akzent5, no icon; '*' before the caption; counters on the caption row", async () => {
+    const u = user();
+    renderScreen();
+    await expandDraft(u);
+    await screen.findByText("Site identified");
+    await u.click(screen.getAllByRole("button", { name: "Add Task" })[0] as HTMLElement);
+    const panel = (await screen.findByText("Add Task", { selector: "h2" })).closest(".canvas-panel") as HTMLElement;
+    // Nothing typed, nothing touched: the canvas label is already visible and Save is disabled.
+    const message = within(panel).getByText("Value cannot be blank.");
+    expect(atomicColor(message)).toBe(rgb(palette.akzent5));
+    expect(atomicValue(message, "font-size")).toBe("12px");
+    expect(message.querySelector("svg")).toBeNull();
+    expect(within(panel).getByRole("button", { name: "Save", ...PORTAL })).toBeDisabled();
+    // The `*` (lbl_…_Name_Required, X 5) sits before "Description" (X 20), in the canvas label's red, not bold.
+    const star = panel.querySelector(".fui-Label__required") as HTMLElement;
+    expect(star).not.toBeNull();
+    expect(getComputedStyle(star).order).toBe("-1");
+    expect(colorRulesOn(star)).toContain(rgb(palette.akzent5));
+    expect(panel.querySelectorAll(".fui-Label__required")).toHaveLength(1); // Holding Description has none
+    // Both captions are Semibold (`Weight: Semibold`, L1087, L1182) through a rule that out-ranks canvas.css's
+    // `.canvas-panel .fui-Field label { font-weight: 400 }` (0-2-1): at least three classes.
+    for (const caption of Array.from(panel.querySelectorAll(".fui-Field__label"))) {
+      expect(rulesOn(caption, "font-weight").some(([selector, value]) =>
+        value === "var(--fontWeightSemibold)" && (selector.match(/\./g) ?? []).length >= 3)).toBe(true);
+    }
+    // `lbl_…_Details` ("0/256", RGBA(50,49,48)) on the caption row, not a hint under the box.
+    const counters = within(panel).getAllByText("0/256");
+    expect(counters).toHaveLength(2);
+    for (const c of counters) {
+      expect(c.closest(".fui-Field__hint")).toBeNull();
+      expect(c.previousElementSibling?.classList.contains("fui-Field")).toBe(true);
+      expect(colorRulesOn(c)).toContain(rgb("#323130"));
+    }
+    // Typing a name clears it, as the canvas label hides.
+    await u.type(within(panel).getByRole("textbox", { name: "Description", ...PORTAL }), "A");
+    expect(within(panel).queryByText("Value cannot be blank.")).not.toBeInTheDocument();
+    expect(within(panel).getByText("1/256")).toBeInTheDocument();
+  });
+
+  it("UT-ADCHK-946 the Add / Edit form: Description, Holding Description, then the Gate relevance / Completion Date / Active toggles; Edit seeds them", async () => {
+    const u = user();
+    renderScreen();
+    await expandDraft(u);
+    await waitFor(() => expect(within(rowOf(T1)).getByRole("button", { name: "Edit" })).not.toHaveAttribute("aria-disabled", "true"));
+    await u.click(within(rowOf(T1)).getByRole("button", { name: "Edit" }));
+    const panel = (await screen.findByText("Edit Task", { selector: "h2" })).closest(".canvas-panel") as HTMLElement;
+    const controls = [
+      "txt_Admin_Checklist_Form_Fields_Name", "txt_Admin_Checklist_Form_Fields_HoldingDescription",
+      "tgl_GateRelevance_ChecklistForm", "tgl_CompletionDate_ChecklistForm", "tgl_Active_ChecklistForm",
+    ].map((id) => within(panel).getByTestId(id));
+    for (let i = 1; i < controls.length; i += 1) {
+      expect((controls[i - 1] as HTMLElement).compareDocumentPosition(controls[i] as HTMLElement) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+    expect(within(panel).getByRole("textbox", { name: "Description", ...PORTAL })).toHaveValue("Site identified");
+    expect(within(panel).getByText("15/256")).toBeInTheDocument();
+    expect(within(panel).queryByText("Value cannot be blank.")).not.toBeInTheDocument();
+    expect(within(panel).getByRole("switch", { name: "Gate relevance", ...PORTAL })).not.toBeChecked();
+    expect(within(panel).getByRole("switch", { name: "Completion Date", ...PORTAL })).not.toBeChecked();
+    expect(within(panel).getByRole("switch", { name: "Active", ...PORTAL })).toBeChecked();
+    // `con_Admin_Checklist_Form_Fields` has no LayoutGap and the panel body's 20 px is its PaddingTop 20.
+    const form = within(panel).getByRole("form", { name: "Edit Task", ...PORTAL });
+    expect(getComputedStyle(form).paddingTop).toBe("0px");
+    expect(getComputedStyle(form).rowGap).toBe("0px");
+  });
+
+  it("UT-ADCHK-947 the delete dialog's Confirm is the canvas blue ✓ (themePrimary, CheckMark, 128 px), not a red bin; Cancel ✕ 96 px", async () => {
+    const u = user();
+    const tick = iconPath(<CheckmarkRegular />);
+    const cross = iconPath(<DismissRegular />);
+    renderScreen();
+    await expandDraft(u);
+    await waitFor(() => expect(within(rowOf(T1)).getByRole("button", { name: "Delete" })).not.toHaveAttribute("aria-disabled", "true"));
+    await u.click(within(rowOf(T1)).getByRole("button", { name: "Delete" }));
+    const dialog = await screen.findByRole("alertdialog", PORTAL);
+    expect(within(dialog).getByText("Delete checklist item?")).toBeInTheDocument();
+    const confirm = within(dialog).getByRole("button", { name: "Delete", ...PORTAL });
+    const cancel = within(dialog).getByRole("button", { name: "Cancel", ...PORTAL });
+    expect(getComputedStyle(confirm).backgroundColor).toBe(rgb(palette.themePrimary));
+    expect(getComputedStyle(confirm).backgroundColor).not.toBe(rgb(palette.Error));
+    expect(getComputedStyle(confirm).color).toBe(rgb(palette.white));
+    expect(confirm.style.width).toBe("128px");
+    expect(pathOf(confirm)).toBe(tick);
+    expect(getComputedStyle(cancel).width).toBe("96px");
+    expect(pathOf(cancel)).toBe(cross);
+    // The PM `cmp_PopUp_Confirmation` box: Min(490, …) wide.
+    expect(getComputedStyle(dialog).width).toBe("490px");
+  });
+
+  it("UT-ADCHK-948 the activate / deactivate dialog has the same canvas buttons (blue ✓ 128 px, ✕ 96 px)", async () => {
+    const u = user();
+    const tick = iconPath(<CheckmarkRegular />);
+    renderScreen();
+    await expandDraft(u);
+    await waitFor(() => expect(within(rowOf(T1)).getByRole("button", { name: "Active" })).not.toHaveAttribute("aria-disabled", "true"));
+    await u.click(within(rowOf(T1)).getByRole("button", { name: "Active" }));
+    const dialog = await screen.findByRole("alertdialog", PORTAL);
+    const confirm = within(dialog).getByRole("button", { name: "Deactivate", ...PORTAL });
+    expect(getComputedStyle(confirm).backgroundColor).toBe(rgb(palette.themePrimary));
+    expect(confirm.style.width).toBe("128px");
+    expect(pathOf(confirm)).toBe(tick);
+    expect(getComputedStyle(within(dialog).getByRole("button", { name: "Cancel", ...PORTAL })).width).toBe("96px");
+    expect(getComputedStyle(dialog).width).toBe("490px");
+  });
+
+  it("UT-ADCHK-949 the cluster Reorder command shows the canvas ItemIconName NumberedList", async () => {
+    const u = user();
+    const numberedList = "NumberedList";
+    renderScreen();
+    await expandDraft(u);
+    await screen.findByText("Site identified");
+    expect(mdl2Of(screen.getAllByRole("button", { name: "Reorder" })[0] as HTMLElement)).toBe(numberedList);
   });
 });

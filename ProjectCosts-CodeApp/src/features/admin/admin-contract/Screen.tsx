@@ -53,9 +53,9 @@ import { CONTRACT_TECHNOLOGIES, technologyOptionLabel } from "@/domain/technolog
 import { useActiveCountries } from "@/data/countries";
 import { ContractSaveError, ENTITY, OwnershipConflictError, type SaveContractInput } from "@/data/adminContract";
 import {
-  CARD_TEXT, CONTRACT_TYPE, INCOMPLETE_CLOSED_WARNING, breadcrumbText, buildAccountTree,
+  CARD_TEXT, CONTRACT_TYPE, INCOMPLETE_CLOSED_WARNING, POPUP_BUTTONS, breadcrumbText, buildAccountTree,
   canSave, classifyAccounts, closeDialogText, closePrompt, currencyOf, deleteDescription, groupDevCoTags, initialForm,
-  isDirty, limitFlags, limitMessage, panelTitle, sortContracts, validateForm,
+  isDirty, limitFlags, limitMessage, panelFixedValueCurrency, panelTitle, sortContracts, validateForm,
   withoutAccounts,
   type ContractForm, type StandardContract,
 } from "./rules";
@@ -111,6 +111,7 @@ interface PanelState {
    * URL selection; if the URL changes while the panel is open, the panel closes or prompts.
    */
   scope: CountryTechnology;
+  /** The panel caption's currency, fixed at open: `panelFixedValueCurrency` (Poland → "PLN", else "EUR"), not the card's ISO code. */
   currency: string;
   /** Set for edit, and after a partial save created the parent (so a retry updates it). */
   contractId?: string;
@@ -146,7 +147,10 @@ export default function ContractsSettingsScreen() {
   const { selection, country: selectedCountry, select } = useCountryTechnologyUrlSelection({
     countries, technologies: CONTRACT_TECHNOLOGIES, defaultTo: CONTRACT_DEFAULT, history: "push",
   });
+  /** The CARD heading's currency (`lbl_MarginFixedValuePercentage_Heading`, the ISO code). */
   const currency = currencyOf(selectedCountry?.isoCurrencyCode);
+  /** The PANEL caption's currency (`lbl_Add_Edit_AdminContracts_MarginFixedValue`, ACS:2506). */
+  const panelCurrency = panelFixedValueCurrency(selectedCountry?.name);
 
   /* ─────────────────────────────────────────────────────────────────── data */
   const contractsQuery = useStandardContracts(selection);
@@ -203,7 +207,7 @@ export default function ContractsSettingsScreen() {
   function openNew(contractType: number) {
     if (!selection) return;
     const form = initialForm(undefined, [], lang);
-    openPanel({ contractType, isNew: true, scope: selection, currency, initial: form, form });
+    openPanel({ contractType, isNew: true, scope: selection, currency: panelCurrency, initial: form, form });
   }
 
   /**
@@ -220,7 +224,7 @@ export default function ContractsSettingsScreen() {
     const form = initialForm(contract, ownIds(devCoRows), lang);
     openPanel({
       contractType: contract.contractType ?? CONTRACT_TYPE.Development, isNew: false,
-      scope: selection, currency,
+      scope: selection, currency: panelCurrency,
       contractId: contract.id, initial: form, form, refreshing: true,
     });
     void Promise.all([fetchContract(contract.id), devCoQuery.refetch()])
@@ -250,10 +254,11 @@ export default function ContractsSettingsScreen() {
    * backdrop, Cancel and `"scope"`: browser back/forward or a URL edit while the panel is
    * open. A clean panel closes at once; "Keep editing" after a scope change restores the panel's
    * own selection. `FormPanel` waits while a save is in flight (its input was already frozen).
+   * The Confirm carries the canvas `cmp_PopUp_Confirmation` CheckMark (`POPUP_BUTTONS`), not an ✕.
    */
   function promptFor(reason: CloseReason) {
     const kind = closePrompt({ dirty, linksIncomplete });
-    return kind === "none" ? null : closeDialogText(kind, reason === "scope");
+    return kind === "none" ? null : { ...closeDialogText(kind, reason === "scope"), confirmIcon: POPUP_BUTTONS.confirmIcon };
   }
 
   /**
@@ -494,7 +499,6 @@ export default function ContractsSettingsScreen() {
               errorText={devCoError ?? capexError}
               onRetry={() => { void devCoQuery.refetch(); void capexQuery.refetch(); }}
               disabled={saveMutation.isPending || scopeChanged}
-              validationMessage={dirty && errors.accounts ? errors.accounts : undefined}
               onChange={(next) => panelState.patch((prev) => ({
                 ...prev, form: { ...prev.form, selectedAccountIds: [...next].sort() },
               }))}
@@ -504,17 +508,25 @@ export default function ContractsSettingsScreen() {
       ) : null}
 
       {/*
-        `cmp_PopUp_Confirmation_Delete_Contract_Or_Period_1` (`IconRightButton: "Delete"`).
-        DIVERGENCE: `destructive` gives Confirm the danger look; the canvas relied on the label.
-        The shared dialog has no props for the popup's canvas control names.
+        `cmp_PopUp_Confirmation_Delete_Contract_Or_Period_1`, an instance of the PM `cmp_PopUp_Confirmation`
+        (`Components/cmp_PopUp_Confirmation.pa.yaml`): the 490-wide box on the dark scrim, Confirm in
+        themePrimary with the component's hard-coded CheckMark and `Width: 128`, Cancel with its ✕ icon
+        and `Width: 96`, no divider above the buttons and no red "danger" fill (`POPUP_BUTTONS`). The
+        instance's `IconRightButton: "Delete"` (ACS:4057) is never read by the component.
       */}
       <ConfirmDialog
         open={deleteTarget !== null}
         title={CARD_TEXT.deleteTitle}
         description={deleteTarget ? deleteDescription(deleteTarget.name) : ""}
         confirmText={CARD_TEXT.deleteConfirm}
-        confirmIcon="delete"
-        destructive
+        cancelText={CARD_TEXT.deleteCancel}
+        confirmIcon={POPUP_BUTTONS.confirmIcon}
+        confirmWidth={POPUP_BUTTONS.confirmWidth}
+        cancelIcon={POPUP_BUTTONS.cancelIcon}
+        classicPopUp
+        darkScrim
+        canvasFooter
+        footerDivider={false}
         onConfirm={() => void confirmDelete()}
         onCancel={deleteDialog.cancel}
       />

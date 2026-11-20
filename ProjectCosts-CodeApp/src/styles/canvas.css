@@ -160,6 +160,12 @@
 .canvas-panel-header button:hover:active .fui-Button__icon,
 .canvas-panel-header button:focus-visible .fui-Button__icon { color: white; }
 .canvas-panel-header button:focus-visible { outline: 2px solid white; outline-offset: -2px; }
+/* `FormPanel closeIconColor`: the Application Settings panels whose canvas ✕ is a command-bar item with
+   `ItemIconColor: gblAppTheme.palette.themeTertiary` (Check List Settings ADCS:964 / 1478, Project Gates PGAS:2546,
+   Milestones AMS:1073). The colour rests on the icon; hover, press and focus keep the shared white above. */
+.canvas-panel.canvas-panel-close-tinted .canvas-panel-header button:not(:hover):not(:focus-visible):not(:disabled) .fui-Button__icon {
+  color: var(--canvas-panel-close-color);
+}
 /* Cost panels (`FormPanel centerClose`, D88): the canvas ✕ is centred in the bar (`Y: =Parent.Height/2-Self.Height/2`).
    Fluent's header is a column flex box that pins the title row to the top, so the row fills the bar and the
    ✕ is centred in it, whatever height or padding a screen's skin gives the bar. */

@@ -12,7 +12,7 @@
  * the category id on `Button2_2`, the cost id on the comment / Edit / Delete buttons.
  */
 import { Button, Tooltip, makeStyles, mergeClasses, tokens } from "@fluentui/react-components";
-import { CommentAddRegular, CommentRegular, DeleteRegular, EditRegular } from "@fluentui/react-icons";
+import { DeleteRegular, EditRegular } from "@fluentui/react-icons";
 import type { DevexCost } from "@/data/adminCost";
 import { ExpandToggle, InlineEmpty, RowActions } from "@/components";
 import { fontFamily, palette } from "@/theme/tokens";
@@ -42,9 +42,47 @@ const useStyles = makeStyles({
   // so it is regular, not semibold; only the column headers are semibold.
   parentLabel: { fontWeight: tokens.fontWeightRegular },
   fold: { marginRight: "10px" },
-  icon: { color: palette.themePrimary },
   actionCell: { display: "flex", alignItems: "center", justifyContent: "center" },
 });
+
+/**
+ * `img_DevexCapex_Content_StandardCosts_CardBody_CostsTable_Comment.Image: =If(Len(ThisItem.vsb_comment)>0,
+ * 'Frame 3', 'Frame 3 (1)')` (ACS:4236-4276), drawn 23 x 23. The two media assets (`References/Resources.json`
+ * → `Assets/Images/a166ff7b….svg` / `a2266de9….svg`) are the same #006EB9 speech bubble with three lines; "Frame 3"
+ * (a comment exists) adds a red #FC3E3E dot at the top-right. Inlined verbatim: Fluent's `Comment` icons were a
+ * different glyph (user screenshot, 21 Nov 2026). `data-icon-name` carries the asset name for the tests.
+ */
+const BUBBLE =
+  "M24 5.5C24.3978 5.5 24.7794 5.65804 25.0607 5.93934C25.342 6.22064 25.5 6.60218 25.5 7V19C25.5 19.3978 25.342 19.7794 " +
+  "25.0607 20.0607C24.7794 20.342 24.3978 20.5 24 20.5H9.621C8.82542 20.5002 8.06248 20.8164 7.5 21.379L4.5 24.379V7C4.5 " +
+  "6.60218 4.65804 6.22064 4.93934 5.93934C5.22064 5.65804 5.60218 5.5 6 5.5H24ZM6 4C5.20435 4 4.44129 4.31607 3.87868 " +
+  "4.87868C3.31607 5.44129 3 6.20435 3 7L3 26.1895C3.00003 26.3379 3.04409 26.483 3.1266 26.6063C3.2091 26.7297 3.32635 " +
+  "26.8258 3.4635 26.8825C3.60065 26.9392 3.75153 26.9539 3.89705 26.9248C4.04258 26.8957 4.1762 26.8241 4.281 26.719L8.5605 " +
+  "22.4395C8.84174 22.1582 9.22321 22.0001 9.621 22H24C24.7956 22 25.5587 21.6839 26.1213 21.1213C26.6839 20.5587 27 19.7957 " +
+  "27 19V7C27 6.20435 26.6839 5.44129 26.1213 4.87868C25.5587 4.31607 24.7956 4 24 4H6Z";
+const LINES =
+  "M7.5 9.25C7.5 9.05109 7.57902 8.86032 7.71967 8.71967C7.86032 8.57902 8.05109 8.5 8.25 8.5H21.75C21.9489 8.5 22.1397 " +
+  "8.57902 22.2803 8.71967C22.421 8.86032 22.5 9.05109 22.5 9.25C22.5 9.44891 22.421 9.63968 22.2803 9.78033C22.1397 9.92098 " +
+  "21.9489 10 21.75 10H8.25C8.05109 10 7.86032 9.92098 7.71967 9.78033C7.57902 9.63968 7.5 9.44891 7.5 9.25ZM7.5 13C7.5 " +
+  "12.8011 7.57902 12.6103 7.71967 12.4697C7.86032 12.329 8.05109 12.25 8.25 12.25H21.75C21.9489 12.25 22.1397 12.329 22.2803 " +
+  "12.4697C22.421 12.6103 22.5 12.8011 22.5 13C22.5 13.1989 22.421 13.3897 22.2803 13.5303C22.1397 13.671 21.9489 13.75 21.75 " +
+  "13.75H8.25C8.05109 13.75 7.86032 13.671 7.71967 13.5303C7.57902 13.3897 7.5 13.1989 7.5 13ZM7.5 16.75C7.5 16.5511 7.57902 " +
+  "16.3603 7.71967 16.2197C7.86032 16.079 8.05109 16 8.25 16H15.75C15.9489 16 16.1397 16.079 16.2803 16.2197C16.421 16.3603 " +
+  "16.5 16.5511 16.5 16.75C16.5 16.9489 16.421 17.1397 16.2803 17.2803C16.1397 17.421 15.9489 17.5 15.75 17.5H8.25C8.05109 " +
+  "17.5 7.86032 17.421 7.71967 17.2803C7.57902 17.1397 7.5 16.9489 7.5 16.75Z";
+
+function CommentGlyph({ hasComment }: { hasComment: boolean }) {
+  return (
+    <svg
+      width="23" height="23" viewBox="0 0 31 27" fill="none" aria-hidden="true"
+      data-icon-name={hasComment ? "Frame 3" : "Frame 3 (1)"}
+    >
+      <path d={BUBBLE} fill="#006EB9" />
+      <path d={LINES} fill="#006EB9" />
+      {hasComment ? <circle cx="26" cy="5" r="5.05" fill="#FC3E3E" /> : null}
+    </svg>
+  );
+}
 
 export interface DevexCostTreeProps {
   groups: readonly DevexGroup[];
@@ -146,7 +184,7 @@ export function DevexCostTree({ groups, openCategories, canEdit, canDelete, onTo
                         <Button
                           appearance="transparent"
                           size="small"
-                          icon={row.hasComment ? <CommentRegular className={styles.icon} /> : <CommentAddRegular className={styles.icon} />}
+                          icon={<CommentGlyph hasComment={row.hasComment} />}
                           disabled={!canEdit(row.cost)}
                           aria-label={MSG.commentLabel(row.hasComment)}
                           data-testid={`img_DevexCapex_Content_StandardCosts_CardBody_CostsTable_Comment-${row.cost.id}`}

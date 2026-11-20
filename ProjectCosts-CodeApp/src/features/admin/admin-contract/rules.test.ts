@@ -10,7 +10,7 @@ import {
   Vsb_bopcontractsstandardassumptionsesvsb_margintype as MarginTypeMap,
 } from "@/generated/models/Vsb_bopcontractsstandardassumptionsesModel";
 import {
-  CLOSING_REF, CLOSING_REF_OPTIONS, CONTRACT_LIMIT, CONTRACT_TYPE, CONTRACT_TYPE_LABEL, MARGIN_TYPE,
+  CLOSING_REF, CLOSING_REF_OPTIONS, CONTRACT_LIMIT, CONTRACT_TYPE, CONTRACT_TYPE_LABEL, MARGIN_RESET_TEXT, MARGIN_TYPE,
   MARGIN_TYPE_LABEL, MSG, OTHER_RANK, TECHNOLOGY,
   breadcrumbText, buildAccountTree, buildParentPayload, canSave, classifyAccounts,
   commentCounter, commentText, currencyOf, deleteDescription, findOwnershipConflicts, formatClosingRef, formatMax,
@@ -359,10 +359,12 @@ describe("Form state", () => {
     expect(isDirty({ ...initial, selectedAccountIds: ["l3-a", "l3-b"] }, initial)).toBe(true);
   });
 
-  it("UT-ADCONTR-041 clears both margin inputs when Margin or Margin Type changes, each input in its own field", () => {
+  it("UT-ADCONTR-041 resets both margin inputs to the canvas \"0\" when Margin or Margin Type changes (ACS:2872-2930)", () => {
     const f = validForm({ margin: true, marginPercentageText: "5", marginFixedText: "7" });
-    expect(withMargin(f, false)).toMatchObject({ marginPercentageText: "", marginFixedText: "" });
-    expect(withMarginType(f, MARGIN_TYPE.FixedValue)).toMatchObject({ marginType: MARGIN_TYPE.FixedValue, marginPercentageText: "", marginFixedText: "" });
+    expect(MARGIN_RESET_TEXT).toBe("0");
+    expect(withMargin(f, false)).toMatchObject({ marginPercentageText: MARGIN_RESET_TEXT, marginFixedText: MARGIN_RESET_TEXT });
+    expect(withMarginType(f, MARGIN_TYPE.FixedValue))
+      .toMatchObject({ marginType: MARGIN_TYPE.FixedValue, marginPercentageText: MARGIN_RESET_TEXT, marginFixedText: MARGIN_RESET_TEXT });
   });
 
   it("UT-ADCONTR-042 gates Save on dirty, selection, validity and link availability", () => {

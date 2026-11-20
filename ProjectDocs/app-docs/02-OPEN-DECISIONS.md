@@ -8347,3 +8347,125 @@ The environment still shows through the band colour (`environmentHeaderFill`), t
 **Numbering:** written as D144 / D145 (commit 13a5282); renumbered D147 / D148 when merging `origin/master` (ef032fc), whose D144 (Generators save latency), D145 (Production write group) and D146 (Revenues volumes) came first. Code comments and tests were renumbered with it.
 
 **Verification (D147 and D148):** `npm run verify` on 13a5282 (20 Nov 2026): `check:power`, typecheck, lint and the control-label and canvas-identity gates passed; tests 6,766 passed, 2 failed, 3 todo (334 files). The two failures, UT-GEN-930 and UT-GENPERF-041 (Generators, not touched here), failed only under full-suite load and pass when run alone (41 of 41). The build passed separately. **Not run:** the E2E parity suite (skipped by the user), knip, a DEV or browser check.
+
+## D149 — Check List Settings: Reorder by drag-and-drop, as the canvas (20 Nov 2026; number PROVISIONAL, may be renumbered at merge)
+
+**Status:** working tree of `application-settings-bugs`, **uncommitted, NOT product-approved, not run on DEV, not seen in a browser**. The user (20 Nov 2026), with a screenshot of the canvas Checklist settings screen: "application settings sorting like canvas is not in code apps".
+
+### 1. Canvas
+
+- `con_Admin_Checklist_Reorder` lists the cluster's tasks in `pcf_ReorderTaskList_AdminScreen`, a `pdd_CustomControl.PowerDragDrop` list (`Admin Project Default Checklists Screen.pa.yaml` L1543-1600). The hint `TextCanvas1` reads "To reorder drag and drop listed items" (L1542).
+- Save writes each row's new position as its Order (L1644-1661).
+- The only other canvas screen with PowerDragDrop is CAPEX Accounts.
+
+### 2. What was wrong
+
+D18 b (19 Oct 2026, decided with the product owner) is "native drag-and-drop plus Move up / Move down buttons", and file 13 Part 2 A said Default Checklists had it. The D36 port wired the shared `ReorderPanel` with `draggable` on for CAPEX Accounts only, so Check List Settings could be reordered with the arrow buttons only, and its hint said so (`REORDER_HELP`).
+
+### 3. What changed
+
+- `admin-default-checklists/Screen.tsx`: the Reorder panel passes `draggable: true`. The rows show a grip and can be dragged; the "1." positions renumber as a row moves; the Move up / Move down buttons, focus handling and announcements are unchanged. Save, the stale-list guard and the written Orders are unchanged (`reorderPatch`, 1-based).
+- `admin-default-checklists/rules.ts` `REORDER_HELP`: "To reorder drag and drop listed items, or use the move up / move down buttons." **DIVERGENCE** from the canvas text (it names the buttons too), the same words as the CAPEX Accounts panel's `REORDER_HINT`.
+- `components/ReorderItems.tsx`: a drag start also calls `dataTransfer.setData("text/plain", <row id>)`. Firefox starts no HTML5 drag without it, so drag-and-drop did not work in Firefox on CAPEX Accounts either. Fixed for both screens.
+
+**Tests:** UT-ADCHK-941 (rows are draggable, the hint text, a drag of Order 1 to the end, Save writes `[T2 → 1, T3 → 2, T1 → 3]`), UT-REORDITEMS-005 (drag in the Check List Settings configuration renumbers positions and carries the row id). UT-REORDITEMS-004's drag mock gained `setData`.
+
+**Not run:** the E2E parity suite, a DEV or browser check (native drag in the Power Apps host iframe, Firefox).
+
+## D150 — Application Settings: canvas parity sweep of all six screens (20 Nov 2026; number PROVISIONAL, may be renumbered at merge)
+
+**Status:** working tree of `application-settings-bugs`, **uncommitted, NOT product-approved, not run on DEV, not seen in a browser**. The user (20 Nov 2026) listed problems across Application Settings and asked for the whole area to match the canvas:
+- the Active / Inactive and Completion Date icons;
+- the Add Task form and the reorder type;
+- the Add / Edit approver form;
+- the delete dialog's button colour;
+- the CAPEX account order, the New / Edit account and Edit subaccount forms, the Deactivate icon and the grid UI;
+- the Costs blue italic text.
+
+The user also asked that **only Application Settings changes**. Shared components therefore got opt-in props only. Two shared fixes that would also have changed PM screens were withdrawn (§3).
+
+### 1. What changed
+
+The entry in `13-CODE-APP-IMPROVEMENTS-OVER-CANVAS.md` lists each change per screen with its tests. The main causes:
+- **Delete / confirm dialogs (every screen):** `ConfirmDialog destructive` painted Confirm red, but every admin dialog is `cmp_PopUp_Confirmation`. That component hard-codes a themePrimary Confirm with CheckMark at 128 px (L193-219) and never reads the instances' `IconRightButton`.
+- **Check List Settings icons:** a `& td span` colour rule in `TaskTable.tsx` (0-1-2) out-ranked the icon tone class (0-1-0), so every grid icon rendered `#242424`.
+- **Costs blue italic:** `drawerStyles.ts` copied the shared standard style onto every input of both panels. The canvas sets the pair per control, unconditionally, on 22 controls. `STANDARD-ASSUMPTION-STYLING-AUDIT.md` said no Admin screen had any; corrected.
+- **Elsewhere:** captions, required marks, error styles, placeholders, counters and texts that the port had added or reworded without a decision were restored to the canvas.
+
+### 2. Kept (recorded decisions)
+
+- D18 a, e-k: tab sort, the corrected typos.
+- D19: Delete Account also blocked by the account's own contract; the deactivate cascade; the server number check; trimming.
+- D20 / D21 / D67: no Apply bars.
+- D22: blank Check List blocks Save; Reset Gate disabled without a saved row.
+- D35 / X1, and doc 13 Part 1: the "Discard changes?" prompts.
+- D36 §4: panels stay open on a failed save.
+- D64 row 7: the row hover fill.
+- D65 / rule 22: the "Save" / "Cancel" hover texts.
+- D149: drag and drop with the Move up / Move down buttons.
+- **Rule 16:** existing `data-testid`s were not renamed to the canvas names. This covers the dialog buttons and the panel ✕; the reorder lists only gained a new id.
+
+### 2a. Canvas defects kept fixed (the user, 20 Nov 2026)
+
+The user: "if you have changed a canvas defect which was resolved in code back to the canvas defect, revert it". The sweep had put nine canvas defects back. They were restored, and each is marked `SOURCE DEFECT (fix kept, D150)` in the code so a later parity pass does not undo them again. Where a twin was useful, the canvas behaviour stays as a `…CanvasParity` twin.
+
+| Screen | Canvas defect | Kept fix | Tests |
+|---|---|---|---|
+| CAPEX Accounts | `IsNumeric` lets "-5", "+5" and "1e3" through as account / subaccount numbers | Digits only (`isDigitsOnly`); the canvas rule is `isCanvasNumberCanvasParity` | UT-ADCAPEX-049, 942, 943, 950 |
+| CAPEX Accounts | Activate is offered on a subaccount under an inactive account | Activate only under an active account (doc 09 §1) | UT-ADCAPEX-050, 941 |
+| CAPEX Accounts | The delete-account text says "with its all related subaccounts", but Delete is only offered for an account without any | That claim dropped | UT-ADCAPEX-033, 946, 906, 935 |
+| CAPEX Accounts | The Activate texts don't say that removed forecast costs are not restored | The sentence added (account and subaccount) | UT-ADCAPEX-945 |
+| Project Gates | The Check List error reads "The cluster cannot be blank.", the Gate field's text copied onto it | "The check list item cannot be blank." | UT-ADGATE-025 |
+| Project Gates | A mode change clears saved people on Save without a word | Warning under Approval Mode (`droppedRoles`) | UT-ADGATE-032, 936 |
+| Project Gates | The Draft gate's "Gate active" shows the stored value (can be OFF) while Save writes ON | Shows ON, with "The Draft gate is always active." | UT-ADGATE-935 |
+| Project Gates | Reset Gate writes on click, with no confirmation; the write cannot be undone | "Reset Gate?" confirmation, in the canvas blue look (no red) | UT-ADGATE-054, 910 |
+| Contracts | An inactive contract is listed unmarked, so it looks active but never seeds project contracts | "Inactive" badge | UT-ADCONTR-928 |
+
+These were **not** treated as defects, so they follow the canvas:
+- the Check List Settings "permanently delete" text (the flow does delete the row);
+- the blank-name message shown as soon as the form opens;
+- the "Edit Approvers" title (D22);
+- Reorder subaccounts always enabled (D19);
+- empty cells instead of "-";
+- the raw margin number;
+- the red border on a blank value.
+
+### 3. Not done (would change other screens, or needs a shared design)
+
+- `ConfirmDialog` `classicPopUp` description `PaddingTop` 20 (PM `cmp_PopUp_Confirmation:148`; the code has 16). The PM screens use the same variant.
+- The semibold-caption fix in `Fields.tsx` / `canvas.css`: `.canvas-panel .fui-Field label { font-weight: 400 }` cancels `labelWeight="semibold"` everywhere, PM Checklist and Generators included. Each admin panel sets its semibold captions locally instead.
+- People search from 1 character (`data/adminGatesApprovals.ts` `searchPeople`): the same function serves PM Checklist, General Data and Team.
+- `PanelButtons look="brand"`: the canvas Save at 16 px regular with a transparent disabled state, and the 14 px Cancel. Every brand-look panel would change.
+- The CAPEX `<parent>_` prefix drawn outside the input box (needs a new `TextField` prop).
+- `PM_CONFIRMATION_POPUP` is still defined twice (Production, Check List Settings `CANVAS_POPUP`). A shared export would touch Production.
+- `PeoplePicker` combobox semantics (`role="combobox"`, Escape).
+- `check-canvas-identities.mjs`: accept `ChoiceField` for a canvas ComboBox.
+
+### 4. Open for the product owner
+
+1. ~~Reset Gate confirmation~~ and ~~CAPEX account number~~: settled by the user, as defect fixes kept (§2a). Still open: whether Edit Account should check the number, as the canvas does.
+2. **Check List Settings delete text**: the canvas "permanently delete" is used; the row is flagged To Delete and the sync flow then deletes it.
+3. **Additions without a decision**:
+   - Costs: the sticky Actions column; Add Period stops at 10; the comment icon is disabled without rights; Edit / Delete are disabled on rows without a sub-account.
+   - Milestones: blank FID shows "-"; Edit is disabled for non-admins.
+   - Contracts: the Add button is focusable at its limit.
+   - Gates: the extra Save checks; the optimistic toggles; inactive tasks are hidden.
+
+**Verification:** each screen's folder tests passed, as did the shared component tests and the control-label, chevron and canvas-identity gates: 30 files, 854 tests. `npm run verify` is listed in the session report. **Not run:** the E2E parity suite, DEV and a browser check (icon colours, panel spacing, native drag in the host iframe, Firefox).
+
+## D151 — Check List Settings: the country / technology tabs sort A → Z by name (21 Nov 2026; number PROVISIONAL, may be renumbered at merge)
+
+**Status:** working tree of `application-settings-bugs`, **uncommitted, NOT product-approved, not run on DEV**. The user (21 Nov 2026, with a screenshot of the code app): "why again like this not alphabetical".
+
+### 1. The two sources disagree
+
+- The extracted canvas YAML (solution 1.21.709, `Admin Project Default Checklists Screen.pa.yaml` L231-236) sorts the strip by Order: `Sort('Checklist Country And Technologies', Order, SortOrder.Ascending)`. In VSBCloud_Dev that reads Germany Wind, Germany PV, Poland PV, …, which is what the code app showed.
+- The **live** canvas app in the same environment lists the tabs alphabetically — Croatia PV, Croatia Wind, Finland PV, … Spain Wind — and opens on Croatia PV (the user's canvas screenshot of 20 Nov 2026; the E2E parity run of 29 Oct 2026 logged the same as O5 and left it unchanged). The live app was changed after the extract.
+
+### 2. Decision
+
+The live app wins (the user, 21 Nov 2026): `sortTabs` orders by name A → Z, case-insensitive, with the Order key as the tie-break. The default tab is the left-most, which is now also the canvas `OnVisible` default (`First(SortByColumns(…, "vsb_name"))`, L23-28), so the D18 f mismatch (strip by Order, default by name) no longer arises. The Order-sorted strip stays as the twin `sortTabsByOrderCanvasParity` (D18 e's numeric-aware sort).
+
+**Tests:** UT-ADCHK-013 (A → Z, case, tie-break), 014 / 015 (the twin), 017, UT-ADCHK-901 (the strip and the default tab). The fixture tab "DE PV" was renamed "DK PV" so the fixtures' default tab (DE Wind, whose tasks they hold) stays first under the new sort.
+
+**Open:** the extracted YAML should be refreshed from the live app (the migration's canvas-identity gate and the parity harness still read 1.21.709).

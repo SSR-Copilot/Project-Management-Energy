@@ -6,7 +6,7 @@
  * `data/adminCost.test.ts`.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, renderHook, screen, waitFor, within } from "@testing-library/react";
 import { FluentProvider } from "@fluentui/react-components";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
@@ -65,12 +65,13 @@ vi.mock("./hooks", async (importOriginal) => {
 });
 
 import { vsbTheme } from "@/theme/fluent";
-import { appliedRules } from "@/test/appliedRules";
-import { AppToaster } from "@/components";
+import { appliedPseudoRules, appliedRules } from "@/test/appliedRules";
+import { AppToaster, useStandardListboxStyles, useStandardValueClass } from "@/components";
 import { CONTRACT_TYPE, ContractDeleteError, OpexFollowUpError } from "@/domain/costStandards";
 import { DataError } from "@/platform/errors";
+import { palette } from "@/theme/tokens";
 import * as fx from "./fixtures";
-import { MSG } from "./constants";
+import { CLUSTER_LABELS, COST_PAID_BY_OPTIONS, MSG } from "./constants";
 import CostsSettingsScreen from "./Screen";
 
 function Harness({ children }: { children: ReactNode }) {
@@ -86,6 +87,44 @@ function Harness({ children }: { children: ReactNode }) {
 
 const isDisabled = (el: HTMLElement) => el.hasAttribute("disabled") || el.getAttribute("aria-disabled") === "true";
 const openSection = (title: string) => fireEvent.click(screen.getByRole("button", { name: title }));
+
+/**
+ * The shared standard-assumption classes (rule 20), as `standardValue.test.tsx` reads them: Griffel merges
+ * classes (dropping the sequence hash), so an element "carries" a style when it has every atomic class of it.
+ */
+const atoms = (cls: string) => cls.split(" ").filter((c) => c && !c.startsWith("___"));
+const carries = (el: Element | null | undefined, cls: string) => !!el && atoms(cls).every((a) => el.className.split(" ").includes(a));
+function standardClasses() {
+  const { result } = renderHook(() => ({ value: useStandardValueClass(), listbox: useStandardListboxStyles() }), { wrapper: Harness });
+  return {
+    blueItalic: result.current.value("standard") as string,
+    italic: result.current.value("italic") as string,
+    listbox: result.current.listbox.standard,
+  };
+}
+/** cssstyle normalises a hex colour to `rgb(…)`; accept both spellings. */
+const rgb = (hex: string) => {
+  const n = parseInt(hex.replace("#", ""), 16);
+  return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`;
+};
+/**
+ * EVERY value the element's atomic classes declare for `prop` (whitespace stripped). `appliedRules` keeps the
+ * last one in sheet order, which for a Fluent slot that also sets the property is Fluent's token, not ours.
+ */
+function declaredValues(el: Element, prop: string): string[] {
+  const out: string[] = [];
+  for (const sheet of Array.from(document.styleSheets)) {
+    let rules: CSSRule[] = [];
+    try { rules = Array.from(sheet.cssRules ?? []); } catch { continue; }
+    for (const rule of rules) {
+      if (!(rule instanceof CSSStyleRule) || !rule.selectorText.startsWith(".")) continue;
+      if (!el.classList.contains(rule.selectorText.slice(1))) continue;
+      const v = rule.style.getPropertyValue(prop);
+      if (v) out.push(v.replace(/\s/g, ""));
+    }
+  }
+  return out;
+}
 
 /*
  * Row controls are named by their canvas caption ("Edit", "+", "Add Period" …, CONVENTIONS rule
@@ -172,6 +211,32 @@ describe("CostsSettingsScreen", () => {
     const dialog = await screen.findByRole("dialog", { name: /Add Cost/ });
     expect(within(dialog).getByRole("button", { name: "Save" })).toBeDisabled();
     expect(within(dialog).getByText("0/55")).toBeInTheDocument();
+  });
+
+  it("UT-ADCOST-945 DEVEX rows draw the canvas comment image ('Frame 3' with a red dot when a comment exists, 'Frame 3 (1)' otherwise, 23 px) and the connector at X 16 / 15 (ACS:4236-4276, 4400-4455)", () => {
+    render(<Harness><CostsSettingsScreen /></Harness>);
+    openSection("DEVEX/CAPEX");
+    fireEvent.click(screen.getByTestId(T.devexFold(DEVEX_CATEGORY)));
+    const buttons = screen.getAllByTestId(/^img_DevexCapex_Content_StandardCosts_CardBody_CostsTable_Comment-/);
+    expect(buttons.length).toBeGreaterThan(1);
+    const glyphs = buttons.map((b) => b.querySelector("svg") as SVGElement);
+    for (const g of glyphs) {
+      expect(g.getAttribute("width")).toBe("23");
+      expect(g.getAttribute("viewBox")).toBe("0 0 31 27");
+      expect(g.querySelectorAll("path").length).toBe(2);
+    }
+    const withComment = glyphs.filter((g) => g.getAttribute("data-icon-name") === "Frame 3");
+    const without = glyphs.filter((g) => g.getAttribute("data-icon-name") === "Frame 3 (1)");
+    expect(withComment.length).toBeGreaterThan(0);
+    expect(without.length).toBeGreaterThan(0);
+    for (const g of withComment) expect(g.querySelector("circle")?.getAttribute("fill")).toBe("#FC3E3E");
+    for (const g of without) expect(g.querySelector("circle")).toBeNull();
+    // The tree connector lives on the first cell of each child row: vertical line at 16 px, elbow from 15 px.
+    const firstCell = buttons[0]!.closest("tr")!.querySelector("td") as HTMLElement;
+    expect(appliedPseudoRules(firstCell, "::before")["left"]).toBe("16px");
+    const elbow = appliedPseudoRules(firstCell, "::after");
+    expect(elbow["left"]).toBe("15px");
+    expect(elbow["width"]).toBe("15px");
   });
 
   it("UT-ADCOST-906 opens Edit Period with the inflation block read-only", async () => {
@@ -527,6 +592,120 @@ describe("CostsSettingsScreen", () => {
     expect(css["display"]).toBe("flex");
     expect(css["flex-direction"]).toBe("column");
     expect(within(list).getAllByRole("checkbox")).toHaveLength(5);
+  });
+
+  /* ── Rule 20: the canvas FontColor / FontItalic pair, per control, through the ONE shared style ── */
+
+  it("UT-ADCOST-942 DEVEX panel: blue italic on Description, clusters, Category, Sub-Account, Unit (box and open list), Cost; italic only on Distribution Frequency, Cost Paid By, Comment; plain Apply VAT / Depreciation", async () => {
+    const cls = standardClasses();
+    render(<Harness><CostsSettingsScreen /></Harness>);
+    openSection("DEVEX/CAPEX");
+    fireEvent.click(screen.getByRole("button", { name: "Add Cost" }));
+    const dialog = await screen.findByRole("dialog", { name: /Add Cost/ });
+    const root = (testId: string) => within(dialog).getByTestId(testId).parentElement;
+    // `txt_…_Description` (ACS:9861-62) and `txt_…_Cost` (ACS:10674-75): the class sits on the Fluent root around the input.
+    expect(carries(root("txt_AdminCost_RightPanel_Form_AddCost_Fields_Description"), cls.blueItalic)).toBe(true);
+    expect(carries(root("txt_AdminCost_RightPanel_Form_AddCost_Fields_Cost"), cls.blueItalic)).toBe(true);
+    // `chk_AdminCost_RightPanel_SelectCluster1…5` (ACS:9953-10032): the pair is on each label.
+    for (const label of CLUSTER_LABELS) expect(carries(within(dialog).getByText(label), cls.blueItalic), label).toBe(true);
+    // `cmb_…_Category` (ACS:10211-12) / `cmb_…_Subaccount` (ACS:10348-49): the combobox root.
+    expect(carries(root("cmb_AdminCost_RightPanel_Form_AddCost_Fields_Category"), cls.blueItalic)).toBe(true);
+    expect(carries(root("cmb_AdminCost_RightPanel_Form_AddCost_Fields_Subaccount"), cls.blueItalic)).toBe(true);
+    // Italic ONLY (no colour): `cmb_…_Distribution_Frequency` (ACS:10085), `rad_…_Cost_Paid_By` (ACS:10509), `txt_…_Comment` (ACS:10750).
+    const frequency = root("cmb_AdminCost_RightPanel_Form_AddCost_Fields_Distribution_Frequency");
+    expect(carries(frequency, cls.italic)).toBe(true);
+    expect(carries(frequency, cls.blueItalic)).toBe(false);
+    for (const o of COST_PAID_BY_OPTIONS) {
+      const label = within(dialog).getByText(o.label);
+      expect(carries(label, cls.italic), o.label).toBe(true);
+      expect(carries(label, cls.blueItalic), o.label).toBe(false);
+    }
+    const comment = root("txt_AdminCost_RightPanel_Form_AddCost_Fields_Comment");
+    expect(carries(comment, cls.italic)).toBe(true);
+    expect(carries(comment, cls.blueItalic)).toBe(false);
+    // Plain: `chk_…_ApplyVat` / `chk_…_Depreciation` (`FontColor: =gblAppColors.Label.Color`, ACS:10152 / 10164).
+    for (const label of ["Apply VAT", "Depreciation"]) {
+      expect(carries(within(dialog).getByText(label), cls.italic), label).toBe(false);
+      expect(carries(within(dialog).getByText(label), cls.blueItalic), label).toBe(false);
+    }
+    // `cmb_…_Unit` (ACS:10563-64): the box AND its open list (a canvas ComboBox styles every option).
+    const unit = within(dialog).getByTestId("cmb_AdminCost_RightPanel_Form_AddCost_Fields_Unit");
+    expect(carries(unit.parentElement, cls.blueItalic)).toBe(true);
+    fireEvent.click(unit);
+    const list = await screen.findByRole("listbox");
+    expect(carries(list, cls.listbox)).toBe(true);
+    expect(within(list).getAllByRole("option").length).toBeGreaterThan(0);
+    // Every styled control keeps its canvas identity.
+    for (const id of [
+      "txt_AdminCost_RightPanel_Form_AddCost_Fields_Description", "cmb_AdminCost_RightPanel_Form_AddCost_Fields_Category",
+      "cmb_AdminCost_RightPanel_Form_AddCost_Fields_Subaccount", "cmb_AdminCost_RightPanel_Form_AddCost_Fields_Unit",
+      "txt_AdminCost_RightPanel_Form_AddCost_Fields_Cost", "txt_AdminCost_RightPanel_Form_AddCost_Fields_Comment",
+    ]) expect(within(dialog).getByTestId(id).getAttribute("aria-label"), id).toBeTruthy();
+  });
+
+  it("UT-ADCOST-943 period panel: blue italic on Description, Start Date, the money figures, Inflation Start Year and Inflation Profile; plain Currency and dropdowns; no Description asterisk", async () => {
+    const cls = standardClasses();
+    render(<Harness><CostsSettingsScreen /></Harness>);
+    openSection("Land Lease");
+    fireEvent.click(screen.getByTestId(T.editContract(LL_P1)));
+    const dialog = await screen.findByRole("dialog", { name: /Edit Contract/ });
+    const root = (testId: string) => within(dialog).getByTestId(testId).parentElement;
+    // `txt_…_Description_1` (ACS:5092-93), `txt_…_StartDate` (ACS:5315-16).
+    expect(carries(root("txt_LandLease_RightPanel_NewEditCost_BodyContent_Description_1"), cls.blueItalic)).toBe(true);
+    expect(carries(root("txt_LandLease_RightPanel_NewEditCost_BodyContent_StartDate"), cls.blueItalic)).toBe(true);
+    // `drp_…_Currency_1` (ACS:5578): no FontColor / FontItalic — plain (it was wrongly blue italic).
+    const currency = root("drp_LandLease_RightPanel_NewEditCost_BodyContent_Currency_1");
+    expect(carries(currency, cls.blueItalic)).toBe(false);
+    expect(carries(currency, cls.italic)).toBe(false);
+    // The five money figures (ACS:5807-6338).
+    for (const id of ["FixedCosts_1", "PercentOfRevenues_1", "EuroMWh_1", "EuroMW_1", "EuroWTG_1"]) {
+      expect(carries(root(`txt_LandLease_RightPanel_NewEditPeriod_BodyContent_${id}`), cls.blueItalic), id).toBe(true);
+    }
+    // The dropdowns stay plain (`BasePaletteColor` only).
+    for (const id of [
+      "drp_LandLease_RightPanel_NewEditPeriod_BodyContent_DurationYears_1", "drp_LandLease_RightPanel_NewEditPeriod_BodyContent_Aggregation_1",
+      "drp_LandLease_RightPanel_NewEditCost_BodyContent_DistributionFrequency_Month_1",
+    ]) {
+      const drop = within(dialog).getByTestId(id);
+      expect(carries(drop, cls.blueItalic) || carries(drop.parentElement, cls.blueItalic), id).toBe(false);
+    }
+    // Inflation on (Period 1 edits it): `txt_…_InflationStartYear_1` (ACS:7189-90) and `txt_…_InflationProfile_1` (ACS:7506-07).
+    const inflation = within(dialog).getByRole("switch", { name: "Inflation Profile" }) as HTMLInputElement;
+    if (!inflation.checked) fireEvent.click(inflation);
+    expect(carries(root("txt_LandLease_RightPanel_NewEditCost_BodyContent_InflationStartYear_1"), cls.blueItalic)).toBe(true);
+    expect(carries(root("txt_LandLease_RightPanel_NewEditCost_BodyContent_InflationProfile_1"), cls.blueItalic)).toBe(true);
+    // `lbl_…_DescriptionAsterisk_1.Visible: =//IsBlank(…)` (ACS:5192) is commented out: no required mark on Description.
+    const descriptionLabel = within(dialog).getByText("Description", { selector: "label" });
+    expect(descriptionLabel.querySelector(".fui-Label__required")).toBeNull();
+    expect(within(dialog).getByRole("textbox", { name: "Description" })).not.toBeRequired();
+  });
+
+  it("UT-ADCOST-944 the delete dialog is the canvas cmp_PopUp_Confirmation: themePrimary Confirm with a CheckMark (128 px), Cancel with an ✕ (96 px), a 490 px box on the dark scrim — not a red button", () => {
+    render(<Harness><CostsSettingsScreen /></Harness>);
+    openSection("Land Lease");
+    fireEvent.click(screen.getByTestId(T.deleteContract(LL_P1)));
+    const dialog = screen.getByRole("alertdialog");
+    const confirm = within(dialog).getByTestId("confirm-dialog-confirm");
+    const cancel = within(dialog).getByTestId("confirm-dialog-cancel");
+    expect(confirm).toHaveTextContent("Confirm");
+    expect(confirm).toHaveAttribute("aria-label", "Confirm");
+    expect(confirm.style.width).toBe("128px");
+    expect(confirm.querySelector("svg")).not.toBeNull();
+    const confirmCss = appliedRules(confirm);
+    expect([palette.themePrimary.toLowerCase(), rgb(palette.themePrimary)]).toContain(confirmCss["background-color"]?.toLowerCase());
+    expect([palette.Error.toLowerCase(), rgb(palette.Error)]).not.toContain(confirmCss["background-color"]?.toLowerCase());
+    expect([palette.white.toLowerCase(), rgb(palette.white), "white"]).toContain(confirmCss["color"]?.toLowerCase());
+    expect(cancel).toHaveTextContent("Cancel");
+    expect(cancel).toHaveAttribute("aria-label", "Cancel");
+    expect(cancel.querySelector("svg")).not.toBeNull();
+    expect(appliedRules(cancel)["width"]).toBe("96px");
+    // `con_PopUpConfirmation_Body.Width: =Min(490, …)`; the scrim `RGBA(0, 0, 0, 0.7)`.
+    expect(appliedRules(dialog)["width"]).toBe("490px");
+    const backdrop = document.querySelector(".fui-DialogSurface__backdrop");
+    expect(backdrop).not.toBeNull();
+    expect(declaredValues(backdrop as Element, "background-color")).toContain("rgba(0,0,0,0.7)");
+    fireEvent.click(cancel);
+    expect(mutateAsync).not.toHaveBeenCalled();
   });
 
   it("UT-ADCOST-932 shows the empty state when no countries load (real data path)", async () => {

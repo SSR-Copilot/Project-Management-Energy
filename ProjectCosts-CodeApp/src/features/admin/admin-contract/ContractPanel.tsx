@@ -6,6 +6,23 @@
  * The ✕ is `ico_Add_Edit_AdminContracts_Close`; Save / Cancel are `ico_AdminContracts_Save` /
  * `ico_AdminContracts_Cancel`.
  *
+ * Canvas parity (20 Nov 2026, D23):
+ *  - the five text inputs carry the UNCONDITIONAL standard-assumption pair (`FontColor: themePrimary`,
+ *    `FontItalic: true`; ACS:2027, 2401, 2547, 2780, 2993) through the shared style (CONVENTIONS rule 20);
+ *  - captions are `gblAppStyles.Label`: black, 11 pt (14.67 px) Semibold; the required `*` is the
+ *    `lbl_…_Aestrik` label — `palette.Error`, Semibold, a 10-wide box hung LEFT of the caption
+ *    (`X: =lbl_….X - Self.Width`, ACS:2067-2098, 3693);
+ *  - the error labels (`lbl_…_ErrorMessage`, ACS:1975, 2276, 2561, 2651) are `palette.Error`, Semibold,
+ *    `ExtraExtraSmall` (8 pt = 10.67 px), no icon, and `Visible` only for a NON-blank invalid value: a
+ *    blank field only greys Save (`visibleFieldError`);
+ *  - no placeholder on the month box (ACS:2398), no "%" / currency inside the margin boxes (ACS:2543,
+ *    2776), no caption and no `*` on `rad_AddEdit_AdminContracts_RightPanel_MarginType` (ACS:2897) —
+ *    it keeps its accessible name only;
+ *  - the fixed-value caption's currency is the canvas Poland → "PLN" / else "EUR" rule
+ *    (`panelFixedValueCurrency`, ACS:2506), passed in as `currency`;
+ *  - a Margin / Margin Type change resets both inputs to "0" (`withMargin` / `withMarginType`,
+ *    ACS:2872-2930).
+ *
  * DIVERGENCE: the canvas gave each column a 560 px minimum inside a 960 px panel and clipped the
  * DevCo column; here the columns shrink and stack.
  * DIVERGENCE: `ico_AdminContracts_Save.OnChange` hides the panel FIRST
@@ -17,19 +34,24 @@
  * `FormPanel busy` ignores Escape / backdrop and disables ✕ and both footer buttons;
  * "Loading contract..." (no canvas text) is a `coverLabel`, so the panel stays dismissable while it
  * shows.
+ * DIVERGENCE: the Margin / Margin Type radio messages ("Select whether…", "Select a margin type.")
+ * have no canvas equivalent (`MSG`); the canvas only greys Save.
  *
  * Hard-coded colour with no theme token: `#f4f4f4` (the canvas input fill on the sign Select).
  */
 import { useId, type ReactNode } from "react";
-import { Field, Input, Radio, RadioGroup, Select, Textarea, makeStyles, tokens } from "@fluentui/react-components";
-import { FormPanel, TextField, type CloseReason, type DiscardText } from "@/components";
-import { shownError, useTouched } from "@/features/shared/useTouched";
-import { media } from "@/theme/tokens";
+import { Field, Input, Radio, RadioGroup, Select, Textarea, makeStyles, mergeClasses, tokens } from "@fluentui/react-components";
+import { FormPanel, TextField, useStandardValueClass, type CloseReason, type DiscardText } from "@/components";
+import { media, palette } from "@/theme/tokens";
 import {
   CARD_TEXT as T, CLOSING_REF_OPTIONS, COMMENT_MAX, DESCRIPTION_MAX, MARGIN_CHOICES, MARGIN_TYPE, MARGIN_TYPE_LABEL,
-  MONTH_SIGNS, MSG, commentCounter, marginValueHeading, withMargin, withMarginType,
+  MONTH_SIGNS, commentCounter, marginValueHeading, panelInputIsStandard, visibleFieldError, withMargin, withMarginType,
   type ContractForm, type FormErrors,
 } from "./rules";
+
+/** `gblAppSizes.Font.Medium` (11 pt) and `ExtraExtraSmall` (8 pt) at 96/72 px per point. */
+const CAPTION_PX = "14.6667px";
+const ERROR_PX = "10.6667px";
 
 /**
  * Canvas parity of the panel chrome. Everything that fights a GLOBAL `canvas.css` rule is
@@ -41,9 +63,29 @@ const useStyles = makeStyles({
   columns: {
     display: "grid", gridTemplateColumns: "minmax(0, 360px) minmax(0, 1fr)", columnGap: "40px", rowGap: "20px",
     [media.belowMd]: { gridTemplateColumns: "minmax(0, 1fr)" },
-    /* Canvas labels are semibold (ACS:2053); `canvas.css:107` forces 400 for every panel. */
-    "& .fui-Field.fui-Field > label": { fontWeight: tokens.fontWeightSemibold },
+    /*
+     * Captions `lbl_Add_Edit_AdminContracts_*` = `gblAppStyles.Label` (black) at `Size: Medium`, Semibold
+     * (ACS:2053-2058); `canvas.css:107` forces 400 for every panel. `position: relative` anchors the `*`.
+     */
+    "& .fui-Field.fui-Field > label": {
+      position: "relative", color: palette.black, fontSize: CAPTION_PX, fontWeight: tokens.fontWeightSemibold,
+    },
     "& .fui-Radio__label": { fontWeight: tokens.fontWeightSemibold },
+    /*
+     * `lbl_…_Aestrik` (ACS:2067-2098, 3693): a classic Label `Text: "*"`, `Color: palette.Error`,
+     * `FontWeight: Semibold`, `Width: 10`, `X: =caption.X - Self.Width` — hung 10 px LEFT of the caption,
+     * out of the caption's flow. Not the shared `useCanvasRequiredMark` (that is the PM `lbl_…_Requered`:
+     * akzent5, regular weight, a 15 px box), so the look is transcribed here.
+     */
+    "& .fui-Field .fui-Field__label .fui-Label__required": {
+      position: "absolute", left: "-10px", top: "0", width: "10px",
+      marginLeft: "0", paddingLeft: "0", paddingRight: "0",
+      color: palette.Error, fontWeight: tokens.fontWeightSemibold, fontSize: CAPTION_PX,
+    },
+    /* `lbl_…_ErrorMessage` (ACS:1975, 2276, 2561, 2651): `palette.Error`, Semibold, `ExtraExtraSmall` (8 pt). */
+    "& .fui-Field__validationMessage": {
+      color: palette.Error, fontWeight: tokens.fontWeightSemibold, fontSize: ERROR_PX,
+    },
     /* `canvas.css:106` greys Input/Dropdown/Textarea but not the Select. */
     "& .fui-Select.fui-Select": { backgroundColor: "#f4f4f4", borderTopWidth: "0", borderRightWidth: "0", borderBottomWidth: "0", borderLeftWidth: "0", borderRadius: "3px" },
     "& .fui-Select__select.fui-Select__select": {
@@ -70,14 +112,13 @@ const useStyles = makeStyles({
   },
 });
 
-type Touchable = "description" | "month" | "marginPercentage" | "marginFixed";
-
 export interface ContractPanelProps {
   open: boolean;
   title: string;
   form: ContractForm;
   onFormChange: (next: ContractForm) => void;
   errors: FormErrors;
+  /** The fixed-value CAPTION's currency — `panelFixedValueCurrency` ("PLN" / "EUR"), not the card's ISO code. */
   currency: string;
   saveEnabled: boolean;
   /** A save is in flight: "Please wait, saving..." and every dismissal locked. */
@@ -106,14 +147,8 @@ export function ContractPanel({
   dirty, closePrompt, promptRequest, onPromptCancel, onDismiss, devCoForm, errorText,
 }: ContractPanelProps) {
   const styles = useStyles();
+  const standardClass = useStandardValueClass();
   const counterId = useId();
-  const { isTouched, touch } = useTouched<Touchable>();
-
-  /**
-   * Blank errors wait until the field was touched; format and range errors show at once (canvas).
-   * DIVERGENCE: the canvas never shows a blank error (its error labels need a non-blank value).
-   */
-  const shown = (field: Touchable, error: string | undefined) => shownError(error, isTouched(field), MSG.inputBlank);
 
   const set = (patch: Partial<ContractForm>) => onFormChange({ ...form, ...patch });
 
@@ -140,15 +175,16 @@ export function ContractPanel({
     >
       <div className={styles.columns}>
         <div className={styles.column}>
+          {/* `lbl_Add_Edit_AdminContracts_Description_ErrorMessage.Text` is commented out (ACS:2000-2017): no message ever. */}
           <TextField skin="plain"
             label={T.description} required ariaLabel={null} testId="txt_Add_Edit_AdminContracts_Description"
-            value={form.description} maxLength={DESCRIPTION_MAX} counter="none"
-            error={shown("description", errors.description)}
+            value={form.description} maxLength={DESCRIPTION_MAX} counter="none" validationIcon={null}
+            standard={panelInputIsStandard("description")}
+            error={visibleFieldError(errors.description)}
             onChange={(description) => set({ description })}
-            onBlur={() => touch("description")}
           />
 
-          <Field label={T.closingDateReference} required validationMessage={errors.closingRef}>
+          <Field label={T.closingDateReference} required validationMessage={errors.closingRef} validationMessageIcon={null}>
             <RadioGroup
               data-testid="rad_Contracts_RightPanel_NewEdit_CostsUntilClosingDate"
               value={form.closingRef === null ? "" : String(form.closingRef)}
@@ -160,11 +196,10 @@ export function ContractPanel({
 
           {/*
             The sign and the number share the canvas caption "Month Difference" (CONVENTIONS rule 16:
-            no canvas AccessibleLabel, so the visible caption).
-            DIVERGENCE: the "Months" placeholder has no canvas equivalent
-            (`txt_Add_Edit_AdminContracts_MonthDifference_Month` sets none).
+            no canvas AccessibleLabel, so the visible caption). No placeholder: the canvas
+            `txt_Add_Edit_AdminContracts_MonthDifference_Month` sets none (ACS:2398).
           */}
-          <Field label={T.monthDifference} required validationMessage={shown("month", errors.month)}>
+          <Field label={T.monthDifference} required validationMessage={visibleFieldError(errors.month)} validationMessageIcon={null}>
             <div className={styles.monthRow}>
               <Select
                 className={styles.sign} aria-label={T.monthDifference} data-testid="drp_Add_Edit_AdminContracts_MonthDifference_AddSub"
@@ -174,15 +209,15 @@ export function ContractPanel({
                 {MONTH_SIGNS.map((sign) => <option key={sign} value={sign}>{sign}</option>)}
               </Select>
               <Input
-                className={styles.months} aria-label={T.monthDifference} data-testid="txt_Add_Edit_AdminContracts_MonthDifference_Month" placeholder="Months"
+                className={mergeClasses(styles.months, standardClass(panelInputIsStandard("month")))}
+                aria-label={T.monthDifference} data-testid="txt_Add_Edit_AdminContracts_MonthDifference_Month"
                 inputMode="numeric" value={form.monthText}
                 onChange={(_, d) => set({ monthText: d.value })}
-                onBlur={() => touch("month")}
               />
             </div>
           </Field>
 
-          <Field label={T.margin} required validationMessage={errors.margin}>
+          <Field label={T.margin} required validationMessage={errors.margin} validationMessageIcon={null}>
             <RadioGroup
               data-testid="rad_Add_Edit_AdminContracts_RightPanel_NewEdit_Margin"
               value={form.margin === null ? "" : form.margin ? "yes" : "no"}
@@ -194,9 +229,11 @@ export function ContractPanel({
             </RadioGroup>
           </Field>
 
+          {/* `rad_AddEdit_AdminContracts_RightPanel_MarginType` (ACS:2897): no caption label and no `*`; the name is accessible only. */}
           {form.margin ? (
-            <Field label={T.marginType} required validationMessage={errors.marginType}>
+            <Field validationMessage={errors.marginType} validationMessageIcon={null}>
               <RadioGroup
+                aria-label={T.marginType}
                 data-testid="rad_AddEdit_AdminContracts_RightPanel_MarginType"
                 value={form.marginType === null ? "" : String(form.marginType)}
                 onChange={(_, d) => onFormChange(withMarginType(form, Number(d.value)))}
@@ -211,24 +248,24 @@ export function ContractPanel({
             </Field>
           ) : null}
 
-          {/* `txt_Add_Edit_AdminContracts_MarginPercentage.MaxLength` / `…_MarginFixedValue.MaxLength` = 130. */}
+          {/* `txt_Add_Edit_AdminContracts_MarginPercentage.MaxLength` / `…_MarginFixedValue.MaxLength` = 130; no suffix inside the box. */}
           {form.margin && form.marginType === MARGIN_TYPE.Percentage ? (
             <TextField skin="plain"
               label={T.marginPercentage} required ariaLabel={null} testId="txt_Add_Edit_AdminContracts_MarginPercentage"
-              value={form.marginPercentageText} maxLength={130} counter="none" inputMode="decimal" contentAfter="%"
-              error={shown("marginPercentage", errors.marginPercentage)}
+              value={form.marginPercentageText} maxLength={130} counter="none" inputMode="decimal" validationIcon={null}
+              standard={panelInputIsStandard("marginPercentage")}
+              error={visibleFieldError(errors.marginPercentage)}
               onChange={(marginPercentageText) => set({ marginPercentageText })}
-              onBlur={() => touch("marginPercentage")}
             />
           ) : null}
 
           {form.margin && form.marginType === MARGIN_TYPE.FixedValue ? (
             <TextField skin="plain"
               label={marginValueHeading(MARGIN_TYPE.FixedValue, currency)} required ariaLabel={null} testId="txt_Add_Edit_AdminContracts_MarginFixedValue"
-              value={form.marginFixedText} maxLength={130} counter="none" inputMode="decimal" contentAfter={currency}
-              error={shown("marginFixed", errors.marginFixed)}
+              value={form.marginFixedText} maxLength={130} counter="none" inputMode="decimal" validationIcon={null}
+              standard={panelInputIsStandard("marginFixed")}
+              error={visibleFieldError(errors.marginFixed)}
               onChange={(marginFixedText) => set({ marginFixedText })}
-              onBlur={() => touch("marginFixed")}
             />
           ) : null}
 
@@ -256,6 +293,7 @@ export function ContractPanel({
             }}
           >
             <Textarea
+              className={standardClass(panelInputIsStandard("comment"))}
               value={form.comment} maxLength={COMMENT_MAX} resize="vertical"
               aria-label={T.comment} data-testid="txt_Add_Edit_AdminContracts_Comments"
               textarea={{ className: styles.commentBox }}

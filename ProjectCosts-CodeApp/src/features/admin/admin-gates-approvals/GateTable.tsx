@@ -61,8 +61,17 @@ const addTaskDisabledReason = (tasksAvailable: boolean) => (tasksAvailable
 const useStyles = makeStyles({
   scroller: { overflowX: "auto", maxWidth: "100%" },
   table: { width: `${TABLE_WIDTH}px`, tableLayout: "fixed" },
+  /*
+   * `con_Admin_ProjectGatest_Approvals_Gallery_Header` (PGAS:435-437): `Fill: =gblAppColors.Gallery.Header`
+   * (`Grayscale40`, #FAFAFA), `Height: =32`. Pinned on hover too — Fluent repaints a header row on hover.
+   */
+  headerRow: {
+    height: "32px",
+    backgroundColor: palette.Grayscale40,
+    ":hover": { backgroundColor: palette.Grayscale40 },
+  },
   // Canvas header labels: Size gblAppSizes.Font.ExtraExtraSmall (8 pt = 10.67 px), colour measured in the Canvas run (rgb(11, 11, 11)).
-  headerCell: { fontWeight: tokens.fontWeightSemibold, fontSize: "10.6667px", color: "#0B0B0B" },
+  headerCell: { fontWeight: tokens.fontWeightSemibold, fontSize: "10.6667px", color: "#0B0B0B", height: "32px", paddingTop: 0, paddingBottom: 0 },
   gateRow: {
     // PGAS:1655 — Fill RGBA(0,0,0,0.1), DropShadow.Semilight.
     backgroundColor: "rgba(0,0,0,0.1)",
@@ -333,7 +342,7 @@ export function GateTable(props: GateTableProps) {
       {/* The table's `aria-label` is NEW (the canvas gallery has no caption). */}
       <Table className={styles.table} aria-label="Gate approvals" size="small" data-testid="gal_Admin_ProjectGates_DefaultApprovals_Clusters">
         <TableHeader data-testid="con_Admin_ProjectGatest_Approvals_Gallery_Header">
-          <TableRow>
+          <TableRow className={styles.headerRow}>
             {COLUMNS.map((c) => (
               <TableHeaderCell key={c.key} className={styles.headerCell} style={{ width: `${c.width}px` }} data-testid={c.control}>
                 {c.label}

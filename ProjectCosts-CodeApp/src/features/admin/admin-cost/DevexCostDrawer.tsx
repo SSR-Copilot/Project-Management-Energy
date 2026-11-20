@@ -10,17 +10,23 @@
  *
  * Every control's `data-testid` is its canvas name; none of them sets a literal `AccessibleLabel`,
  * so each `aria-label` is its visible caption (CONVENTIONS rule 16).
+ *
+ * The canvas standard-assumption pair (`FontColor: themePrimary` / `FontItalic: true`, rule 20) is
+ * a FIXED value per control here; `devexFieldStandard` says which half each control carries and the
+ * shared `standard` style (`@/components`) draws it — on the shared primitives through their
+ * `standard` prop, on the raw Fluent controls through `useStandardValueClass` on the root (which
+ * reaches the inner input / textarea / button) or on a checkbox / radio label slot.
  */
 import { useMemo, useState } from "react";
 import {
-  Checkbox, Dropdown, Field, Input, Option, Radio, RadioGroup, Text, Textarea,
+  Checkbox, Dropdown, Field, Input, mergeClasses, Option, Radio, RadioGroup, Text, Textarea,
 } from "@fluentui/react-components";
-import { FormPanel, PANEL_RADIO_ROW, TextField } from "@/components";
+import { FormPanel, PANEL_RADIO_ROW, TextField, useStandardListboxStyles, useStandardValueClass } from "@/components";
 import type { CapexHierarchy, DevexCost } from "@/data/adminCost";
 import { CLUSTER_LABELS, COST_PAID_BY_OPTIONS, MSG } from "./constants";
 import { useDrawerStyles } from "./drawerStyles";
 import {
-  canSaveDevex, devexCategoryOptions, isDirty, devexFormFromCost, devexPanelTitle, devexSubaccountOptions,
+  canSaveDevex, devexCategoryOptions, devexFieldStandard, isDirty, devexFormFromCost, devexPanelTitle, devexSubaccountOptions,
   emptyDevexForm, unitLabel, unitOptions, validateDevexForm, withDevexCategory, withDevexSubaccount,
   withDevexUnit, type ClusterFlags, type CostSelection, type DevexForm,
 } from "./rules";
@@ -43,6 +49,8 @@ export interface DevexCostDrawerProps {
 export function DevexCostDrawer(props: DevexCostDrawerProps) {
   const { open, editing, selection, hierarchy, costs, payerDefaults, locale, saving, error } = props;
   const styles = useDrawerStyles();
+  const standardClass = useStandardValueClass();
+  const listbox = useStandardListboxStyles();
   const [pristine] = useState<DevexForm>(() =>
     editing ? devexFormFromCost(editing, selection.countryName) : emptyDevexForm(selection.countryName));
   const [form, setForm] = useState<DevexForm>(pristine);
@@ -82,24 +90,28 @@ export function DevexCostDrawer(props: DevexCostDrawerProps) {
       {...(saving ? { busyLabel: MSG.saving } : {})}
     >
       <div className={styles.form}>
-        {/* `lbl_AdminCost_RightPanel_Form_Fields_AddCost_Fields_Description.Text` — "Description"; MaxLength 30. */}
+        {/* `lbl_AdminCost_RightPanel_Form_Fields_AddCost_Fields_Description.Text` — "Description"; MaxLength 30; blue italic (ACS:9861-62). */}
         <TextField skin="plain"
           label="Description"
           testId="txt_AdminCost_RightPanel_Form_AddCost_Fields_Description"
           required
+          standard={devexFieldStandard("description")}
           value={form.description}
           maxLength={30}
           counter="none"
           onChange={(v) => setForm((f) => ({ ...f, description: v }))}
         />
 
-        {/* `lbl_AdminCost_RightPanel_Form_AddCost_Fields_SelectCluster.Text` — "Select Cluster". */}
+        {/*
+          `lbl_AdminCost_RightPanel_Form_AddCost_Fields_SelectCluster.Text` — "Select Cluster". Each
+          `chk_AdminCost_RightPanel_SelectCluster1…5` label is blue italic (ACS:9953-10032).
+        */}
         <Field label="Select Cluster" required>
           <div role="group" aria-label="Select Cluster" className={styles.checkList} data-testid="chk_AdminCost_RightPanel_SelectClusters">
             {CLUSTER_LABELS.map((label, i) => (
               <Checkbox
                 key={label}
-                label={label}
+                label={{ children: label, className: standardClass(devexFieldStandard("clusters")) }}
                 value={String(i + 1)}
                 aria-label={label}
                 data-testid={`chk_AdminCost_RightPanel_SelectCluster${i + 1}`}
@@ -112,10 +124,12 @@ export function DevexCostDrawer(props: DevexCostDrawerProps) {
 
         {/*
           `lbl_AdminCost_RightPanel_Form_AddCost_Fields_Distribution_Frequency.Text` — "Distribution
-          Frequency". The canvas ComboBox is disabled with 3 Months; shown as its fixed value.
+          Frequency". The canvas ComboBox is disabled with 3 Months; shown as its fixed value. Italic
+          only — `cmb_…_Distribution_Frequency` sets `FontItalic` without a `FontColor` (ACS:10085).
         */}
         <Field label="Distribution Frequency" required>
           <Input
+            className={mergeClasses(standardClass(devexFieldStandard("distributionFrequency")))}
             value="3 Months"
             disabled
             aria-label="Distribution Frequency"
@@ -124,17 +138,21 @@ export function DevexCostDrawer(props: DevexCostDrawerProps) {
         </Field>
 
         <div className={styles.inline}>
-          {/* `chk_AdminCost_RightPanel_Form_AddCost_Fields_ApplyVat.Label` / `_Depreciation.Label` — verbatim; locked on. */}
-          <Checkbox label="Apply VAT" value="applyVat" aria-label="Apply VAT" data-testid="chk_AdminCost_RightPanel_Form_AddCost_Fields_ApplyVat" checked disabled />
-          <Checkbox label="Depreciation" value="depreciation" aria-label="Depreciation" data-testid="chk_AdminCost_RightPanel_Form_AddCost_Fields_Depreciation" checked disabled />
+          {/*
+            `chk_AdminCost_RightPanel_Form_AddCost_Fields_ApplyVat.Label` / `_Depreciation.Label` — verbatim; locked on.
+            Plain: `FontColor: =gblAppColors.Label.Color`, no `FontItalic` (ACS:10152 / 10164, `devexFieldStandard`).
+          */}
+          <Checkbox label={{ children: "Apply VAT", className: standardClass(devexFieldStandard("applyVat")) }} value="applyVat" aria-label="Apply VAT" data-testid="chk_AdminCost_RightPanel_Form_AddCost_Fields_ApplyVat" checked disabled />
+          <Checkbox label={{ children: "Depreciation", className: standardClass(devexFieldStandard("depreciation")) }} value="depreciation" aria-label="Depreciation" data-testid="chk_AdminCost_RightPanel_Form_AddCost_Fields_Depreciation" checked disabled />
         </div>
 
-        {/* `lbl_AdminCost_RightPanel_Form_AddCost_Fields_Category.Text` — "Category"; `InputTextPlaceholder` "Find Category". */}
+        {/* `lbl_AdminCost_RightPanel_Form_AddCost_Fields_Category.Text` — "Category"; `InputTextPlaceholder` "Find Category"; blue italic (ACS:10211-12). */}
         <Field label="Category" required>
           <SearchCombo
             ariaLabel="Category"
             testId="cmb_AdminCost_RightPanel_Form_AddCost_Fields_Category"
             placeholder="Find Category"
+            standard={devexFieldStandard("category")}
             options={categoryOptions}
             value={form.categoryId}
             onChange={(v) => setForm((f) => withDevexCategory(f, v))}
@@ -144,7 +162,7 @@ export function DevexCostDrawer(props: DevexCostDrawerProps) {
         {/*
           `lbl_AdminCost_RightPanel_Form_AddCost_Fields_Subaccount.Text` — "Sub-Account";
           `cmb_…_Subaccount.InputTextPlaceholder` — "Find supplier", verbatim (the port had
-          reworded it to "Find Sub-Account").
+          reworded it to "Find Sub-Account"). Blue italic (ACS:10348-49).
         */}
         <Field
           label="Sub-Account"
@@ -157,13 +175,17 @@ export function DevexCostDrawer(props: DevexCostDrawerProps) {
             ariaLabel="Sub-Account"
             testId="cmb_AdminCost_RightPanel_Form_AddCost_Fields_Subaccount"
             placeholder="Find supplier"
+            standard={devexFieldStandard("subaccount")}
             options={subaccountOptions}
             value={form.subaccountId}
             onChange={(v) => setForm((f) => withDevexSubaccount(f, v, hierarchy, payerDefaults))}
           />
         </Field>
 
-        {/* `lbl_AdminCost_RightPanel_Form_Fields_AddCost_Fields_Cost_Paid_By.Text` — "Cost Paid By". */}
+        {/*
+          `lbl_AdminCost_RightPanel_Form_Fields_AddCost_Fields_Cost_Paid_By.Text` — "Cost Paid By". The option
+          labels are italic only — `rad_…_Cost_Paid_By` sets `FontItalic` without a `FontColor` (ACS:10509).
+        */}
         <Field label="Cost Paid By" required>
           {/* Opt-in horizontal row (the panel CSS otherwise stacks radio groups). */}
           <RadioGroup
@@ -178,7 +200,7 @@ export function DevexCostDrawer(props: DevexCostDrawerProps) {
               <Radio
                 key={o.value}
                 value={String(o.value)}
-                label={o.label}
+                label={{ children: o.label, className: standardClass(devexFieldStandard("costPaidBy")) }}
                 aria-label={o.label}
                 data-testid={`rad_AdminCost_RightPanel_Form_AddCost_Fields_Cost_Paid_By-${o.value}`}
               />
@@ -186,7 +208,10 @@ export function DevexCostDrawer(props: DevexCostDrawerProps) {
           </RadioGroup>
         </Field>
 
-        {/* `lbl_AdminCost_RightPanel_Form_AddCost_Fields_Unit.Text` — "Unit"; `InputTextPlaceholder` "Find Cost Unit". */}
+        {/*
+          `lbl_AdminCost_RightPanel_Form_AddCost_Fields_Unit.Text` — "Unit"; `InputTextPlaceholder` "Find Cost Unit".
+          Blue italic on the box AND the open list (`cmb_…_Unit`, ACS:10563-64 — a canvas ComboBox styles its options too).
+        */}
         <Field
           label="Unit"
           required
@@ -195,6 +220,8 @@ export function DevexCostDrawer(props: DevexCostDrawerProps) {
           validationMessageIcon={null}
         >
           <Dropdown
+            className={mergeClasses(standardClass(devexFieldStandard("unit")))}
+            listbox={{ className: devexFieldStandard("unit") ? listbox.standard : undefined }}
             aria-label="Unit"
             data-testid="cmb_AdminCost_RightPanel_Form_AddCost_Fields_Unit"
             placeholder="Find Cost Unit"
@@ -206,11 +233,12 @@ export function DevexCostDrawer(props: DevexCostDrawerProps) {
           </Dropdown>
         </Field>
 
-        {/* `lbl_AdminCost_RightPanel_Form_Fields_AddCost_Fields_Cost.Text` — `$"Cost [{Coalesce(Unit & "", "EUR")}]"`; MaxLength 10. */}
+        {/* `lbl_AdminCost_RightPanel_Form_Fields_AddCost_Fields_Cost.Text` — `$"Cost [{Coalesce(Unit & "", "EUR")}]"`; MaxLength 10; blue italic (ACS:10674-75). */}
         <TextField skin="plain"
           label={`Cost [${unitText}]`}
           testId="txt_AdminCost_RightPanel_Form_AddCost_Fields_Cost"
           required
+          standard={devexFieldStandard("cost")}
           value={form.cost}
           maxLength={10}
           counter="none"
@@ -223,9 +251,13 @@ export function DevexCostDrawer(props: DevexCostDrawerProps) {
 
         {/* ACS:10787-10806 — the `n/55` counter sits at the right end of the label line. */}
         <div className={styles.commentBlock}>
-          {/* `lbl_AdminCost_RightPanel_Form_Fields_AddCost_Fields_Comment.Text` — "Comment"; MaxLength 55. */}
+          {/*
+            `lbl_AdminCost_RightPanel_Form_Fields_AddCost_Fields_Comment.Text` — "Comment"; MaxLength 55. Italic
+            only — `txt_…_Comment` sets `FontItalic` without a `FontColor` (ACS:10750).
+          */}
           <Field label="Comment">
             <Textarea
+              className={mergeClasses(standardClass(devexFieldStandard("comment")))}
               value={form.comment}
               maxLength={55}
               resize="vertical"

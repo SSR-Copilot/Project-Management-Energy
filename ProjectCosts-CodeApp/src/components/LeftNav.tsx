@@ -192,6 +192,21 @@ const useStyles = makeStyles({
 });
 
 /**
+ * Which groups start open on a section's rail. The OPEX group starts open when the current screen is
+ * one of its children (what the canvas rail showed on a deep link into Land Lease), else as the cost
+ * rail's one group. The admin rail opens BOTH groups on every screen, as the canvas does (Canvas run,
+ * 29 Oct 2026: Project Gate and Standard Assumptions are both open when Application Settings opens),
+ * not only the group of the current screen.
+ */
+function defaultOpenGroups(
+  section: ReturnType<typeof railSection>, active: Parameters<typeof parentOf>[0], items: Parameters<typeof parentOf>[1],
+): Set<string> {
+  if (section === "admin") return new Set(["GatesKey", "StandardAssumptionsKey"]);
+  const parent = parentOf(active, items);
+  return new Set(parent ? [parent] : ["OpexCostsKey"]);
+}
+
+/**
  * `adminVisible` — the canvas `ItemVisible: Or(IsApplicationAdministrator, IsControllerOwnData)`
  * on every admin row (`app/adminAccess.ts`). Only the admin rail uses it.
  */
@@ -203,14 +218,22 @@ export function LeftNav({ adminVisible = true }: { adminVisible?: boolean } = {}
   const items = navItemsFor(section);
   const active = activeNavKey(location.pathname, items);
 
-  // The OPEX group starts open when the current screen is one of its children, which is
-  // what the canvas rail showed on a deep link into Land Lease.
-  // The admin rail opens BOTH groups on every screen, as the canvas does (seen in the Canvas run, 29 Oct 2026: Project Gate and
-  // Standard Assumptions are both open when Application Settings opens), not only the group of the current screen.
-  const [openGroups, setOpenGroups] = useState<Set<string>>(
-    () => new Set(section === "admin" ? ["GatesKey", "StandardAssumptionsKey"]
-      : parentOf(active, items) ? [parentOf(active, items) as string] : ["OpexCostsKey"]),
+  /*
+   * The group state is kept PER SECTION. One `AppShell` hosts this rail for every route (`App.tsx`), so
+   * it stays mounted when the section changes; the defaults used to be computed once, on mount, and
+   * arriving at Application Settings from a PM screen (the header's Application Settings row) kept
+   * the PM rail's state: both admin groups collapsed, no screen link visible until each was opened
+   * (21 Nov 2026). A section change re-applies that section's defaults; toggles within it stick.
+   */
+  const [groupState, setGroupState] = useState<{ section: typeof section; groups: Set<string> }>(
+    () => ({ section, groups: defaultOpenGroups(section, active, items) }),
   );
+  const openGroups = groupState.section === section ? groupState.groups : defaultOpenGroups(section, active, items);
+  if (groupState.section !== section) setGroupState({ section, groups: openGroups });
+  const setOpenGroups = (update: (prev: Set<string>) => Set<string>) =>
+    setGroupState((prev) => ({
+      section, groups: update(prev.section === section ? prev.groups : defaultOpenGroups(section, active, items)),
+    }));
 
   const visible = useMemo(
     () => items.filter((i) => i.visible && (section !== "admin" || adminVisible)),

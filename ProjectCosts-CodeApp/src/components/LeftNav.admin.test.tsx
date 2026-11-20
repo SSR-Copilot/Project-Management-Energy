@@ -6,7 +6,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { FluentProvider } from "@fluentui/react-components";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useNavigate } from "react-router-dom";
 import { vsbTheme } from "@/theme/fluent";
 import { LeftNav } from "./LeftNav";
 
@@ -88,5 +88,36 @@ describe("LeftNav collapse row (cmp_Left_Navigation, 20 Oct 2026)", () => {
     const { container } = renderAt("/costs/capex", true);
     expect(container.querySelector(".canvas-rail-header")).not.toBeNull();
     expect(screen.queryByText("Collapse Menu")).toBeNull();
+  });
+});
+
+describe("LeftNav group defaults follow the section (21 Nov 2026)", () => {
+  it("UT-RAIL-004 arriving at Application Settings from a PM screen opens both admin groups with every link visible", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event");
+    // The header's Application Settings row: a navigation while the rail stays mounted (one AppShell for every route).
+    const Go = () => {
+      const navigate = useNavigate();
+      return <button onClick={() => navigate("/admin/default-checklists")}>go admin</button>;
+    };
+    render(
+      <FluentProvider theme={vsbTheme}>
+        <MemoryRouter initialEntries={["/project/production?projectId=p1"]}>
+          <LeftNav adminVisible />
+          <Go />
+        </MemoryRouter>
+      </FluentProvider>,
+    );
+    expect(screen.getByText("Production")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "go admin" }));
+    for (const key of ["GatesKey", "StandardAssumptionsKey"]) {
+      expect(screen.getByTestId(`rail-group-${key}`)).toHaveAttribute("aria-expanded", "true");
+    }
+    for (const label of ["Check List Settings", "Project Gates", "CAPEX Accounts", "Milestones", "Costs", "Contracts"]) {
+      expect(screen.getByText(label)).toBeInTheDocument();
+    }
+    // A group the user closes stays closed while on the section.
+    await userEvent.click(screen.getByTestId("rail-group-GatesKey"));
+    expect(screen.queryByText("Check List Settings")).toBeNull();
+    expect(screen.getByText("Milestones")).toBeInTheDocument();
   });
 });

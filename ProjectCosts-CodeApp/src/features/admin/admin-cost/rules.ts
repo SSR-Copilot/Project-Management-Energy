@@ -38,6 +38,7 @@ import {
   DevexRuleError, OpexFollowUpError, OpexRuleError, type CostTechnology, type OpexContractType,
 } from "@/domain/costStandards";
 import { COST_UNIT_LABEL, MSG } from "./constants";
+import type { StandardVariant } from "@/components";
 
 /* ═══════════════════════════════════════════════════════════════ selection ══ */
 
@@ -1226,7 +1227,78 @@ export function opexWriteFromForm(
   };
 }
 
+/* ═══════════════════════════════════════════ standard-assumption styling (rule 20) ══ */
+
+/**
+ * Which half of the canvas `FontColor: themePrimary` / `FontItalic: true` pair a panel control
+ * carries — the value the shared `standard` prop takes (`@/components/standardValue.ts`):
+ * `"standard"` = blue AND italic, `"italic"` = italic only (the colour stays the control's own),
+ * `false` = plain. On this screen the pair is a FIXED value on each control (no condition).
+ */
+export type FieldStandard = Extract<StandardVariant, "standard" | "italic"> | false;
+
+export type DevexFieldKey =
+  | "description" | "clusters" | "distributionFrequency" | "applyVat" | "depreciation"
+  | "category" | "subaccount" | "costPaidBy" | "unit" | "cost" | "comment";
+
+/**
+ * `con_AdminCost_RightPanel_Form_AddStandardCost` (ACS:9712-10977): blue italic on
+ * `txt_…_Description` (ACS:9861-62), `chk_AdminCost_RightPanel_SelectCluster1…5` (ACS:9953-10032),
+ * `cmb_…_Category` (ACS:10211-12), `cmb_…_Subaccount` (ACS:10348-49), `cmb_…_Unit` (ACS:10563-64)
+ * and `txt_…_Cost` (ACS:10674-75); italic ONLY on `cmb_…_Distribution_Frequency` (ACS:10085),
+ * `rad_…_Cost_Paid_By` (ACS:10509) and `txt_…_Comment` (ACS:10750); plain on `chk_…_ApplyVat` /
+ * `chk_…_Depreciation` (`FontColor: =gblAppColors.Label.Color`, ACS:10152 / 10164).
+ */
+export function devexFieldStandard(field: DevexFieldKey): FieldStandard {
+  switch (field) {
+    case "description": case "clusters": case "category": case "subaccount": case "unit": case "cost":
+      return "standard";
+    case "distributionFrequency": case "costPaidBy": case "comment":
+      return "italic";
+    default:
+      return false;
+  }
+}
+
+export type OpexFieldStandardKey =
+  | "description" | "startDate" | "duration" | "currency"
+  | FigureKey | "aggregation" | "distributionFrequency"
+  | "inflationStartYear" | "area" | "inflationProfile" | "toggles";
+
+/**
+ * `con_LandLease_RightPanel_NewEditPeriod_1` (ACS:4863-9711): blue italic on
+ * `txt_…_Description_1` (ACS:5092-93), `txt_…_StartDate` (ACS:5315-16), the five money inputs
+ * `txt_…_FixedCosts_1` … `txt_…_EuroWTG_1` (ACS:5807-6338), `txt_…_InflationStartYear_1`
+ * (ACS:7189-90) and `txt_…_InflationProfile_1` under both captions (ACS:7506-07). Plain on every
+ * `drp_…` (Currency ACS:5578, Duration, Aggregation, Distribution Frequency, Area — `BasePaletteColor`
+ * only, no `FontColor` / `FontItalic`) and on the toggles.
+ */
+export function opexFieldStandard(field: OpexFieldStandardKey): FieldStandard {
+  switch (field) {
+    case "description": case "startDate": case "inflationStartYear": case "inflationProfile":
+    case "fixCosts": case "ofRevenues": case "eurMwh": case "eurMw": case "eurWtg":
+      return "standard";
+    default:
+      return false;
+  }
+}
+
 /* ═══════════════════════════════════════════════════════════════ dialogs ══ */
+
+/**
+ * `cmp_PopUp_Confirmation_Delete_Contract_Or_Period` (ACS:4717-4722) on `cmp_PopUp_Confirmation`
+ * (`Src/Components/cmp_PopUp_Confirmation.pa.yaml`): `ConfirmButtonText: ="Confirm"`,
+ * `IconRightButton: ="CheckMark"`, Confirm `Width: =128` (:218) in `themePrimary` with white text
+ * (:199-200); `CancelButtonText: ="Cancel"`, `IconLeftButton: ="Cancel"` (an ✕), `Width: =96`
+ * (:244); the box `Width: =Min(490, Parent.Width)` (:83), a 40 px header (:95), scrim
+ * `RGBA(0, 0, 0, 0.7)` (:68). No red "destructive" button exists in the canvas. The icons are
+ * `ConfirmDialog`'s icon names ("CheckMark" → `checkmark`, "Cancel" → `dismiss`).
+ */
+export const DELETE_DIALOG_BUTTONS = {
+  confirm: { text: "Confirm", icon: "checkmark", width: 128 },
+  cancel: { text: "Cancel", icon: "dismiss", width: 96 },
+  boxWidth: 490,
+} as const;
 
 export interface DeleteDialogText { title: string; description: string }
 

@@ -25,6 +25,7 @@
  *   - `coverLabel`: a blocking cover inside the drawer that does NOT lock dismissal.
  *   - `ariaLabel`: the drawer's accessible name (defaults to `title`).
  *   - `panelClassName`: extra class on the drawer surface, for screen-scoped chrome overrides.
+ *   - `closeIconColor`: the ✕ icon's resting colour (the Application Settings panels' themeTertiary).
  */
 import { Button, Drawer, DrawerBody, DrawerHeader, DrawerHeaderTitle, Tooltip } from "@fluentui/react-components";
 import { DismissRegular } from "@fluentui/react-icons";
@@ -105,13 +106,19 @@ export interface FormPanelProps {
   centerClose?: boolean;
   /** Hover text on the panel title (the canvas title label's `Tooltip`, e.g. the full "Comments : <contract>"). Default none. */
   titleTooltip?: string;
+  /**
+   * Opt-in: the ✕ icon's resting colour, where the canvas ✕ is a command-bar item with its own `ItemIconColor`
+   * (the Application Settings panels: `gblAppTheme.palette.themeTertiary`). Hover, press, focus and the disabled
+   * state keep the shared look. Default: white, as every other panel.
+   */
+  closeIconColor?: string;
 }
 
 export function FormPanel({
   open, title, width = "wide", children, footer, onDismiss, closeTestId, closeLabel, closeTooltip, closeTooltipBox = false,
   busy = false, busyLabel, dirty = false, discardText, actions, messages, closePrompt, promptRequest, onPromptCancel,
   coverLabel, ariaLabel, panelClassName, keepOpenOnOutsideClick = false, keepOpenOnEscape = false, centerClose = false,
-  titleTooltip,
+  titleTooltip, closeIconColor,
 }: FormPanelProps) {
   const locked = busy || busyLabel !== undefined;
   // Without `closePrompt`, `onDismiss` is called with no argument.
@@ -130,7 +137,10 @@ export function FormPanel({
   const { requestClose } = guard;
   usePromptRequest(open, promptRequest, locked, guard.confirming, requestClose);
   const api = useMemo<FormPanelApi>(() => ({ requestClose, busy: locked }), [requestClose, locked]);
-  const style: CSSProperties = { width: formPanelWidth(width), maxWidth: "100vw" };
+  const style = {
+    width: formPanelWidth(width), maxWidth: "100vw",
+    ...(closeIconColor !== undefined ? { "--canvas-panel-close-color": closeIconColor } : {}),
+  } as CSSProperties;
   const footerNode = typeof footer === "function"
     ? footer(api)
     : footer ?? (actions ? <ActionButtons {...actions} /> : null);
@@ -138,7 +148,7 @@ export function FormPanel({
   return (
     <FormPanelContext.Provider value={api}>
       <Drawer type="overlay" position="end" open={open}
-        className={`canvas-panel canvas-panel-${typeof width === "number" ? "custom" : width}${centerClose ? " canvas-panel-close-centered" : ""}${panelClassName ? ` ${panelClassName}` : ""}`}
+        className={`canvas-panel canvas-panel-${typeof width === "number" ? "custom" : width}${centerClose ? " canvas-panel-close-centered" : ""}${closeIconColor !== undefined ? " canvas-panel-close-tinted" : ""}${panelClassName ? ` ${panelClassName}` : ""}`}
         onOpenChange={(_, data) => {
           if (data.open) return;
           if (keepOpenOnOutsideClick && data.type === "backdropClick") return;

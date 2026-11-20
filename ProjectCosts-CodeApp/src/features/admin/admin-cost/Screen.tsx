@@ -46,7 +46,7 @@ import { useTablePrivileges } from "@/platform/privileges";
 import { media, palette } from "@/theme/tokens";
 import { COST_CATEGORIES, COST_TECHNOLOGIES_FOR, MSG, type CostCategoryDef } from "./constants";
 import {
-  breadcrumbText, buildDevexTree, contractMenu, currencyCode, deleteDialogText,
+  breadcrumbText, buildDevexTree, contractMenu, currencyCode, DELETE_DIALOG_BUTTONS, deleteDialogText,
   deleteKind, devexWriteFromForm, editModeFor, errorText, groupContracts, opexWriteFromForm,
   toCostSelection, toScope, type ContractView, type DevexForm, type HiddenValues, type MenuItemView,
   type OpexForm, type OpexPanelContext,
@@ -506,11 +506,25 @@ export default function CostsSettingsScreen() {
         />
       ) : null}
 
+      {/*
+        `cmp_PopUp_Confirmation_Delete_Contract_Or_Period` (ACS:4717) on the classic `cmp_PopUp_Confirmation`:
+        a themePrimary "Confirm" with a CheckMark (128 wide), a white "Cancel" with an ✕ (96 wide), a 490 px
+        box with a 40 px header on the RGBA(0,0,0,0.7) scrim, no divider above the buttons (`DELETE_DIALOG_BUTTONS`).
+        The port's red `destructive` button had no canvas counterpart.
+      */}
       <ConfirmDialog
         open={dialog.state !== null}
         title={dialogText?.title ?? ""}
         description={dialogText?.description ?? ""}
-        destructive
+        confirmText={DELETE_DIALOG_BUTTONS.confirm.text}
+        cancelText={DELETE_DIALOG_BUTTONS.cancel.text}
+        confirmIcon={DELETE_DIALOG_BUTTONS.confirm.icon}
+        cancelIcon={DELETE_DIALOG_BUTTONS.cancel.icon}
+        confirmWidth={DELETE_DIALOG_BUTTONS.confirm.width}
+        classicPopUp
+        darkScrim
+        canvasFooter
+        footerDivider={false}
         onConfirm={() => { void dialog.confirm(runDelete, { closeFirst: true }); }}
         onCancel={dialog.cancel}
       />

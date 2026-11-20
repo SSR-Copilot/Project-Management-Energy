@@ -7,9 +7,9 @@ import { FIXTURE_ROWS, IDS } from "./fixtures";
 import {
   MSG, NAME_MAX_LENGTH, accountCommands, accountDeleteUnavailable, accountLabel, accountNumberError,
   accountStatusDialog, buildCapexTree, canSaveAccount, canSaveSubaccount, composeSubaccountNumber,
-  deleteAccountDialog, deleteSubaccountDialog, forecastCutoff, isDigitsOnly, nameError,
+  deleteAccountDialog, deleteSubaccountDialog, forecastCutoff, isCanvasNumberCanvasParity, isDigitsOnly, nameError,
   nextOrder, subaccountCommands, subaccountDeleteUnavailable, subaccountRowActions, subaccountStatusDialog,
-  subaccountSuffixError, type CapexNode,
+  subaccountSuffixError, visibleNameError, type CapexNode,
 } from "./rules";
 
 const tree = buildCapexTree(FIXTURE_ROWS);
@@ -77,11 +77,30 @@ describe("BuildCapexTree", () => {
 });
 
 describe("Number validation", () => {
+  // SOURCE DEFECT fix kept (D150): digits only.
   it.each([
     ["123", true], [" 123 ", true], ["12.3", false], ["1,2", false], ["-5", false],
     ["+5", false], ["1e3", false], ["", false], ["00010", true],
   ])("UT-ADCAPEX-049 isDigitsOnly(%j) = %s", (value, ok) => {
     expect(isDigitsOnly(value)).toBe(ok);
+  });
+
+  // The canvas test, kept as the parity twin: `IsNumeric` reads a sign and an exponent.
+  it.each([
+    ["123", true], [" 123 ", true], ["00010", true],
+    ["-5", true], ["+5", true], ["1e3", true], ["2E+2", true],
+    ["12.3", false], ["1,2", false], ["12a", false], ["1 2", false], ["", false], ["   ", false], ["-", false],
+  ])("UT-ADCAPEX-942 isCanvasNumberCanvasParity(%j) = %s — the canvas Not(IsNumeric) / \",\" / \".\" test (CA:1274-1282)", (value, ok) => {
+    expect(isCanvasNumberCanvasParity(value)).toBe(ok);
+  });
+
+  it("UT-ADCAPEX-943 a signed or exponent number shows the not-numeric message and blocks Save (the canvas let it through)", () => {
+    expect(accountNumberError("-5", true)).toBe(MSG.accountNotNumeric);
+    expect(subaccountSuffixError("1e3", true)).toBe(MSG.subaccountNotNumeric);
+    expect(canSaveAccount({ categoryId: "c", number: "+5", name: "X" }, true)).toBe(false);
+    expect(canSaveSubaccount({ suffix: "-5", name: "X" }, true)).toBe(false);
+    expect(accountNumberError("1.5", true)).toBe(MSG.accountNotNumeric);
+    expect(subaccountSuffixError("1,5", true)).toBe(MSG.subaccountNotNumeric);
   });
 
   it("UT-ADCAPEX-009 shows the account message only for a non-blank, editable, non-numeric value", () => {
@@ -102,6 +121,14 @@ describe("Names and save gates", () => {
     expect(nameError("   ")).toBe(MSG.nameRequired);
     expect(nameError("x".repeat(NAME_MAX_LENGTH + 1))).toBe(MSG.nameTooLong);
     expect(nameError(" Land ")).toBeUndefined();
+  });
+
+  it("UT-ADCAPEX-944 the panels show no message for a blank name (the canvas only disables Save); only the over-limit guard", () => {
+    expect(visibleNameError("")).toBeUndefined();
+    expect(visibleNameError("   ")).toBeUndefined();
+    expect(visibleNameError("Land")).toBeUndefined();
+    expect(visibleNameError("x".repeat(NAME_MAX_LENGTH + 1))).toBe(MSG.nameTooLong);
+    expect(canSaveAccount({ categoryId: "c", number: "80020", name: "" }, true)).toBe(false);
   });
 
   it("UT-ADCAPEX-012 account Save needs category, number (digits) and name on New; only name on Edit", () => {
@@ -190,10 +217,15 @@ describe("Account command bar", () => {
 });
 
 describe("Subaccount commands and row actions", () => {
-  it("UT-ADCAPEX-024 enables Reorder subaccounts only with ≥ 2 subaccounts", () => {
-    expect(subaccountCommands(land, ALLOW_ALL).reorder.enabled).toBe(true);
-    expect(subaccountCommands(permits, ALLOW_ALL).reorder.enabled).toBe(false);
-    expect(subaccountCommands(permits, DENY_ALL).add.enabled).toBe(false);
+  it("UT-ADCAPEX-024 Add subaccount needs the create privilege", () => {
+    expect(subaccountCommands(ALLOW_ALL).add.enabled).toBe(true);
+    expect(subaccountCommands(DENY_ALL).add.enabled).toBe(false);
+  });
+
+  it("UT-ADCAPEX-940 Reorder subaccounts is always enabled, as the canvas (no ItemEnabled, CA:483-484; D19)", () => {
+    expect(subaccountCommands(ALLOW_ALL).reorder).toEqual({ visible: true, enabled: true });
+    // Whatever the privileges: Dataverse refuses the write instead (D19).
+    expect(subaccountCommands(DENY_ALL).reorder).toEqual({ visible: true, enabled: true });
   });
 
   const A = { active: true };
@@ -208,6 +240,11 @@ describe("Subaccount commands and row actions", () => {
     [I, A, undefined, { edit: true, activate: true, deactivate: false, delete: false }],
   ])("UT-ADCAPEX-050 sub %j / parent %j / contracts %s", (sub, parent, hasContracts, expected) => {
     expect(subaccountRowActions(sub, parent, hasContracts, ALLOW_ALL)).toEqual(expected);
+  });
+
+  it("UT-ADCAPEX-941 SOURCE DEFECT fix kept (D150): no Activate for a subaccount under an inactive account", () => {
+    expect(subaccountRowActions(I, I, false, ALLOW_ALL).activate).toBe(false);
+    expect(subaccountRowActions(I, A, false, ALLOW_ALL).activate).toBe(true);
   });
 
   it("UT-ADCAPEX-025 offers nothing without privileges", () => {
@@ -247,11 +284,10 @@ describe("Reorder", () => {
 });
 
 describe("Dialog texts", () => {
-  it("UT-ADCAPEX-031 account deactivate promises subaccount deactivation; activate states nothing is restored", () => {
+  it("UT-ADCAPEX-031 account deactivate promises subaccount deactivation; activate asks only (verbatim)", () => {
     expect(accountStatusDialog(land)).toMatchObject({ title: "Deactivate Account?", confirmText: "Deactivate" });
     expect(accountStatusDialog(land).description).toContain("All related subaccounts will be automatically deactivated");
     expect(accountStatusDialog(permits)).toMatchObject({ title: "Activate Account?", confirmText: "Activate" });
-    expect(accountStatusDialog(permits).description).toContain("not restored");
   });
 
   it("UT-ADCAPEX-032 subaccount title is keyed on the subaccount's own status", () => {
@@ -260,11 +296,38 @@ describe("Dialog texts", () => {
     expect(subaccountStatusDialog({ name: "S", active: true } as CapexNode).title).toBe("Deactivate Subaccount?");
   });
 
-  it("UT-ADCAPEX-033 delete-account text does not claim subaccounts are deleted", () => {
+  it("UT-ADCAPEX-033 delete-account text does not claim subaccounts are deleted (SOURCE DEFECT fix kept, D150)", () => {
     const d = deleteAccountDialog("Permits");
     expect(d.description).toBe('Are you sure that you want to permanently delete "Permits" account?');
     expect(d.description).not.toContain("subaccounts");
-    expect(deleteSubaccountDialog("Cable").title).toBe("Delete Subaccount?");
+  });
+
+  it("UT-ADCAPEX-945 the Deactivate descriptions are verbatim; the Activate ones say what activating does (D150)", () => {
+    expect(accountStatusDialog({ name: "Land", active: true }).description).toBe(
+      'Are you sure that you want to deactivate "Land" account? All related subaccounts will be automatically deactivated and associated forecasted costs will be deleted.',
+    );
+    expect(accountStatusDialog({ name: "Permits", active: false }).description).toBe(
+      'Are you sure that you want to activate "Permits" account? Subaccounts keep their current status and previously removed forecast costs are not restored.',
+    );
+    expect(subaccountStatusDialog({ name: "Cable", active: true }).description).toBe(
+      'Are you sure that you want to deactivate "Cable" subaccount? All forecasted costs associated with this subaccount will be deleted.',
+    );
+    expect(subaccountStatusDialog({ name: "Cable", active: false }).description).toBe(
+      'Are you sure that you want to activate "Cable" subaccount? Previously removed forecast costs are not restored.',
+    );
+  });
+
+  it("UT-ADCAPEX-946 both delete dialogs: canvas Title / ConfirmButtonText; the subaccount Description verbatim (CA:2337-2373)", () => {
+    expect(deleteAccountDialog("Permits")).toEqual({
+      title: "Delete Account?",
+      description: 'Are you sure that you want to permanently delete "Permits" account?',
+      confirmText: "Confirm",
+    });
+    expect(deleteSubaccountDialog("Cable")).toEqual({
+      title: "Delete Subaccount?",
+      description: 'Are you sure that you want to permanently delete "Cable" subaccount?',
+      confirmText: "Confirm",
+    });
   });
 
   it("UT-ADCAPEX-034 labels a card '<number> - <name>'", () => {

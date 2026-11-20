@@ -2,7 +2,7 @@
 /**
  * Keyboard reorder, focus retention and announcements, in both screens' configurations.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { useState } from "react";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -62,6 +62,25 @@ describe("ReorderItems — Check List Settings configuration", () => {
     render(<Harness items={[]} emptyText="There are no tasks to reorder in this cluster." />);
     expect(screen.getByText("There are no tasks to reorder in this cluster.")).toBeInTheDocument();
   });
+
+  it("UT-REORDITEMS-005 Drag-and-drop reorders and renumbers the positions; the drag carries the row id", () => {
+    render(<Harness showPosition draggable />);
+    const dataTransfer = { effectAllowed: "", setData: vi.fn() };
+    fireEvent.dragStart(row("c"), { dataTransfer });
+    expect(dataTransfer.effectAllowed).toBe("move");
+    expect(dataTransfer.setData).toHaveBeenCalledWith("text/plain", "c");
+    fireEvent.dragOver(row("a"), { dataTransfer });
+    fireEvent.drop(row("a"), { dataTransfer });
+    expect(order()).toBe("c,a,b");
+    expect(within(row("c")).getByText("1.")).toBeInTheDocument();
+  });
+
+  it("UT-REORDITEMS-006 The list carries listTestId; no position numbers unless asked (the canvas template is the name only)", () => {
+    render(<Harness listTestId="pcf_ReorderTaskList_AdminScreen" />);
+    expect(screen.getByTestId("pcf_ReorderTaskList_AdminScreen")).toBe(screen.getByRole("list", { name: "Checklist order" }));
+    expect(within(row("a")).queryByText("1.")).not.toBeInTheDocument();
+    expect(within(row("a")).getByText("Alpha")).toBeInTheDocument();
+  });
 });
 
 describe("ReorderItems — CAPEX configuration", () => {
@@ -72,7 +91,7 @@ describe("ReorderItems — CAPEX configuration", () => {
     expect(screen.getByTestId("reorder-announcement").textContent).toBe("Charlie moved to position 2 of 3");
     expect(screen.getByRole("button", { name: "Move Charlie up" })).toHaveFocus();
 
-    const dataTransfer = { effectAllowed: "" };
+    const dataTransfer = { effectAllowed: "", setData: vi.fn() };
     fireEvent.dragStart(row("a"), { dataTransfer });
     fireEvent.dragOver(row("b"), { dataTransfer });
     fireEvent.drop(row("b"), { dataTransfer });

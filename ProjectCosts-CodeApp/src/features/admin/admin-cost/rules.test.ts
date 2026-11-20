@@ -22,8 +22,8 @@ import {
 } from "./fixtures";
 import {
   breadcrumbText, buildDevexTree, canAddPeriod, canDeletePeriodRow, canDeleteRow, canSaveDevex, inactiveRowsReason, canSaveOpex, clusterText,
-  codText, commentTooltip, contractMenu, costText, currencyCode, currencyIssue, defaultExternalContract,
-  deleteDialogText, deleteKind, devexCategoryOptions, fmtCanvasPercent, fmtGridPercent, fmtStoredPercent,
+  codText, commentTooltip, contractMenu, costText, currencyCode, currencyIssue, defaultExternalContract, DELETE_DIALOG_BUTTONS,
+  deleteDialogText, deleteKind, devexCategoryOptions, devexFieldStandard, fmtCanvasPercent, fmtGridPercent, fmtStoredPercent, opexFieldStandard,
   isInactiveSubaccount, PERCENT_DISPLAY, devexFormFromCost, devexPanelTitle,
   devexSubaccountOptions, devexWriteFromForm, editModeFor, emptyDevexForm, endDateText, errorText,
   groupContracts, hasCostTechnologies, hiddenValues, inputText, isContractLevelEditable, isDirty, newContractDescription,
@@ -800,5 +800,32 @@ describe("Dialogs and errors", () => {
     expect(inputText(0.02, "keep2", ".")).toBe("0.02");
     expect(inputText(2, "keep2", ",")).toBe("2,0");
     expect(inputText(2.5, "keep2", ".")).toBe("2.5");
+  });
+  it("UT-ADCOST-941 the delete dialog's buttons are the canvas cmp_PopUp_Confirmation ones: Confirm + CheckMark 128 wide, Cancel + ✕ 96 wide, a 490 px box", () => {
+    expect(DELETE_DIALOG_BUTTONS.confirm).toEqual({ text: "Confirm", icon: "checkmark", width: 128 });
+    expect(DELETE_DIALOG_BUTTONS.cancel).toEqual({ text: "Cancel", icon: "dismiss", width: 96 });
+    expect(DELETE_DIALOG_BUTTONS.boxWidth).toBe(490);
+  });
+});
+
+/* ═══════════════════════════════════ standard-assumption styling per control (rule 20) ══ */
+
+describe("Panel control styling (canvas FontColor / FontItalic, fixed per control)", () => {
+  it("UT-ADCOST-939 DEVEX panel: blue italic on Description, clusters, Category, Sub-Account, Unit, Cost; italic only on Distribution Frequency, Cost Paid By, Comment; plain on Apply VAT / Depreciation", () => {
+    for (const f of ["description", "clusters", "category", "subaccount", "unit", "cost"] as const) {
+      expect(devexFieldStandard(f), f).toBe("standard");
+    }
+    for (const f of ["distributionFrequency", "costPaidBy", "comment"] as const) expect(devexFieldStandard(f), f).toBe("italic");
+    for (const f of ["applyVat", "depreciation"] as const) expect(devexFieldStandard(f), f).toBe(false);
+  });
+
+  it("UT-ADCOST-940 contract / period panel: blue italic on Description, Start Date, the five money figures, Inflation Start Year and Inflation Profile; plain on Currency and every dropdown / toggle", () => {
+    for (const f of ["description", "startDate", "fixCosts", "ofRevenues", "eurMwh", "eurMw", "eurWtg", "inflationStartYear", "inflationProfile"] as const) {
+      expect(opexFieldStandard(f), f).toBe("standard");
+    }
+    // `drp_LandLease_RightPanel_NewEditCost_BodyContent_Currency_1` (ACS:5578) sets no FontColor / FontItalic — it was wrongly blue italic.
+    for (const f of ["currency", "duration", "aggregation", "distributionFrequency", "area", "toggles"] as const) {
+      expect(opexFieldStandard(f), f).toBe(false);
+    }
   });
 });

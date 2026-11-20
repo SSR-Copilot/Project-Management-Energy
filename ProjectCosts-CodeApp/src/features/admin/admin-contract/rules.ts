@@ -109,9 +109,8 @@ export const CARD_TEXT = {
   /** `lbl_Margin_Heading.Text` / `lbl_Add_Edit_AdminContracts_Margin.Text` — verbatim. */
   margin: "Margin",
   /**
-   * `lbl_MarginType_Heading.Text` — verbatim. DIVERGENCE: the panel also captions the
-   * `rad_AddEdit_AdminContracts_RightPanel_MarginType` radio with it; the canvas panel radio has
-   * no caption.
+   * `lbl_MarginType_Heading.Text` — verbatim. The panel radio `rad_AddEdit_AdminContracts_RightPanel_MarginType`
+   * has no caption (canvas parity, restored 20 Nov 2026); this text is only its accessible name there.
    */
   marginType: "Margin Type",
   /** `lbl_Add_Edit_AdminContracts_Margin_Percentage.Text` — verbatim. */
@@ -132,6 +131,8 @@ export const CARD_TEXT = {
   deleteTitle: "Delete BoP Standard Contract",
   /** `cmp_PopUp_Confirmation_Delete_Contract_Or_Period_1.ConfirmButtonText` — verbatim. */
   deleteConfirm: "Confirm",
+  /** `cmp_PopUp_Confirmation_Delete_Contract_Or_Period_1.CancelButtonText` — verbatim. */
+  deleteCancel: "Cancel",
   /** `ico_AdminContracts_Save.OnChange` → `locContractSpinnerInformationText` — verbatim. */
   saving: "Please wait, saving...",
   /** `cmp_PopUp_Confirmation_Delete_Contract_Or_Period_1.OnConfirm` → `locContractSpinnerInformationText` — verbatim. */
@@ -166,8 +167,8 @@ export function breadcrumbText(countryName: string | undefined, technology: numb
 /**
  * Inactive standard contracts are listed and count toward the limit of 10 (canvas
  * parity), but the project Contracts reader filters them out, so they never seed a project.
- * DIVERGENCE: the card shows an "Inactive" badge so that difference is visible (the canvas
- * shows inactive rows unmarked).
+ * SOURCE DEFECT (fix kept, D150): the canvas shows them unmarked; the card shows an "Inactive" badge so
+ * that difference is visible. `isInactive` is the one place the state is read.
  */
 export const INCLUDE_INACTIVE_STANDARD_CONTRACTS = true;
 export const STATE_INACTIVE = 1;
@@ -256,14 +257,47 @@ export function formatClosingRef(
 }
 
 /**
- * ISO currency of the selected country, default EUR — `lbl_MarginFixedValuePercentage_Heading.Text`:
+ * ISO currency of the selected country, default EUR — the CARD heading
+ * `lbl_MarginFixedValuePercentage_Heading.Text` (ACS:1617-1621):
  * `If(Not(IsBlank(SelectedCountry.'ISO Currency Code')), 'ISO Currency Code', "EUR")`.
- * DIVERGENCE: the PANEL caption `lbl_Add_Edit_AdminContracts_MarginFixedValue.Text` uses
- * `If(SelectedCountry.Name = "Poland", "PLN", "EUR")`; here the panel uses this same ISO-code rule
- * as the card.
  */
 export function currencyOf(isoCurrencyCode: string | undefined): string {
   return isoCurrencyCode?.trim() || "EUR";
+}
+
+/**
+ * The PANEL caption's currency, `lbl_Add_Edit_AdminContracts_MarginFixedValue.Text` (ACS:2506):
+ * `"Margin Fixed Value [" & If(SelectedCountry.Name = "Poland", "PLN", "EUR") & "]"` — a different
+ * rule from the card's ISO code, as the canvas has it (D23; restored 20 Nov 2026).
+ */
+export function panelFixedValueCurrency(countryName: string | undefined): string {
+  return countryName === "Poland" ? "PLN" : "EUR";
+}
+
+/**
+ * CONVENTIONS rule 20 — the panel inputs that carry the canvas standard-assumption pair, both halves
+ * UNCONDITIONAL (`FontColor: =ColorValue(gblAppTheme.palette.themePrimary)`, `FontItalic: =true`):
+ * every value typed into this panel is a standard assumption. `txt_Add_Edit_AdminContracts_Description`
+ * (ACS:2027-2028), `…_MonthDifference_Month` (2401-2402), `…_MarginFixedValue` (2547-2548),
+ * `…_MarginPercentage` (2780-2781) and `…_Comments` (2993-2994). The radios and the sign drop-down
+ * carry no pair.
+ */
+export type PanelInput = "description" | "month" | "marginFixed" | "marginPercentage" | "comment";
+export const STANDARD_PANEL_INPUTS: readonly PanelInput[] = ["description", "month", "marginFixed", "marginPercentage", "comment"];
+export function panelInputIsStandard(input: PanelInput): boolean {
+  return STANDARD_PANEL_INPUTS.includes(input);
+}
+
+/**
+ * Which validation text the panel SHOWS under a field. The canvas error labels
+ * (`lbl_Add_Edit_AdminContracts_MonthDifference_ErrorMessage`, `…_MarginPercentage_ErrorMessage`,
+ * `…_MarginFixedValue_ErrorMessage`, ACS:2297-2306, 2608-2621, 2690-2705) are `Visible` only for a
+ * NON-blank invalid value, and the description label's `Text` is commented out (ACS:2000-2017): a
+ * blank field only greys Save, it never shows "Input must not be blank" (D23; restored 20 Nov 2026).
+ * `validateForm` keeps the blank errors for the Save gate.
+ */
+export function visibleFieldError(error: string | undefined): string | undefined {
+  return error === MSG.inputBlank ? undefined : error;
 }
 
 /**
@@ -277,15 +311,27 @@ export function marginValueHeading(marginType: number | undefined, currency: str
 
 /**
  * `lbl_MarginFixedValuePercentage_Value.Text` — `Value(ThisItem.'Margin Fixed Value')` or
- * `Value(ThisItem.'Margin Percentage')`.
- * DIVERGENCE: the canvas shows the raw number; here it is locale-formatted with grouping and at
- * most two decimals, and a blank value shows "-".
+ * `Value(ThisItem.'Margin Percentage')` (ACS:1644-1652): the raw number as the label's text — the
+ * language's decimal separator, no thousands grouping, every stored decimal; a blank value is an
+ * empty label (canvas parity, restored 20 Nov 2026).
  */
 export function marginValue(contract: StandardContract, locale?: string): string {
   const value = contract.marginType === MARGIN_TYPE.FixedValue
     ? contract.marginFixedValue : contract.marginPercentage;
-  if (value === undefined || value === null) return "-";
-  return new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(value);
+  if (value === undefined || value === null) return "";
+  return new Intl.NumberFormat(locale, { maximumFractionDigits: 10, useGrouping: false }).format(value);
+}
+
+/**
+ * `lbl_Description_Value.Text = ThisItem.Description` and `lbl_MarginType_Value.Text =
+ * Text(ThisItem.'Margin Type')` (ACS:1329, 1576): a blank value is an empty label, never "-"
+ * (canvas parity, restored 20 Nov 2026). Only the comment has a dash (`commentText`).
+ */
+export function cardDescription(contract: Pick<StandardContract, "description">): string {
+  return contract.description || "";
+}
+export function cardMarginType(contract: Pick<StandardContract, "marginType">): string {
+  return contract.marginType === undefined ? "" : MARGIN_TYPE_LABEL[contract.marginType] ?? "";
 }
 
 /** `lbl_Comment_Value.Text` — `If(IsBlank(ThisItem.Comment), "-", Text(ThisItem.Comment))`, verbatim. */
@@ -768,15 +814,16 @@ export function canSave(args: {
 
 /**
  * `rad_Add_Edit_AdminContracts_RightPanel_NewEdit_Margin.OnChange` /
- * `rad_AddEdit_AdminContracts_RightPanel_MarginType.OnChange` (ACS:2873-2930) reset both margin
- * inputs. DIVERGENCE: the canvas resets them to 0 (the inputs then show "0"); here they are
- * cleared to "".
+ * `rad_AddEdit_AdminContracts_RightPanel_MarginType.OnChange` (ACS:2873-2930) set
+ * `locSelectedContractMarginPercentage` / `…FixedValues` to 0 and `Reset` both inputs, which then
+ * show "0" (D23; canvas parity restored 20 Nov 2026 — the port had cleared them to "").
  */
+export const MARGIN_RESET_TEXT = "0";
 export function withMargin(form: ContractForm, margin: boolean): ContractForm {
-  return { ...form, margin, marginPercentageText: "", marginFixedText: "" };
+  return { ...form, margin, marginPercentageText: MARGIN_RESET_TEXT, marginFixedText: MARGIN_RESET_TEXT };
 }
 export function withMarginType(form: ContractForm, marginType: number): ContractForm {
-  return { ...form, marginType, marginPercentageText: "", marginFixedText: "" };
+  return { ...form, marginType, marginPercentageText: MARGIN_RESET_TEXT, marginFixedText: MARGIN_RESET_TEXT };
 }
 
 /* ══════════════════════════════════════════════════════ save payloads ══ */
@@ -841,6 +888,16 @@ export function closeDialogText(kind: Exclude<ClosePrompt, "none">, fromScopeCha
 /** NEW — no canvas equivalent: the toast after closing a partly saved contract. */
 export const INCOMPLETE_CLOSED_WARNING =
   "The contract was saved, but its DevCo accounts are incomplete. Edit it to finish linking them.";
+
+/**
+ * The button look of every canvas confirmation on this screen, `cmp_PopUp_Confirmation`
+ * (`Components/cmp_PopUp_Confirmation.pa.yaml` L193-246): Confirm `FillColor: themePrimary`,
+ * `FontColor: white`, `IconName: "CheckMark"` (hard-coded — the instance's `IconRightButton: "Delete"`,
+ * ACS:4057, is never read by the component), `Width: 128`; Cancel white with the themePrimary border,
+ * `IconName: "Cancel"`, `Width: 96`. No red "danger" fill for a delete. The close prompts (no canvas
+ * instance) reuse the same look.
+ */
+export const POPUP_BUTTONS = { confirmIcon: "checkmark", confirmWidth: 128, cancelIcon: "dismiss" } as const;
 
 /**
  * `cmp_PopUp_Confirmation_Delete_Contract_Or_Period_1.Description` — `"Are you sure that you want

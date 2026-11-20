@@ -17,26 +17,70 @@
  *
  * The footer is the shared `PanelButtons look="brand"` via `FormPanel actions` with `gap: 20` (canvas
  * `Save.X = Cancel.X - Self.Width - 20`, CAX:1440 / CAX:2302); the error bar is `PanelMessages`;
- * Category / Main Account / the Edit subaccount number are `ReadOnlyField`; name "touched"
- * is `useTouched` + `shownError`; dirty is `isDirty`. The reorder panel is the shared
- * `ReorderPanel` with `footerGap={20}` (CAX:2302).
+ * the Category box is the shared `ChoiceField` (the canvas `DropDown@0.0.45`, always disabled);
+ * Main Account / the Edit subaccount number are `ReadOnlyField`; dirty is `isDirty`. The reorder
+ * panel is the shared `ReorderPanel` with `footerGap={20}` (CAX:2302).
+ *
+ * The field cluster as the canvas draws it (20 Nov 2026 parity pass): Semibold captions
+ * (`Text@0.0.51` `Weight: Semibold`), the red `*` hanging LEFT of the caption, the error labels
+ * 8 pt Semibold in `palette.Error` with no icon and no red box, and no `{Len}/55` counter under
+ * Name (the canvas sets `MaxLength: =55` but shows no counter).
  */
 import { useState } from "react";
-import { Text, makeStyles, tokens } from "@fluentui/react-components";
+import { Text, makeStyles, mergeClasses, tokens } from "@fluentui/react-components";
 import {
-  FormPanel, PanelMessages, ReadOnlyField, ReorderPanel as SharedReorderPanel, TextField,
+  ChoiceField, FormPanel, PanelMessages, ReadOnlyField, ReorderPanel as SharedReorderPanel, TextField,
+  useNoInvalidOutline,
 } from "@/components";
-import { useTouched, shownError } from "@/features/shared/useTouched";
 import { isDirty } from "@/domain/form";
 import { palette } from "@/theme/tokens";
 import {
-  MSG, NAME_MAX_LENGTH, accountLabel, accountNumberError, canSaveAccount, canSaveSubaccount,
-  nameError, subaccountSuffixError, type CapexNode,
+  MSG, NAME_MAX_LENGTH, accountNumberError, canSaveAccount, canSaveSubaccount,
+  subaccountSuffixError, visibleNameError, type CapexNode,
 } from "./rules";
 
+/** `gblAppSizes.Font` points → px (Power Apps renders 96/72 px per point). */
+const pt = (size: number) => `${(size * 4) / 3}px`;
+
 const useStyles = makeStyles({
-  form: { display: "flex", flexDirection: "column", rowGap: "16px", paddingTop: "20px" },
-  hint: { color: palette.Grayscale10, fontWeight: tokens.fontWeightRegular },
+  /*
+   * `con_Account_RightPanel_NewEditAccount_BodyContent` (CA:1040-1056): `PaddingTop: =20`, no `LayoutGap`;
+   * the shared `.canvas-panel-body` padding of 20 px IS that top padding, so none is added here (the earlier
+   * extra 20 px + 16 px gaps left the form starting 40 px down with wide gaps, user screenshot 21 Nov 2026).
+   * Each field is a `Height: =70` container: the caption `Height: =22` and the input at `caption.Y + 22 + 5`
+   * (CA:1061, 1081, 1114), so a field block is 70 px with a 5 px caption-to-input gap.
+   */
+  form: {
+    display: "flex", flexDirection: "column", rowGap: "0",
+    "& .fui-Field": { minHeight: "70px", rowGap: "0", alignContent: "start" },
+    // `lbl_…_Category` / `_Number` / `_Name` (and the subaccount captions): `Weight: Semibold`, 22 px high.
+    "& .fui-Field__label": {
+      display: "inline-flex", alignItems: "baseline", fontWeight: tokens.fontWeightSemibold,
+      minHeight: "22px", paddingBottom: "5px", boxSizing: "content-box",
+    },
+    /*
+     * `lbl_…_Asterisk`: a `Label@2.5.1` "*", `Color: palette.Error`, `FontWeight: Semibold`,
+     * `Size: Medium` (11 pt), 10 px wide at `X: =caption.X - Self.Width` (the subaccount panel's
+     * X 10 with the caption at 20) — so it hangs in the margin left of the caption.
+     */
+    "& .fui-Field .fui-Field__label .fui-Label__required": {
+      order: -1, boxSizing: "border-box", width: "10px", marginLeft: "-10px",
+      paddingLeft: 0, paddingRight: 0,
+      color: palette.Error, fontWeight: tokens.fontWeightSemibold, fontSize: pt(11),
+    },
+  },
+  /**
+   * `lbl_…_ErrorMessageNotNumbers` / `_ErrorMessageNumberExists`: `Size: ExtraExtraSmall` (8 pt),
+   * `FontWeight: Semibold`, `Color: palette.Error`, `PaddingTop: =3`.
+   */
+  error: { fontSize: pt(8), fontWeight: tokens.fontWeightSemibold, color: palette.Error, paddingTop: "3px" },
+  /** `lbl_…_AccountNumberAsPrefix`: `Size: =10`, `Color: gblAppStyles.Label.Color` (black). */
+  prefix: { fontSize: pt(10), color: palette.black },
+  /**
+   * `lbl_Account_RightPanel_Ordering_BodyContent` (CA:2119-2149): `Color: Grayscale10`,
+   * `FontWeight: Lighter`, `Size: Medium` (11 pt).
+   */
+  hint: { color: palette.Grayscale10, fontWeight: 300, fontSize: pt(11) },
 });
 
 /** CAPEX's footer: canvas button gap 20 (CAX:1440, CAX:2302). */
@@ -64,12 +108,12 @@ export function AccountPanel({
   open, isNew, account, category, saving, duplicate, error, blocked = false, onSave, onCancel,
 }: AccountPanelProps) {
   const styles = useStyles();
+  const noInvalidOutline = useNoInvalidOutline();
   const [number, setNumber] = useState(account?.number ?? "");
   const [name, setName] = useState(account?.name ?? "");
-  const touched = useTouched<"name">();
 
   const numberMessage = accountNumberError(number, isNew) ?? (duplicate ? MSG.accountExists : undefined);
-  const nameMessage = shownError(nameError(name), touched.isTouched("name"));
+  const nameMessage = visibleNameError(name);
   const valid = !blocked && canSaveAccount({ categoryId: category?.id, number, name }, isNew);
   const dirty = isDirty({ number, name }, { number: account?.number ?? "", name: account?.name ?? "" });
 
@@ -85,27 +129,33 @@ export function AccountPanel({
         cancelTestId: "pcf_Account_RightPanel_NewEditAccount_BodyButtons_Cancel",
       }}
     >
-      <div className={styles.form}>
+      <div className={mergeClasses(styles.form, noInvalidOutline.root)}>
         <PanelMessages error={error} />
         {/*
-          * `drp_Account_RightPanel_NewEditAccount_BodyContent_Category` — `DisplayMode: Disabled`
-          * always, defaulted to the selected tab (CA:1074-1083), so it is shown read-only.
+          * `drp_Account_RightPanel_NewEditAccount_BodyContent_Category` — a `DropDown@0.0.45`,
+          * `DisplayMode: Disabled` always, `DefaultSelectedItems` the selected tab (CA:1074-1083):
+          * a disabled dropdown showing the category. It never opens, so its one option is the tab.
           * Captions: `lbl_…_Category.Text` "Category", `lbl_…_Number.Text` "Number",
-          * `lbl_…_Name.Text` "Name" — verbatim.
+          * `lbl_…_Name.Text` "Name" — verbatim, in the canvas order Category, Number, Name.
           */}
-        <ReadOnlyField
-          skin="plain" label="Category" value={category?.name ?? ""} required
+        <ChoiceField
+          label="Category" required disabled
+          value={category?.id ?? null}
+          options={category ? [{ value: category.id, label: category.name }] : []}
           testId="drp_Account_RightPanel_NewEditAccount_BodyContent_Category"
         />
         {/* `txt_…_Number.DisplayMode: If(IsBlank(locSelectedAccount), Edit, Disabled)` (CA:1186-1191). */}
         <TextField skin="plain"
           label="Number" required value={number} disabled={!isNew}
           onChange={setNumber} error={numberMessage}
+          errorClassName={styles.error} validationIcon={null}
           testId="txt_Account_RightPanel_NewEditAccount_BodyContent_Number"
         />
+        {/* `txt_…_Name.MaxLength: =55` (CA:1341), no counter. */}
         <TextField skin="plain"
-          label="Name" required value={name} maxLength={NAME_MAX_LENGTH}
-          onChange={(v) => { setName(v); touched.touch("name"); }} error={nameMessage}
+          label="Name" required value={name} maxLength={NAME_MAX_LENGTH} counter={false}
+          onChange={setName} error={nameMessage}
+          errorClassName={styles.error} validationIcon={null}
           testId="txt_Account_RightPanel_NewEditAccount_BodyContent_Name"
         />
       </div>
@@ -135,12 +185,12 @@ export function SubaccountPanel({
   open, isNew, parent, subaccount, saving, duplicate, error, blocked = false, onSave, onCancel,
 }: SubaccountPanelProps) {
   const styles = useStyles();
+  const noInvalidOutline = useNoInvalidOutline();
   const [suffix, setSuffix] = useState("");
   const [name, setName] = useState(subaccount?.name ?? "");
-  const touched = useTouched<"name">();
 
   const suffixMessage = subaccountSuffixError(suffix, isNew) ?? (duplicate ? MSG.subaccountExists : undefined);
-  const nameMessage = shownError(nameError(name), touched.isTouched("name"));
+  const nameMessage = visibleNameError(name);
   const valid = !blocked && Boolean(parent) && canSaveSubaccount({ suffix, name }, isNew);
   const prefix = `${parent?.number ?? ""}_`;
   const dirty = isDirty({ suffix, name }, { suffix: "", name: subaccount?.name ?? "" });
@@ -157,12 +207,13 @@ export function SubaccountPanel({
         cancelTestId: "pcf_Account_RightPanel_NewEditSubaccount_BodyButtons_Cancel",
       }}
     >
-      <div className={styles.form}>
+      <div className={mergeClasses(styles.form, noInvalidOutline.root)}>
         <PanelMessages error={error} />
         {/*
           * Captions: `lbl_…_AccountMain.Text` "Main Account", `lbl_…_Number.Text` "Subaccount
-          * Number", `lbl_…_Name.Text` "Subaccount Name" — verbatim. The Main Account box
-          * (`txt_…_AccountName`) is `DisplayMode: Disabled` (CA:1611), so it is shown read-only.
+          * Number", `lbl_…_Name.Text` "Subaccount Name" — verbatim, in the canvas order. The Main
+          * Account box (`txt_…_AccountName`, `Value: locSelectedAccount.Name`) is
+          * `DisplayMode: Disabled` (CA:1611), so it is shown disabled.
           */}
         <ReadOnlyField
           skin="plain" label="Main Account" value={parent?.name ?? ""} required
@@ -171,22 +222,28 @@ export function SubaccountPanel({
         {isNew ? (
           <TextField skin="plain"
             label="Subaccount Number" required value={suffix} onChange={setSuffix}
-            error={suffixMessage}
+            error={suffixMessage} errorClassName={styles.error} validationIcon={null}
             // `lbl_…_AccountNumberAsPrefix.Text: locSelectedAccount.Number & "_"`, visible for a NEW subaccount only.
-            contentBefore={<Text data-testid="lbl_Account_RightPanel_NewEditSubaccount_BodyContent_AccountNumberAsPrefix">{prefix}</Text>}
+            contentBefore={(
+              <Text className={styles.prefix} data-testid="lbl_Account_RightPanel_NewEditSubaccount_BodyContent_AccountNumberAsPrefix">
+                {prefix}
+              </Text>
+            )}
             testId="txt_Account_RightPanel_NewEditSubaccount_BodyContent_Number"
           />
         ) : (
-          // Edit: the full number, read-only (no validation applies to it). Same canvas control,
-          // which the canvas disables in edit mode.
+          // Edit: the full number, disabled (no validation applies to it). Same canvas control,
+          // which the canvas disables in edit mode (CA:1758-1766).
           <ReadOnlyField
             skin="plain" label="Subaccount Number" value={subaccount?.number ?? ""} required
             testId="txt_Account_RightPanel_NewEditSubaccount_BodyContent_Number"
           />
         )}
+        {/* `txt_…_Name.MaxLength: =55` (CA:1885), no counter. */}
         <TextField skin="plain"
-          label="Subaccount Name" required value={name} maxLength={NAME_MAX_LENGTH}
-          onChange={(v) => { setName(v); touched.touch("name"); }} error={nameMessage}
+          label="Subaccount Name" required value={name} maxLength={NAME_MAX_LENGTH} counter={false}
+          onChange={setName} error={nameMessage}
+          errorClassName={styles.error} validationIcon={null}
           testId="txt_Account_RightPanel_NewEditSubaccount_BodyContent_Name"
         />
       </div>
@@ -214,22 +271,28 @@ export interface ReorderPanelProps {
 const ALWAYS_SAVE = () => true;
 
 /**
- * DIVERGENCE: `lbl_Account_RightPanel_Ordering_BodyContent.Text` is "To reorder drag and drop
- * listed items" (CA:2119-2149). This panel also has Move up / Move down buttons, so the hint
- * names them too.
+ * `lbl_Account_RightPanel_Ordering_BodyContent.Text` (CA:2145) — verbatim. The port had added
+ * ", or use the move up / move down buttons." (a divergence proposed in D149, not approved);
+ * restored on 20 Nov 2026. The Move up / Move down buttons stay for the keyboard.
  */
-const REORDER_HINT = "To reorder drag and drop listed items, or use the move up / move down buttons.";
+const REORDER_HINT = "To reorder drag and drop listed items";
 
 /**
- * The shared `ReorderPanel` with `footerGap={20}` (canvas CAX:2302) and `bodyGap={16}`. Focus
- * follows the moved item and each move is announced.
+ * The PowerDragDrop item text: `ItemTemplate: ="<p><b>{{vsb_name}}</b></p>"` (CA:2165, CA:2204),
+ * the name only (D19: "lists the category's accounts by name"). The port had shown
+ * "<number> - <name>", an unrecorded divergence; restored on 20 Nov 2026.
+ */
+const reorderLabel = (n: CapexNode) => n.name;
+
+/**
+ * The shared `ReorderPanel` with `footerGap={20}` (canvas CAX:2302) and `bodyGap={16}`. Rows drag
+ * and drop as the canvas `pdd_CustomControl.PowerDragDrop`; focus follows a keyboard move and each
+ * move is announced.
  *
- * DIVERGENCE: each row shows "<number> - <name>", so equal names are distinguishable; the canvas
- * PowerDragDrop template is the name only (`ItemTemplate: "<p><b>{{vsb_name}}</b></p>"`, CA:2165).
- *
- * The ✕ (`ico_Account_RightPanel_Ordering_BodyHeaderCancel`) and the list
- * (`pcf_Account_RightPanel_Ordering_BodyContent_Accounts` / `…_Subaccounts`) carry no canvas id:
- * the shared `ReorderPanel` has no prop for them yet.
+ * The list carries its canvas name (`pcf_Account_RightPanel_Ordering_BodyContent_Accounts` / `…_Subaccounts`);
+ * rows are the template's 15 px bold names with no line between them (`ItemFontSize: =15`, `BorderWidth: =0`,
+ * the shared `ReorderItems` look). The ✕ (`ico_Account_RightPanel_Ordering_BodyHeaderCancel`) keeps its existing
+ * `panel-close` id (rule 16: never change an existing value).
  */
 export function ReorderPanel({ open, subaccounts, items, saving, error, onSave, onCancel }: ReorderPanelProps) {
   const styles = useStyles();
@@ -240,7 +303,7 @@ export function ReorderPanel({ open, subaccounts, items, saving, error, onSave, 
       title={subaccounts ? "Subaccounts order" : "'Capex Accounts' order"}
       items={items}
       getId={(n) => n.id}
-      getLabel={accountLabel}
+      getLabel={reorderLabel}
       // NEW — no canvas equivalent: the list's accessible name.
       listAriaLabel={subaccounts ? "Subaccounts in order" : "Accounts in order"}
       hint={REORDER_HINT}
@@ -255,6 +318,9 @@ export function ReorderPanel({ open, subaccounts, items, saving, error, onSave, 
       saveTestId="pcf_Account_RightPanel_Ordering_BodyButtons_Save"
       cancelTestId="pcf_Account_RightPanel_Ordering_BodyButtons_Cancel"
       listProps={{
+        listTestId: subaccounts
+          ? "pcf_Account_RightPanel_Ordering_BodyContent_Subaccounts"
+          : "pcf_Account_RightPanel_Ordering_BodyContent_Accounts",
         buttonLabels: "inline",
         draggable: true,
         announcePeriod: false,

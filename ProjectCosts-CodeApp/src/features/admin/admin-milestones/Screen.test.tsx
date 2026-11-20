@@ -67,7 +67,7 @@ import { DataError, RecordGoneError } from "@/platform/errors";
 import { ERROR_HINT } from "@/platform/userMessage";
 import type { MilestoneAssumption, MilestoneCountry, MilestonePatch } from "@/data/adminMilestones";
 import MilestonesSettingsScreen from "./Screen";
-import { FIXTURE_ASSUMPTIONS, FIXTURE_COUNTRIES } from "./fixtures";
+import { FIXTURE_ASSUMPTIONS, FIXTURE_COUNTRIES, GERMANY } from "./fixtures";
 import { MSG } from "./constants";
 
 let client: QueryClient;
@@ -654,7 +654,8 @@ describe("MilestonesSettingsScreen — canvas parity", () => {
     // Header, then the blank-Technology row first (Power Fx sorts blanks first), then Wind, PV.
     expect(rows).toHaveLength(4);
     expect(within(rows[1]!).getAllByRole("cell")[0]).toHaveTextContent(/^$/);
-    expect(screen.getByTestId("lbl_Cluster1Value_MilestonesStandardAssumptions_AdminScreen-none")).toHaveTextContent("5-");
+    // No success row for the blank Technology: the Cluster 1 rate line is EMPTY (`$"{record.SuccessRate}"`), not "-".
+    expect(screen.getByTestId("lbl_Cluster1Value_MilestonesStandardAssumptions_AdminScreen-none")).toHaveTextContent(/^5$/);
 
     await user.click(screen.getByRole("button", { name: "Edit" }));
     await screen.findByText("Edit Milestones for Germany");
@@ -666,5 +667,22 @@ describe("MilestonesSettingsScreen — canvas parity", () => {
     expect(saveMilestonePatches.mock.calls[0]?.[0]).toEqual([
       { id: "de-none-m", changes: { vsb_cluster1: 7 }, label: "No technology – Cluster Durations" },
     ]);
+  });
+
+  it("UT-ADMILE-938 the section's bottom rule shows only while folded (`shp_BottomLine.Visible = IsFolded`, AMS:855)", async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    const header = await screen.findByRole("button", { name: /Germany/ });
+    const item = screen.getByTestId(`con_Main_MilestonesStandardAssumptions-${GERMANY}`);
+    expect(header).toHaveAttribute("aria-expanded", "false");
+    expect(getComputedStyle(item).borderBottomWidth).toBe("1px");
+    // The rule is the item's while folded, never the header's own (`border="folded"`, not `"always"`).
+    expect(getComputedStyle(header.parentElement!).borderBottomWidth).not.toBe("1px");
+    await user.click(header);
+    expect(header).toHaveAttribute("aria-expanded", "true");
+    expect(getComputedStyle(item).borderBottomWidth).not.toBe("1px");
+    expect(getComputedStyle(header.parentElement!).borderBottomWidth).not.toBe("1px");
+    await user.click(header);
+    expect(getComputedStyle(item).borderBottomWidth).toBe("1px");
   });
 });

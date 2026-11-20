@@ -4,9 +4,10 @@
  * DIVERGENCE: ONE error colour for both panels (`palette.Error`, #B22727). The canvas uses #B22727
  * in the contract panel and #d20532 in the DEVEX panel (a canvas inconsistency).
  *
- * The inputs are italic `themePrimary`, as the canvas inputs are (e.g.
- * `txt_LandLease_RightPanel_NewEditCost_BodyContent_InflationStartYear_1`: `FontColor: themePrimary`,
- * `FontItalic: true`).
+ * No blanket input colour here: the canvas sets the standard-assumption pair (`FontColor:
+ * themePrimary` / `FontItalic: true`) PER CONTROL, so each drawer passes the shared `standard`
+ * style (`@/components`, CONVENTIONS rule 20) to exactly the controls that carry it —
+ * `devexFieldStandard` / `opexFieldStandard` in `rules.ts` say which.
  */
 import { makeStyles, tokens } from "@fluentui/react-components";
 import { palette } from "@/theme/tokens";
@@ -16,7 +17,6 @@ export const useDrawerStyles = makeStyles({
     display: "flex", flexDirection: "column", rowGap: "14px",
     paddingTop: "12px", paddingBottom: "12px",
     "& .fui-Label__required": { color: palette.Error },
-    "& input, & textarea": { fontStyle: "italic", color: palette.themePrimary },
   },
   columns: {
     display: "grid", gridTemplateColumns: "1fr 1fr", columnGap: "24px", rowGap: "14px",

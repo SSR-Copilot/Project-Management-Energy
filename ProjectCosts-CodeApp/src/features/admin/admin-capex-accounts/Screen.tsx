@@ -28,13 +28,18 @@
  * delete or status change is refused with `OUT_OF_SCOPE` and nothing is sent. The commands stay
  * enabled for a non-admin (doc 09 §5).
  *
- * DIVERGENCE: the success toasts, warnings, loading / empty / load-error states and the inline
- * errors are NEW — the canvas showed nothing after a write (no `IfError`, no message control).
+ * DIVERGENCE: the success toasts, warnings, loading / load-error / missing-root states and the
+ * inline errors are NEW — the canvas showed nothing after a write (no `IfError`, no message
+ * control). A category without accounts shows nothing under the command bar, as the canvas
+ * (`gal_Account_Accounts.Visible: =Self.AllItemsCount>0`, CA:406).
+ *
+ * Canvas parity pass (20 Nov 2026): the canvas `ItemIconName`s on the account bar, the canvas
+ * `cmp_PopUp_Confirmation` chrome on every confirmation (no red Confirm) and no invented empty line.
  */
 import { useMemo, useState } from "react";
 import { makeStyles } from "@fluentui/react-components";
 import {
-  CommandBar, ConfirmDialog, EmptyState, LoadingOverlay, NoticeBar, QueryStates, SettingsTabStrip, useNotify,
+  CommandBar, ConfirmDialog, LoadingOverlay, NoticeBar, QueryStates, SettingsTabStrip, useNotify,
   type Command,
   useQueryHealth,
   VisuallyHidden,
@@ -164,15 +169,13 @@ export default function CAPEXAccountsSettingsScreen() {
 
   /**
    * The account command bar — `pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar`
-   * (CA:184-368): the canvas `ItemKey`s and `ItemDisplayName`s, verbatim; hidden commands are not
-   * rendered.
-   * DIVERGENCE (icons): the canvas `ItemIconName`s are "NumberedList" (Reorder), "ActivateOrders"
-   * and "DeactivateOrders"; this bar shows the "Reorder", "Activate" and "Deactivate" icons (D19 had
-   * restored the canvas icons before the port).
+   * (CA:184-368): the canvas `ItemKey`s, `ItemDisplayName`s and `ItemIconName`s, verbatim —
+   * "NumberedList" (CA:208), "Add", "Edit", "ActivateOrders" (CA:244), "DeactivateOrders" (CA:257),
+   * "Delete" — as the shared `CommandBar` maps them; hidden commands are not rendered.
    */
   const accountBar: (Command & CommandState & { run: () => void })[] = [
     {
-      key: "orderAccounts", label: "Reorder", icon: "Reorder", ...commands.reorder,
+      key: "orderAccounts", label: "Reorder", icon: "NumberedList", ...commands.reorder,
       run: () => { if (category) openPanel({ kind: "reorder", parentId: category.id, subaccounts: false }); },
     },
     {
@@ -183,11 +186,11 @@ export default function CAPEXAccountsSettingsScreen() {
     },
     { key: "editAccount", label: "Edit", icon: "Edit", ...commands.edit, run: () => { if (selected) openPanel({ kind: "account", editing: selected }); } },
     {
-      key: "activateAccount", label: "Activate", icon: "Activate", ...commands.activate,
+      key: "activateAccount", label: "Activate", icon: "ActivateOrders", ...commands.activate,
       run: () => { if (selected) openDialog("accountStatus", selected, accountStatusDialog(selected)); },
     },
     {
-      key: "deactivateAccount", label: "Deactivate", icon: "Deactivate", ...commands.deactivate,
+      key: "deactivateAccount", label: "Deactivate", icon: "DeactivateOrders", ...commands.deactivate,
       run: () => { if (selected) openDialog("accountStatus", selected, accountStatusDialog(selected)); },
     },
     {
@@ -411,8 +414,8 @@ export default function CAPEXAccountsSettingsScreen() {
   /* ── render ── */
   // Full-page error only when there is NOTHING to show: `useQueryHealth` treats a
   // failed background refetch with cached data as `staleError` (a warning bar), never as fatal,
-  // so open panels/dialogs and the outcome of the write just made stay on screen. The empty and
-  // error texts are NEW (CONVENTIONS rule 19).
+  // so open panels/dialogs and the outcome of the write just made stay on screen. The missing-root
+  // and error texts are NEW (CONVENTIONS rule 19).
   const empty = !tree?.root
     ? {
       when: true,
@@ -487,10 +490,11 @@ export default function CAPEXAccountsSettingsScreen() {
               </NoticeBar>
             ) : null}
 
-            {/* Account cards — `gal_Account_Accounts` (CA:369-941); the empty state is NEW (the canvas gallery is just hidden). */}
-            {accounts.length === 0 ? (
-              <EmptyState title="No accounts in this category" description="Use New to add the first account." />
-            ) : (
+            {/*
+              * Account cards — `gal_Account_Accounts` (CA:369-941). `Visible: =Self.AllItemsCount>0`
+              * (CA:406): a category without accounts shows nothing under the command bar, no text.
+              */}
+            {accounts.length === 0 ? null : (
               <div
                 className={styles.cards} role="list" aria-label={`Accounts of ${category?.name ?? ""}`}
                 data-testid="gal_Account_Accounts"
@@ -564,17 +568,26 @@ export default function CAPEXAccountsSettingsScreen() {
               />
             ) : null}
 
-            {/* Confirmation dialogs — the four `cmp_Account_PopUpConfirmation_*` (one at a time; texts
-                in `rules.ts`). The failure is a `role="alert"` MessageBar inside the dialog; ✕ and
-                Escape are locked while it runs. `destructive` (red Confirm) is NEW. The shared
-                `ConfirmDialog` has no prop for the pop-up's or its buttons' canvas ids. */}
+            {/*
+              * Confirmation dialogs — the four `cmp_Account_PopUpConfirmation_*` (one at a time; texts
+              * in `rules.ts`), every one the PM `cmp_PopUp_Confirmation` as the canvas draws it
+              * (`Src/Components/cmp_PopUp_Confirmation.pa.yaml`): a 490-wide box with a 40 px header
+              * (`classicPopUp`, :83, :95), the 0.7 scrim (`darkScrim`, :68), Confirm themePrimary with
+              * white text and a CheckMark (`IconName: ="CheckMark"`, :211), `Width: =128` (:218), Cancel
+              * with the "Cancel" icon (:238), 96 wide (:244). The deletes are the SAME button — no red Confirm
+              * (the port's `destructive` was NEW; dropped on 20 Nov 2026). The failure is a
+              * `role="alert"` MessageBar inside the dialog; ✕ and Escape are locked while it runs. The
+              * shared `ConfirmDialog` has no prop for the pop-up's or its buttons' canvas ids.
+              */}
             <ConfirmDialog
               open={Boolean(dialog.state)}
               title={dialog.state?.payload.text.title ?? ""}
               description={dialog.state?.payload.text.description ?? ""}
               confirmText={dialog.state?.payload.text.confirmText ?? "Confirm"}
+              confirmIcon="checkmark"
               confirmWidth={128}
-              destructive={dialog.state?.kind === "deleteAccount" || dialog.state?.kind === "deleteSubaccount"}
+              classicPopUp
+              darkScrim
               busy={dialog.busy}
               lockWhileBusy
               error={dialog.error ?? null}

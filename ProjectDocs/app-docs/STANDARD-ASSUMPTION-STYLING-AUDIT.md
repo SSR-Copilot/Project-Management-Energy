@@ -11,6 +11,18 @@ and `Src/Components/`, solution 1.21.709) was scanned for every control with a n
 `Italic` / `FontItalic`, or a `Color` / `FontColor` of the form `If(<…Standard…>, ColorValue(gblAppTheme.palette.themePrimary), …)`.
 That gives 168 controls on 10 screens. No Admin screen and no shared component has one.
 
+**Correction (20 Nov 2026, D150).** The scan looked for *conditional* formulas only. Two Admin screens set the pair as
+fixed values (`FontColor: =gblAppTheme.palette.themePrimary` with `FontItalic: =true`), so their values are always blue
+and italic and an edit never clears the style:
+- **Admin Costs** (`Admin Cost Screen.pa.yaml`): 22 controls across the DEVEX cost panel and the contract period panel,
+  for example Description, Cost, the cluster checkboxes, Category, Sub-Account, Unit, the period figures and the Inflation
+  fields. Distribution Frequency, Cost Paid By and Comment are italic only. Currency, the tree rows and the OPEX cells are
+  plain. In the code: `admin-cost/rules.ts` `devexFieldStandard` / `opexFieldStandard`.
+- **Admin Contracts** (`Admin Contract Screen.pa.yaml`): Description, Month, Margin Fixed Value, Margin % and Comment
+  (L2027, 2401, 2547, 2780, 2993).
+
+Both use the shared `standardValue` style.
+
 ## The shared style
 
 One definition, in `ProjectCosts-CodeApp/src/components/standardValue.ts`, exported from `@/components`:

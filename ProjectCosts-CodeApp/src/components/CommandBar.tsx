@@ -20,8 +20,8 @@ import {
 import {
   AddRegular, EditRegular, DeleteRegular, ArrowSyncRegular, SaveRegular,
   DocumentRegular, MoreHorizontalRegular, PlayRegular,
-  GlassesRegular, OpenRegular, TextNumberListLtrRegular,
-  ChevronDownRegular, DocumentCheckmarkRegular, DocumentDismissRegular, PauseRegular, CheckmarkRegular,
+  GlassesRegular, OpenRegular,
+  ChevronDownRegular, DocumentCheckmarkRegular, PauseRegular, CheckmarkRegular,
 } from "@fluentui/react-icons";
 import type { ReactElement } from "react";
 import { palette, space } from "@/theme/tokens";
@@ -59,6 +59,37 @@ const BIDashboardIcon = () => (
   </svg>
 );
 
+/**
+ * MDL2 `NumberedList` (U+EA1C, fabric-icons-3), the canvas `ItemIconName` of every Reorder command (Check List
+ * Settings' cluster bar, CAPEX Accounts' account and subaccount bars), from `@fluentui/react-icons-mdl2` 1.3.83.
+ * Fluent v9's `TextNumberListLtrRegular` drew the digits on another baseline (until 21 Nov 2026). The same 80 %
+ * padding as `BIDashboard`. The render tests read the glyph's `data-icon-name`.
+ */
+const MDL2_NUMBERED_LIST_PATH =
+  "M2048 384v128H512V384h1536zM512 896h1536v128H512V896zm0 512h1536v128H512v-128zM135 349q-14 11-37 21t-43 11v-69q31-11 59-24t54-33h49v385h-82V349zm-1 420q25 0 47 6t39 20 26 34 10 47q0 31-12 54t-29 42-39 33-38 27-30 25-12 26h160v69H5v-41q0-18 10-39 15-34 41-57t51-44 45-40 19-47q0-27-15-38t-40-11q-26 0-49 11t-44 28v-73q50-32 111-32zm36 699q36 5 61 27t25 61q0 31-12 53t-33 35-46 20-54 7q-24 0-48-4t-47-15v-73q19 14 41 21t47 7q26 0 46-11t21-41q0-22-13-32t-31-15-39-5-34 0v-64h32q18 0 34-3t28-14 12-31q0-26-16-36t-40-10q-39 0-74 24v-68q22-11 45-15t48-5q22 0 44 5t39 16 28 30 11 43q0 38-19 60t-56 32v1z";
+const NumberedListIcon = () => (
+  <svg width="1em" height="1em" viewBox="-256 -256 2560 2560" fill="currentColor" aria-hidden="true"
+    data-icon-name="NumberedList">
+    <path d={MDL2_NUMBERED_LIST_PATH} />
+  </svg>
+);
+
+/**
+ * MDL2 `DeactivateOrders` (U+EFE1, fabric-icons-8): a document with a cross, the canvas `ItemIconName` / `IconName`
+ * of every Deactivate command and status icon (CAPEX Accounts CA:257 and CA:546-568, Check List Settings L556, the
+ * PM Generators / Production / Finance bars), from `@fluentui/react-icons-mdl2` 1.3.83. Until 21 Nov 2026 Fluent
+ * v9's `DocumentDismissRegular` stood in. `fit="slot"` (default) pads the em to 80 % of the command-bar slot like the
+ * other MDL2 glyphs here; `fit="em"` draws the glyph AS the em for the PowerCAT Icon rows (Check List Settings' task
+ * grid, CAPEX subaccounts), where the slot's font-size is the glyph size. Exported for those rows.
+ */
+const MDL2_DEACTIVATE_ORDERS_PATH = "M1819 1728l226 227-90 90-227-226-227 227-90-91 227-227-227-227 90-90 227 227 227-227 90 91-226 226zM512 640H384V512h128v128zm0 256H384V768h128v128zm-128 128h128v128H384v-128zm-128 896h1024v128H128V0h1115l549 549v731h-128V640h-512V128H256v1792zM1280 512h293l-293-293v293zm-256 128H640V512h384v128zm0 256H640V768h384v128zm-384 128h384v128H640v-128z";
+export const DeactivateOrdersIcon = ({ fit = "slot" }: { fit?: "slot" | "em" }) => (
+  <svg width="1em" height="1em" viewBox={fit === "slot" ? "-256 -256 2560 2560" : "0 0 2048 2048"} fill="currentColor"
+    aria-hidden="true" focusable="false" data-icon-name="DeactivateOrders">
+    <path d={MDL2_DEACTIVATE_ORDERS_PATH} />
+  </svg>
+);
+
 const ICONS: Record<CommandIcon, ReactElement> = {
   Add: <AddRegular />,
   Edit: <EditRegular />,
@@ -72,11 +103,11 @@ const ICONS: Record<CommandIcon, ReactElement> = {
   BIDashboard: <BIDashboardIcon />,
   ReadingMode: <GlassesRegular />,
   View: <OpenRegular />,
-  NumberedList: <TextNumberListLtrRegular />,
-  // MDL2 `ActivateOrders` / `DeactivateOrders` are a document with a tick / a cross.
+  NumberedList: <NumberedListIcon />,
+  // MDL2 `ActivateOrders` is a document with a tick (Fluent v9's lookalike); `DeactivateOrders` is the MDL2 outline itself.
   ActivateOrders: <DocumentCheckmarkRegular />,
-  DeactivateOrders: <DocumentDismissRegular />,
-  Reorder: <TextNumberListLtrRegular />,
+  DeactivateOrders: <DeactivateOrdersIcon />,
+  Reorder: <NumberedListIcon />,
   Activate: <PlayRegular />,
   Deactivate: <PauseRegular />,
   Apply: <CheckmarkRegular />,

@@ -33,8 +33,8 @@
  * Shared building blocks: tab strip `SettingsTabStrip`, page / section states `useQueryHealth`
  * + `QueryStates`, load bars `NoticeBar` (small Retry), accordion `SettingsAccordion`, cluster
  * commands `CommandBar` (canvas disabled greys), writes `useBusyRunner`, panels
- * `usePanelState`, editor touch `useTouched`, dialogs `useConfirmDialog` (`closeFirst`), live
- * region `VisuallyHidden`.
+ * `usePanelState`, dialogs `useConfirmDialog` (`closeFirst`) + `ConfirmDialog` in the PM pop-up
+ * look (`CANVAS_POPUP`), live region `VisuallyHidden`.
  *
  * Access: every write is gated by the admin rule (`useAdminAccess`, with its local-run bypass);
  * a non-admin sees the screen read-only (commands, row actions and Save disabled).
@@ -54,7 +54,6 @@ import { useAdminAccess } from "@/app/useCurrentUser";
 import { useBusyRunner } from "@/features/shared/useBusyRunner";
 import { useConfirmDialog } from "@/features/shared/useConfirmDialog";
 import { usePanelState } from "@/features/shared/usePanelState";
-import { useTouched } from "@/features/shared/useTouched";
 import {
   RenumberAfterDeleteError, TaskCreatedIdUnknownError, TaskStatusNotSetError,
   type ChecklistTask, type TaskForm,
@@ -95,6 +94,21 @@ const PAGE_TITLE = "Checklist settings";
 /** `pcf_CommandBar_Cluster_DefaultChecklist_AdminScreen.Items` `ItemKey`s (L327, L333). */
 const ADD_TASK = "addNewChecklistEntity";
 const REORDER = "reorderChecklist";
+
+/**
+ * Both confirmations are instances of the PM app's `cmp_PopUp_Confirmation`
+ * (`Components/cmp_PopUp_Confirmation.pa.yaml`): a `RGBA(0, 0, 0, 0.7)` scrim (L66), a `Min(490, …)` x 260 box
+ * with a 40-high themePrimary header (L80-102), and the PowerCAT buttons — Confirm `FillColor: themePrimary`,
+ * `FontColor: white`, `IconName: ="CheckMark"`, `Width: =128` (L193-219), Cancel `IconName: ="Cancel"`, `Width: =96`
+ * (L221-245). The component hard-codes both icons: the instances' `IconRightButton: ="Trash"` (L1709, L1766) is an
+ * input it never reads, so Delete shows the ✓ too, and nothing is red. Until 20 Nov 2026 the delete dialog was
+ * `destructive` (a red Confirm, no canvas counterpart) with a bin icon and the 96 px default width.
+ * The same props as Production's `PM_CONFIRMATION_POPUP` (the Team delete screenshot); a shared export is proposed.
+ */
+const CANVAS_POPUP = {
+  canvasFooter: true, footerDivider: false, darkScrim: true, confirmWidth: 128, classicPopUp: true,
+  confirmIcon: "checkmark", cancelIcon: "dismiss",
+} as const;
 
 type Editor = {
   mode: "create" | "edit";
@@ -161,7 +175,6 @@ export default function CheckListSettingsScreen() {
   const [openClusters, setOpenClusters] = useState<string[]>([]);
   const [selectedClusterId, setSelectedClusterId] = useState<string | null>(null);
   const editor = usePanelState<Editor>();
-  const touched = useTouched<"name">();
   const reorder = usePanelState<Reorder>();
   const dialog = useConfirmDialog<"status" | "delete", ChecklistTask>();
   /** Wraps every write: overlay text (or a row spinner), then success or a visible error. */
@@ -198,13 +211,11 @@ export default function CheckListSettingsScreen() {
   /** `pcf_CommandBar_Cluster_….OnSelect` "addNewChecklistEntity": opens the panel and sets `locSelectedCluster` (L345-358). */
   const openAdd = (clusterId: string) => {
     setSelectedClusterId(clusterId);
-    touched.reset();
     editor.open({ mode: "create", clusterId, taskId: null, tabId, form: emptyTaskForm(), seed: emptyTaskForm() });
   };
 
   const openEdit = (task: ChecklistTask) => {
     if (rowLocked(task)) return;
-    touched.reset();
     editor.open({
       mode: "edit", clusterId: task.clusterId ?? "", taskId: task.id, tabId: task.tabId ?? tabId,
       form: formFromTask(task), seed: formFromTask(task),
@@ -225,7 +236,8 @@ export default function CheckListSettingsScreen() {
     const current = editor.panel;
     if (!current) return;
     if (!canEdit) { editor.setError(OUT_OF_SCOPE_MESSAGE); return; }
-    if (!isTaskFormValid(current.form)) { touched.touch("name"); return; }
+    // The blank-name message is already showing (canvas `Visible: IsBlank(Trim(…))`, L1056) and Save is disabled.
+    if (!isTaskFormValid(current.form)) return;
     const tab = sortedTabs.find((t) => t.id === (current.tabId ?? tabId));
     // NEW — no canvas equivalent.
     if (!tab) { editor.setError("The selected country/technology no longer exists. Reload the page."); return; }
@@ -455,11 +467,9 @@ export default function CheckListSettingsScreen() {
                   <>
                     {/*
                       * Cluster command bar — `pcf_CommandBar_Cluster_DefaultChecklist_AdminScreen.Items`
-                      * (L324-338): `ItemDisplayName` "Add Task" / "Reorder" verbatim, the canvas
-                      * `ItemKey`s. Canvas `ItemEnabled: true`; here disabled while a write runs, the
-                      * tasks have not loaded or the user is not an admin (NEW).
-                      * DIVERGENCE: Reorder shows the "Reorder" icon; the canvas `ItemIconName` is
-                      * "NumberedList" (D18 had restored it before the port).
+                      * (L324-338): `ItemDisplayName` "Add Task" / "Reorder" and `ItemIconName` "Add" /
+                      * "NumberedList" verbatim, the canvas `ItemKey`s. Canvas `ItemEnabled: true`; here
+                      * disabled while a write runs, the tasks have not loaded or the user is not an admin (NEW).
                       */}
                     <CommandBar
                       className={styles.commands}
@@ -467,7 +477,7 @@ export default function CheckListSettingsScreen() {
                       testIdPrefix={`pcf_CommandBar_Cluster_DefaultChecklist_AdminScreen-${cluster.id}`}
                       commands={[
                         { key: ADD_TASK, label: "Add Task", icon: "Add", enabled: commandsEnabled },
-                        { key: REORDER, label: "Reorder", icon: "Reorder", enabled: commandsEnabled },
+                        { key: REORDER, label: "Reorder", icon: "NumberedList", enabled: commandsEnabled },
                       ]}
                       onCommand={(key) => (key === ADD_TASK ? openAdd(cluster.id) : openReorder(cluster.id))}
                     />
@@ -502,22 +512,22 @@ export default function CheckListSettingsScreen() {
         open={editorPanel !== null}
         mode={editorPanel?.mode ?? "create"}
         form={editorPanel?.form ?? emptyTaskForm()}
-        touched={editorPanel !== null && touched.isTouched("name")}
         dirty={editorPanel ? taskFormChanged(editorPanel.seed, editorPanel.form) : false}
         error={editor.error ?? null}
         saving={saveTask.isPending}
         readOnly={!canEdit}
         onChange={(form) => editor.patch({ form })}
-        onTouch={() => touched.touch("name")}
         onSave={() => void saveEditor()}
         onCancel={editor.close}
       />
 
       {/*
         * Reorder drawer — `con_Admin_Checklist_Reorder` (remounted per open, so it starts from the
-        * new snapshot). `pcf_ReorderTaskList_AdminScreen` was a PowerDragDrop list; here Move up /
-        * Move down buttons (see `REORDER_HELP`). The ✕ (`pcf_Cancel_Reorder_CommandBar`) and the
-        * list itself carry no canvas id: the shared `ReorderPanel` has no prop for them yet.
+        * new snapshot). `pcf_ReorderTaskList_AdminScreen` was a PowerDragDrop list; here native
+        * drag-and-drop (as the canvas) plus Move up / Move down buttons for keyboard and touch
+        * (D18 b, see `REORDER_HELP`). The ✕ (`pcf_Cancel_Reorder_CommandBar`) is themeTertiary (L1478); the list is
+        * `pcf_ReorderTaskList_AdminScreen`; rows are the template's 15 px bold names, with no position numbers
+        * (`ItemTemplate: ="<p><b>{{RenderName}}</b></p>"`, `ItemFontSize: =15`, L1557-1558).
         */}
       <ReorderPanel
         key={reorder.key}
@@ -541,8 +551,11 @@ export default function CheckListSettingsScreen() {
         saveTooltip={HINTS.save}
         saveTestId="pcf_but_Admin_Checklist_Reorder_Buttons_Save"
         cancelTestId="pcf_but_Admin_Admin_Checklist_Reorder_Buttons_Cancel"
+        // The ✕ keeps its existing `panel-close` id (rule 16: never change an existing value).
+        closeIconColor={palette.themeTertiary}
         listProps={{
-          showPosition: true,
+          listTestId: "pcf_ReorderTaskList_AdminScreen",
+          draggable: true,
           buttonLabels: "describedby",
           announcePeriod: true,
           emptyText: "There are no tasks to reorder in this cluster.",
@@ -552,14 +565,16 @@ export default function CheckListSettingsScreen() {
 
       {/*
         * Confirmation dialogs — `cmp_ActivateDeactiveChecklistItem_AdminScreen` and
-        * `cmp_DeleteChecklistItem_AdminScreen` (texts in `statusDialog` / `deleteDialog`). The
-        * shared `ConfirmDialog` has no prop for the dialog's or its buttons' canvas ids.
+        * `cmp_DeleteChecklistItem_AdminScreen` (texts in `statusDialog` / `deleteDialog`), both in the
+        * canvas pop-up look (`CANVAS_POPUP`: blue ✓ Confirm, 128 px). The buttons keep their existing
+        * `confirm-dialog-*` test ids (rule 16: never change an existing value); `PM_POPUP_IDS` would
+        * carry the canvas names.
         */}
       {dialog.state?.kind === "status" ? (
         <ConfirmDialog
           open
           {...statusDialog(dialog.state.payload)}
-          confirmWidth={128}
+          {...CANVAS_POPUP}
           onConfirm={() => void confirmStatus()}
           onCancel={dialog.cancel}
         />
@@ -568,7 +583,7 @@ export default function CheckListSettingsScreen() {
         <ConfirmDialog
           open
           {...deleteDialog(dialog.state.payload)}
-          destructive confirmIcon="delete"
+          {...CANVAS_POPUP}
           onConfirm={() => void confirmDelete()}
           onCancel={dialog.cancel}
         />

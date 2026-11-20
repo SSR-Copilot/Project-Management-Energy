@@ -127,14 +127,15 @@ export function duplicatesWarning(groups: readonly TechnologyGroup[]): string | 
 /* ══════════════════════════════════════════════════════════ cell text ══ */
 
 /**
- * Display a stored number: user locale, up to 2 decimals, no grouping; blank → "-".
+ * Display a stored number: user locale, up to 2 decimals, no grouping; blank → `blank`, "-" by
+ * default (`Coalesce(Text(…), "-")`), "" where the canvas label interpolates the raw value
+ * (`$"{record.Duration}"`, which renders a blank as nothing).
  * Always Latin digits: the locale picks only the decimal separator, so native-digit
  * locales such as `ar-EG` show "12", matching what the user types and what validation accepts.
- * DIVERGENCE: the canvas cells interpolate the raw number (`$"{record.Duration}"`), and a blank
- * Cluster 1–5 value renders as empty; here it is locale-formatted and a blank shows "-".
+ * DIVERGENCE: the canvas cells interpolate the raw number; here it is locale-formatted.
  */
-export function formatValue(value: number | undefined, locale?: string): string {
-  if (value === undefined) return "-";
+export function formatValue(value: number | undefined, locale?: string, blank = "-"): string {
+  if (value === undefined) return blank;
   return numberFormat(locale, { maximumFractionDigits: 2, useGrouping: false, numberingSystem: "latn" }).format(value);
 }
 
@@ -146,11 +147,12 @@ export interface MatrixCell {
 
 /**
  * The nine two-line cells of a read-only matrix row (AMS:553-796), one per canvas value label:
- *  - Cluster 1–4 (`lbl_Cluster<n>Value_…`): `$"{record.Duration}\n{record.SuccessRate}"`.
+ *  - Cluster 1–4 (`lbl_Cluster<n>Value_…`): `$"{record.Duration}\n{record.SuccessRate}"`
+ *    (AMS:665-737) — a blank value renders EMPTY, not "-".
  *  - FID (`lbl_FidValue_…`): duration / literal 1. DIVERGENCE (product decision): a blank FID
  *    shows "-"; the canvas shows `Coalesce(record.Duration, 0.75)`.
- *  - Cluster 5 (`lbl_Cluster5Value_…`): `$"{record.Duration}\n1"` — the stored success value is
- *    ignored, as in the canvas.
+ *  - Cluster 5 (`lbl_Cluster5Value_…`): `$"{record.Duration}\n1"` (AMS:569) — a blank duration
+ *    renders EMPTY; the stored success value is ignored, as in the canvas.
  *  - Operational Lifetime (`lbl_OperationalLifetimeValue_…`): `Coalesce(Text(Duration), "-")` /
  *    `Coalesce(Text(SuccessRate), "-")`.
  *  - Sales Start (`lbl_SalesStartDateValue_…`), Sales End (`lbl_SalesCompletionDateValue_…`,
@@ -159,15 +161,17 @@ export interface MatrixCell {
 export function matrixCells(group: TechnologyGroup, locale?: string): MatrixCell[] {
   const d = group.durations?.values;
   const s = group.successRates?.values;
-  const dur = (f: MilestoneField) => formatValue(d?.[f], locale);
-  const rate = (f: MilestoneField) => formatValue(s?.[f], locale);
+  const dur = (f: MilestoneField, blank?: string) => formatValue(d?.[f], locale, blank);
+  const rate = (f: MilestoneField, blank?: string) => formatValue(s?.[f], locale, blank);
+  // `$"{…}"` interpolation: a blank is nothing.
+  const raw = "";
   return [
-    { key: "cluster1", duration: dur("cluster1"), rate: rate("cluster1") },
-    { key: "cluster2", duration: dur("cluster2"), rate: rate("cluster2") },
-    { key: "cluster3", duration: dur("cluster3"), rate: rate("cluster3") },
-    { key: "cluster4", duration: dur("cluster4"), rate: rate("cluster4") },
+    { key: "cluster1", duration: dur("cluster1", raw), rate: rate("cluster1", raw) },
+    { key: "cluster2", duration: dur("cluster2", raw), rate: rate("cluster2", raw) },
+    { key: "cluster3", duration: dur("cluster3", raw), rate: rate("cluster3", raw) },
+    { key: "cluster4", duration: dur("cluster4", raw), rate: rate("cluster4", raw) },
     { key: "fid", duration: dur("fid"), rate: "1" },
-    { key: "cluster5", duration: dur("cluster5"), rate: "1" },
+    { key: "cluster5", duration: dur("cluster5", raw), rate: "1" },
     { key: "operationalLifetime", duration: dur("operationalLifetime"), rate: rate("operationalLifetime") },
     { key: "salesStart", duration: dur("salesStart"), rate: "-" },
     { key: "salesEnd", duration: dur("salesEnd"), rate: "-" },
@@ -252,20 +256,39 @@ export interface CellState {
   text: string;
   /** Greyed hint shown while the input is empty ("0" for blank-as-zero durations). */
   placeholder?: string;
-  /** The text differs from what the input started with. Only touched cells are validated. */
+  /**
+   * The SHOWN value fails its check — the canvas `BasePaletteColor` / `BorderThickness` red state
+   * (AMS:1358-1371, 2068-2085), which the input carries from the moment it is shown, typed or not.
+   * Drives the border only; the message and the Save gate follow `error`.
+   */
+  invalid: boolean;
+  /** The text differs from what the input started with. Only touched cells carry a message. */
   touched: boolean;
-  /** Validation message for a touched, invalid cell. */
+  /** Validation message for a touched, invalid cell (`…_InvalidMessage`). */
   error?: string;
   /** Touched, valid, and the parsed value differs from the stored one. */
   dirty: boolean;
   value?: number;
 }
 
+function checkText(kind: MatrixKind, field: MilestoneField, text: string): ValidationResult {
+  return kind === "durations"
+    ? validateDuration(text, durationDef(field)?.max ?? 1000)
+    : validateSuccessRate(text);
+}
+
 /**
  * Validation and dirtiness for one input — the canvas `BasePaletteColor` / `BorderThickness`
  * error state plus the journal upsert of `txt_…_Input.OnChange`.
- * DIVERGENCE: only a changed cell is validated; the canvas paints a blank stored Cluster 1–4
- * value red on open.
+ *
+ * `invalid` follows the canvas: the border is red whenever the value the input SHOWS fails the
+ * check (`!IsMatch(Self.Value, "^\d+$")` / `Not(IsBlank(…)) && IsTwoDecimal && InRange`), so a
+ * blank stored Cluster 1–4 duration or success rate — and a stored value such as FID 0.75 — is red
+ * on open. The value the canvas input showed for a blank blank-as-zero duration was its
+ * `Coalesce(…, "0")`, here the "0" placeholder, so that one is not red.
+ * `error` (the section message) and `dirty` (the Save gate) still wait for a change: the canvas
+ * message `Visible` is driven by `OnChange`, and nothing is written until the user types.
+ * DIVERGENCE: the border check also applies the column maximum (`validateDuration`).
  */
 export function evaluateCell(
   kind: MatrixKind,
@@ -278,12 +301,12 @@ export function evaluateCell(
   const placeholder = placeholderText(kind, field, stored);
   const hint = placeholder === undefined ? {} : { placeholder };
   const text = typed ?? initial;
-  if (text === initial) return { text, ...hint, touched: false, dirty: false };
-  const result = kind === "durations"
-    ? validateDuration(text, durationDef(field)?.max ?? 1000)
-    : validateSuccessRate(text);
-  if (!result.ok) return { text, ...hint, touched: true, error: result.message, dirty: false };
-  return { text, ...hint, touched: true, dirty: result.value !== stored, value: result.value };
+  const shown = text === "" && placeholder !== undefined ? placeholder : text;
+  const result = checkText(kind, field, shown);
+  const invalid = !result.ok;
+  if (text === initial) return { text, ...hint, invalid, touched: false, dirty: false };
+  if (!result.ok) return { text, ...hint, invalid, touched: true, error: result.message, dirty: false };
+  return { text, ...hint, invalid, touched: true, dirty: result.value !== stored, value: result.value };
 }
 
 /** Which fields a row of a given kind can edit. */

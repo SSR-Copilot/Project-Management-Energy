@@ -14,8 +14,8 @@ import {
   deleteConfirmationText, deletingText, droppedRoles, DUPLICATE_GATE_MESSAGE, EMPTY_MESSAGE,
   emptyTaskForm, fieldRules, GATE_BLANK_MESSAGE, gateDescription, gateEditorTarget, gateFieldText,
   gateLabel, hasGateConflict, headline, INVALID_PERSON_MESSAGE, isGateToggleLocked, isLastVisibleState, isShownChecklist,
-  JSON_MAX, MAX_PEOPLE, MODE, modeOptions, panelTitle, parsePeople,
-  participantCell, pmCell, resetConfirmationText, savingGateText, savingTaskText, seedGateForm, seedTaskForm,
+  JSON_MAX, MAX_PEOPLE, MODE, modeOptions, panelTitle, parsePeople, ROLE_LABEL, ROLE_PLACEHOLDER, ROLE_TOOLTIP, SAVED_MESSAGE,
+  participantCell, pmCell, resetConfirmationText, resettingGateText, savingGateText, savingTaskText, seedGateForm, seedTaskForm,
   serializePeople, taskCandidates, taskNotificationsCell, tasksOfGate, toChecklistPayload,
   toGatePayload, validateForm, visibleGateStates, type ApprovalForm, type GateContext, type GateRow,
   NO_PERMISSION_MESSAGE, planDeleteTaskApproval, planResetGate, planSaveGate, planSaveTaskApproval,
@@ -188,9 +188,10 @@ describe("Editor seeding", () => {
     expect(emptyTaskForm([]).checklistId).toBeNull();
   });
 
-  it("UT-ADGATE-019 panel titles", () => {
+  it("UT-ADGATE-019 panel titles: every gate 'Edit Approvers' (placeholders too, as the canvas and D22); tasks Add / Edit", () => {
     expect(panelTitle({ kind: "gate", row: row(1), label: "x" })).toBe("Edit Approvers");
-    expect(panelTitle({ kind: "gate", row: row(2), label: "x" })).toBe("Add Approvers");
+    expect(row(2).template).toBeNull();
+    expect(panelTitle({ kind: "gate", row: row(2), label: "x" })).toBe("Edit Approvers");
     expect(panelTitle({ kind: "task", mode: "create", row: row(1), label: "x", candidates: [] })).toBe("Add Approvers");
     expect(panelTitle({ kind: "task", mode: "edit", row: row(1), label: "x", candidates: [] })).toBe("Edit Approvers");
   });
@@ -240,9 +241,10 @@ describe("Validation and Save enablement", () => {
     expect(canSave(validateForm(form({ notifications: [person(1)] }), gate))).toBe(true);
   });
 
-  it("UT-ADGATE-025 task editor without a Check List cannot save, with the corrected wording", () => {
+  it("UT-ADGATE-025 task editor without a Check List cannot save; the message names the field (SOURCE DEFECT fix kept, D150)", () => {
     const e = validateForm(form({ notifications: [person(1)] }), { kind: "task", gateLabel: "x" });
     expect(e.checklist).toBe(CHECKLIST_BLANK_MESSAGE);
+    expect(CHECKLIST_BLANK_MESSAGE).toBe("The check list item cannot be blank.");
     expect(CHECKLIST_BLANK_MESSAGE).not.toMatch(/cluster/i);
     expect(canSave(e)).toBe(false);
   });
@@ -296,7 +298,7 @@ describe("Validation and Save enablement", () => {
     expect(validateForm(form({ notifications: [person(1)] }), { ...gate, conflict: true }).main).toBe(DUPLICATE_GATE_MESSAGE);
   });
 
-  it("UT-ADGATE-032 warns which saved roles a mode change will clear", () => {
+  it("UT-ADGATE-032 warns which saved roles a mode change will clear (SOURCE DEFECT fix kept, D150)", () => {
     const before = form({ mode: MODE.Formal, portfolioManager: [person(1)], contributors: [person(2)], approvers: [person(3)] });
     expect(droppedRoles(before, { ...before, mode: MODE.Local })).toEqual(["portfolioManager", "contributors"]);
     expect(droppedRoles(before, { ...before, mode: MODE.OnlyNotifications })).toEqual(["portfolioManager", "contributors", "approvers"]);
@@ -543,6 +545,27 @@ describe("Messages", () => {
 
   it("UT-ADGATE-054 the reset confirmation names the country and the technology LABEL (never the code)", () => {
     expect(resetConfirmationText({ ...ctx, technology: PV }, "Cluster 1 to Cluster 2")).toContain("Germany - PV\nGate: 'Cluster 1 to Cluster 2'");
+  });
+
+  it("UT-ADGATE-070 the save success text is the canvas one verbatim; the reset progress text names the technology LABEL", () => {
+    expect(SAVED_MESSAGE).toBe("Approvals was successfully saved.");
+    expect(resettingGateText({ ...ctx, technology: PV }, "Cluster 1 to Cluster 2")).toBe(
+      "Approvals data for Project Gates | Germany | PV\nGate: 'Cluster 1 to Cluster 2' will be reset, please wait...",
+    );
+  });
+
+  it("UT-ADGATE-071 the people pickers' captions, HintText and Tooltip are the canvas ones verbatim", () => {
+    expect(ROLE_LABEL).toEqual({
+      portfolioManager: "Portfolio Manager", contributors: "Contributors", approvers: "Approvers", notifications: "Notifications",
+    });
+    expect(ROLE_PLACEHOLDER).toEqual({
+      portfolioManager: "Select Portfolio Manager", contributors: "Select Contributors",
+      approvers: "Select Approvers", notifications: "Select Notifications",
+    });
+    expect(ROLE_TOOLTIP).toEqual({
+      portfolioManager: "Search for portfolio manager", contributors: "Select Contributors",
+      approvers: "Select Approvers", notifications: "Select Notifications",
+    });
   });
   // Failed-action text is the shared `userErrorText`, covered by `platform/userMessage.test.ts`
   // and asserted on the screen (`Screen.test.tsx`).

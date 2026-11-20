@@ -18,20 +18,46 @@
  * Icons as the canvas: the Active button shows `DeactivateOrders` on an Active row and `ActivateOrders` on
  * an Inactive one (the action: a document with a cross / a tick), and the Completion Date button `CalendarReply`
  * / `Calendar`. (27 Oct 2026: the earlier port showed the state, a check / cross and a calendar with / without a tick.)
+ * Edit, Calendar, CalendarReply (`MDL2_PATH`) and DeactivateOrders (the shared `DeactivateOrdersIcon`) are the MDL2
+ * outlines themselves (21 Nov 2026); Delete and ActivateOrders are still Fluent v9 lookalikes.
  */
 import {
   Button, Spinner, Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow, Text, Tooltip,
   makeStyles, mergeClasses, tokens,
 } from "@fluentui/react-components";
-import {
-  CalendarRegular, CalendarReplyRegular, DeleteRegular, DocumentCheckmarkRegular,
-  DocumentDismissRegular, EditRegular,
-} from "@fluentui/react-icons";
-import { DisabledReason, InlineEmpty, RowActions } from "@/components";
+import { DeleteRegular, DocumentCheckmarkRegular } from "@fluentui/react-icons";
+import { DeactivateOrdersIcon, DisabledReason, InlineEmpty, RowActions } from "@/components";
 import type { ChecklistTask } from "@/data/adminDefaultChecklists";
 import { palette } from "@/theme/tokens";
 import { useRowActionStyles } from "@/theme/buttonStyles";
 import { HOLDING_CUT, truncateHolding, yesNo } from "./rules";
+
+/**
+ * The canvas row icons that Fluent v9 only approximates, as the MDL2 glyph's own outline on its 2048-unit em, from
+ * `@fluentui/react-icons-mdl2` 1.3.83 (the SVG build of the MDL2 font the PowerCAT `Icon` draws through
+ * `data-icon-name`): `ico_Edit_…` `IconName: "Edit"` (L504) and `ico_EnablelCompletionDate_…`
+ * `IconName: If('Is Completion Date', "CalendarReply", "Calendar")` (L570). Until 21 Nov 2026 these were
+ * `EditRegular` (a rounder pencil) and `CalendarReplyRegular` / `CalendarRegular` (another arrow and grid).
+ * The render tests read the glyph's `data-icon-name`.
+ */
+const MDL2_PATH = {
+  // Edit — U+E70F, the core fabric-icons set.
+  edit: "M2048 335q0 66-25 128t-73 110L633 1890 0 2048l158-633L1475 98q48-48 110-73t128-25q69 0 130 26t106 72 72 107 27 130zM326 1428q106 35 182 111t112 183L1701 640l-293-293L326 1428zm-150 444l329-82q-10-46-32-87t-55-73-73-54-87-33l-82 329zM1792 549q25-25 48-47t41-46 28-53 11-67q0-43-16-80t-45-66-66-45-81-17q-38 0-66 10t-53 29-47 41-47 48l293 293z",
+  // Calendar — U+E787, the core fabric-icons set.
+  calendar: "M768 768h128v128H768V768zm384 768h128v128h-128v-128zm384-768h128v128h-128V768zm-384 0h128v128h-128V768zm-384 256h128v128H768v-128zm-384 0h128v128H384v-128zm1152 0h128v128h-128v-128zm-384 0h128v128h-128v-128zm-384 256h128v128H768v-128zm-384 0h128v128H384v-128zm1152 0h128v128h-128v-128zm-384 0h128v128h-128v-128zm-384 256h128v128H768v-128zm-384 0h128v128H384v-128zM2048 128v1792H0V128h384V0h128v128h1024V0h128v128h384zM128 256v256h1792V256h-256v128h-128V256H512v128H384V256H128zm1792 1536V640H128v1152h1792z",
+  // CalendarReply — U+E8F5, fabric-icons-1.
+  calendarReply: "M896 896H768V768h128v128zm384 0h-128V768h128v128zm-384 256H768v-128h128v128zm-384 0H384v-128h128v128zm640-128h128v128h-128v-128zm512-128h-128V768h128v128zm-128 128h128v128h-128v-128zm-384 256h128v128h-128v-128zm-256 128H768v-128h128v128zm-384 0H384v-128h128v128zm256 128h128v128H768v-128zm-384 0h128v128H384v-128zM2048 128v1380q-28-26-60-44t-68-32V640H128v1152h1120l128 128H0V128h384V0h128v128h1024V0h128v128h384zm-128 384V256h-256v128h-128V256H512v128H384V256H128v256h1792zm-421 1024q50 0 110-2t122 0 118 14 101 40 71 78 27 126q0 53-20 99t-55 81-82 55-99 21v-128q27 0 50-10t40-27 28-41 10-50q0-27-10-50t-27-40-41-28-50-10h-293l162 163-90 90-317-317 317-317 90 90-162 163z",
+} as const;
+
+/**
+ * The glyph IS the em (`viewBox` 0 0 2048), so the icon slot's font-size draws the glyph at that size, exactly as the
+ * MDL2 font does; `currentColor` takes the button's `IconColor` rules as a Fluent icon would.
+ */
+const Mdl2Icon = ({ name, path }: { name: string; path: string }) => (
+  <svg width="1em" height="1em" viewBox="0 0 2048 2048" fill="currentColor" aria-hidden="true" focusable="false" data-icon-name={name}>
+    <path d={path} />
+  </svg>
+);
 
 const useStyles = makeStyles({
   scroller: { overflowX: "auto", maxWidth: "100%" },
@@ -43,9 +69,10 @@ const useStyles = makeStyles({
    */
   table: {
     width: "1210px", minWidth: "1210px", tableLayout: "fixed",
-    // Fluent's cells set their own colour, so it is set on the cells and their text, not on the table.
+    // Fluent's cells set their own colour, so it is set on the cells and their text, not on the table. Only the
+    // cell's own Text (a direct child): a descendant rule also painted the buttons' icon spans #242424.
     "& td, & th": { paddingLeft: "0", color: "#242424" },
-    "& td span, & th span": { color: "#242424" },
+    "& td > span, & th > span": { color: "#242424" },
     "& td:first-child, & th:first-child": { paddingLeft: "20px" },
   },
   /** `con_Header_TasksInCluster*` — Grayscale40 (#FAFAFA), radius 2, Semibold labels. */
@@ -61,7 +88,17 @@ const useStyles = makeStyles({
    * the Active column, not a column of their own.
    */
   activeCell: { display: "flex", alignItems: "center" },
-  activeButton: { width: "90px", justifyContent: "flex-start" },
+  /** `ico_ActivateDeactivate_…` keeps the PowerCAT Icon's default TextAlignment (Center) in its 90 px; Completion Date sets Left. */
+  activeButton: { width: "90px", justifyContent: "center" },
+  /**
+   * `ico_Edit_…` / `ico_Delete_…`: `Width: =34`, `Height: =34` (L498-499, L532-533) around the 16 px icon, and
+   * `IconColor: If(Self.DisplayMode = DisplayMode.Edit, akzent3, "#bbb")` (L503, L537): #bbb while locked.
+   */
+  rowIcons: {
+    "& button": { width: "34px", height: "34px", minWidth: "0", paddingLeft: "0", paddingRight: "0" },
+    "& .fui-Button__icon": { fontSize: "16px", width: "16px", height: "16px" },
+    "& button[aria-disabled='true'] .fui-Button__icon": { color: "#bbb" },
+  },
   /**
    * `TemplateSize: =34`; the row rule is the gallery's `BorderColor: RGBA(245, 245, 245, 1)`.
    * Hard-coded: `src/theme/tokens.ts` has no #F5F5F5 token.
@@ -73,7 +110,17 @@ const useStyles = makeStyles({
    */
   value: { fontSize: "12px", lineHeight: "16px", overflowWrap: "anywhere" },
   /** Completion Date / Active buttons: `FontColor: If(<Yes / Active>, akzent3, themePrimary)` (L567, L593). */
-  flagButton: { minWidth: "0", paddingLeft: "4px", paddingRight: "4px", fontWeight: tokens.fontWeightRegular },
+  flagButton: {
+    minWidth: "0", paddingLeft: "4px", paddingRight: "4px", fontWeight: tokens.fontWeightRegular,
+    // No `IconSize` / `FontSize` on the PowerCAT Icon: Fluent v8's 16 px button icon, 8 px before a 14 px regular label.
+    fontSize: "14px",
+    "& .fui-Button__icon": { fontSize: "16px", width: "16px", height: "16px", marginRight: "8px" },
+  },
+  /**
+   * A row locked by a Project Gate (`DisplayMode.Disabled`, L553, L579): `IconColor … "#bbb"` (L567, L593) and the
+   * PowerCAT Icon's disabled label, Fluent v8's `neutralTertiary` #a19f9d.
+   */
+  locked: { color: "#a19f9d", "& .fui-Button__icon": { color: "#bbb" } },
   positive: { color: palette.akzent3, ":hover": { color: palette.akzent3 } },
   neutral: { color: palette.themePrimary, ":hover": { color: palette.themePrimary } },
   /** A cut holding text is focusable so its full-text tooltip is keyboard-reachable. */
@@ -172,8 +219,8 @@ export function TaskTable({
                     {/* `ico_EnablelCompletionDate_…` — caption `If(…, "Yes", "No")`. */}
                     <Button
                       appearance="transparent"
-                      className={mergeClasses(styles.flagButton, !disabled && feedback.interactive, task.isCompletionDate ? styles.positive : styles.neutral)}
-                      icon={task.isCompletionDate ? <CalendarReplyRegular /> : <CalendarRegular />}
+                      className={mergeClasses(styles.flagButton, !disabled && feedback.interactive, lockReason ? styles.locked : task.isCompletionDate ? styles.positive : styles.neutral)}
+                      icon={task.isCompletionDate ? <Mdl2Icon name="CalendarReply" path={MDL2_PATH.calendarReply} /> : <Mdl2Icon name="Calendar" path={MDL2_PATH.calendar} />}
                       disabled={disabled}
                       aria-pressed={task.isCompletionDate === true}
                       aria-label={completion}
@@ -192,8 +239,8 @@ export function TaskTable({
                     {/* `ico_ActivateDeactivate_…` — caption `=ThisItem.Status` ("Active" / "Inactive"); opens the confirmation. */}
                     <Button
                       appearance="transparent"
-                      className={mergeClasses(styles.flagButton, styles.activeButton, !disabled && feedback.interactive, task.isActive ? styles.positive : styles.neutral)}
-                      icon={task.isActive ? <DocumentDismissRegular /> : <DocumentCheckmarkRegular />}
+                      className={mergeClasses(styles.flagButton, styles.activeButton, !disabled && feedback.interactive, lockReason ? styles.locked : task.isActive ? styles.positive : styles.neutral)}
+                      icon={task.isActive ? <DeactivateOrdersIcon fit="em" /> : <DocumentCheckmarkRegular />}
                       disabled={disabled}
                       aria-label={status}
                       aria-describedby={nameId}
@@ -205,10 +252,11 @@ export function TaskTable({
                   </DisabledReason>
                     {/* `ico_Edit_…` / `ico_Delete_…` (`IconName` "Edit" / "Delete"): green when enabled (L503, L537); grey while locked. */}
                     <RowActions
+                      className={styles.rowIcons}
                       tone="accent"
                       actions={[
                         {
-                          key: "edit", icon: <EditRegular />, label: "Edit", describedBy: nameId,
+                          key: "edit", icon: <Mdl2Icon name="Edit" path={MDL2_PATH.edit} />, label: "Edit", describedBy: nameId,
                           testId: `ico_Edit_TasksInClusterDefaultChecklist_AdminScreen-${task.id}`,
                           disabled, ...(lockReason ? { disabledReason: lockReason } : {}),
                           onClick: () => onEdit(task),

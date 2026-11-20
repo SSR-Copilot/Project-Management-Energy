@@ -10,8 +10,11 @@ import { render, screen } from "@testing-library/react";
 import { FluentProvider, tokens } from "@fluentui/react-components";
 import { vsbTheme } from "@/theme/fluent";
 import { useBrandButtonStyles } from "@/theme/buttonStyles";
+import { palette } from "@/theme/tokens";
 import { EditMilestonesPanel } from "./EditMilestonesPanel";
-import { HEADING, MSG, TYPOGRAPHY } from "./constants";
+import {
+  CLOSE_ICON_COLOR, HEADING, INPUT_MAX_LENGTH, INVALID_BORDER, MESSAGE_COLOR, MSG, TYPOGRAPHY,
+} from "./constants";
 import { cellKey, evaluatePanel, groupAssumptions, type Draft } from "./rules";
 import { FIXTURE_ASSUMPTIONS, GERMANY } from "./fixtures";
 
@@ -74,8 +77,10 @@ describe("EditMilestonesPanel — typography", () => {
     }
   });
 
-  it("UT-ADMILE-029: section validation messages render canvas Small (10px) in red (AMS:1914, 2372; GAP-R3-1)", () => {
+  it("UT-ADMILE-029: section validation messages render canvas Small (10px) in gblAppColors.Error = akzent5 (AMS:1908-1914, 2366-2372)", () => {
     expect(TYPOGRAPHY.panelMessage).toEqual({ fontSize: "10px" });
+    expect(MESSAGE_COLOR).toBe(palette.akzent5);
+    expect(MESSAGE_COLOR).toBe("#d20532");
     renderPanel({
       [cellKey("de-wind-m", "cluster2")]: "12.5",
       [cellKey("de-pv-s", "cluster1")]: "2",
@@ -83,9 +88,67 @@ describe("EditMilestonesPanel — typography", () => {
     for (const message of [MSG.durationInvalid, MSG.rateInvalid]) {
       const s = style(message);
       expect(s.fontSize).toBe("10px");
-      // jsdom lower-cases colour values, so compare case-insensitively.
-      expect(s.color.toLowerCase()).toBe(tokens.colorPaletteRedForeground1.toLowerCase());
+      // jsdom normalises colours (lower case or rgb()), so accept either spelling.
+      expect([palette.akzent5.toLowerCase(), "rgb(210, 5, 50)"]).toContain(s.color.toLowerCase());
     }
+  });
+});
+
+describe("EditMilestonesPanel — canvas input parity", () => {
+  const input = (name: string) => screen.getByRole("textbox", { name, hidden: true });
+  /** Fluent's `Input` puts `style` on its root span, the parent of the `<input>` that carries the role. */
+  const frame = (el: HTMLElement) => el.parentElement!;
+  /** The red the canvas `BorderColor: RGBA(189, 49, 51, 1)` draws, in either jsdom spelling. */
+  const reds = [INVALID_BORDER.toLowerCase(), "rgb(189, 49, 51)"];
+
+  it("UT-ADMILE-935: a blank or failing STORED value is red (#BD3133) on open, with no message and Save disabled (AMS:1358-1371, 2068-2085)", () => {
+    expect(INVALID_BORDER).toBe("#BD3133");
+    renderPanel();
+    // Germany PV has no FID: shown "", fails `^\d+$`.
+    const pvFid = input("PV Final Investment Decision duration in months");
+    expect(pvFid).toHaveValue("");
+    expect(pvFid).toHaveAttribute("aria-invalid", "true");
+    expect(reds).toContain(frame(pvFid).style.borderColor.toLowerCase());
+    expect(frame(pvFid).style.borderWidth).toBe("1px");
+    expect(pvFid).not.toHaveAttribute("aria-describedby");
+    // A stored valid value is not red; a blank blank-as-zero duration (placeholder "0") is not red either.
+    const windFid = input("Wind Final Investment Decision duration in months");
+    expect(windFid).toHaveAttribute("aria-invalid", "false");
+    expect(frame(windFid).style.border).toBe("");
+    const pvSalesStart = input("PV Sales Start duration in months");
+    expect(pvSalesStart).toHaveAttribute("placeholder", "0");
+    expect(pvSalesStart).toHaveAttribute("aria-invalid", "false");
+    // Nothing typed: no section message, Save disabled.
+    expect(screen.queryByText(MSG.durationInvalid)).not.toBeInTheDocument();
+    expect(screen.queryByText(MSG.rateInvalid)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save", hidden: true })).toBeDisabled();
+  });
+
+  it("UT-ADMILE-935b: a typed failing value is red in the same colour and now carries the message", () => {
+    renderPanel({ [cellKey("de-wind-m", "cluster1")]: "12.5" });
+    const wind = input("Wind Cluster 1 duration in months");
+    expect(wind).toHaveAttribute("aria-invalid", "true");
+    expect(reds).toContain(frame(wind).style.borderColor.toLowerCase());
+    expect(wind).toHaveAttribute("aria-describedby");
+    expect(screen.getByText(MSG.durationInvalid)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save", hidden: true })).toBeDisabled();
+  });
+
+  it("UT-ADMILE-936: every input takes the canvas MaxLength 256 (gblAppConstants.DefaultDefMaxLength, AMS:1375, 2085)", () => {
+    expect(INPUT_MAX_LENGTH).toBe(256);
+    renderPanel();
+    const inputs = screen.getAllByRole("textbox", { hidden: true });
+    expect(inputs.length).toBeGreaterThan(0);
+    for (const i of inputs) expect(i).toHaveAttribute("maxlength", "256");
+  });
+
+  it("UT-ADMILE-937: the panel ✕ is tinted themeTertiary through FormPanel closeIconColor (ItemIconColor, AMS:1073)", () => {
+    expect(CLOSE_ICON_COLOR).toBe(palette.themeTertiary);
+    renderPanel();
+    const drawer = screen.getByRole("dialog", { name: "Edit Milestones for Germany", hidden: true });
+    expect(drawer).toHaveClass("canvas-panel-close-tinted");
+    expect(drawer.style.getPropertyValue("--canvas-panel-close-color")).toBe(palette.themeTertiary);
+    expect(screen.getByTestId("pcf_com_Admin_ProjectGates_Approvals_Form_CommandBar_2-closeKey")).toBeInTheDocument();
   });
 });
 

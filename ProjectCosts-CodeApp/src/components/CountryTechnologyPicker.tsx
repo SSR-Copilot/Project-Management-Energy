@@ -223,6 +223,12 @@ export interface CountryTechnologyPickerProps {
   compactFlags?: boolean;
   /** Stem of every control's `data-testid` (see the header); default `country-tech-picker`. */
   testIdPrefix?: string;
+  /**
+   * Opt-in (Project Gates): the column opens with EVERY country collapsed, the selected one included, as the canvas
+   * rail's `AddColumns(…, Expanded, false)` (PGAS:118-119). A later selection change still expands the newly
+   * selected country. Default false: the selected country starts expanded (every other screen).
+   */
+  startCollapsed?: boolean;
 }
 
 const defaultToggleLabel = (open: boolean, country: PickerCountry) => `${open ? "Collapse" : "Expand"} ${country.name}`;
@@ -237,9 +243,12 @@ function ColumnPicker({
   countries, technologies, value, onChange, flag = "flag", countryClick = "none",
   toggleLabel = defaultToggleLabel, emptyText, highlightCollapsedSelection = false,
   ariaLabel = "Country and technology", technologiesFor, testIdPrefix = "country-tech-picker",
+  startCollapsed = false,
 }: CountryTechnologyPickerProps) {
   const styles = useStyles();
-  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set(value ? [value.countryId] : []));
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(
+    () => new Set(value && !startCollapsed ? [value.countryId] : []),
+  );
   // Expand a newly selected country once, adjusted during render on a selection change.
   const [seededFor, setSeededFor] = useState(value?.countryId);
   if (value?.countryId !== seededFor) {

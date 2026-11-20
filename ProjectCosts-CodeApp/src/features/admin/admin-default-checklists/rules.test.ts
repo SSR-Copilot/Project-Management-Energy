@@ -11,7 +11,7 @@ import { planSetActive, planToggleCompletion, planUpdateTask } from "./rules";
 import {
   BLANK_NAME_MESSAGE, LOCK_TOOLTIP, NEW_TASK_DEFAULT_ACTIVE, busyText, clusterCaption, counter,
   deleteDialog, emptyTaskForm, formFromTask, groupTasksByCluster, isLocked, isTaskFormValid,
-  moveItem, nextOrder, orderChanged, renumberAfterDelete, reorderPatch, resolveTabId, sortTabs,
+  moveItem, nextOrder, orderChanged, renumberAfterDelete, reorderPatch, resolveTabId, sortTabs, sortTabsByOrderCanvasParity,
   sortTasks, statusDialog, tabSortKey, truncateHolding, validateTask, yesNo,
   LOCK_LOADING_TOOLTIP, LOCK_UNKNOWN_TOOLTIP, findGroup, lockState, lockTooltipFor,
   reorderSnapshotStale, snapshotGroup,
@@ -105,14 +105,24 @@ describe("YesNo", () => {
 describe("SortTabs / resolveTabId", () => {
   const tab = (id: string, order: string | null, name = id) => ({ id, order, name });
 
-  it("UT-ADCHK-013 orders 1, 2, 3 show A, B, C", () => {
-    expect(sortTabs([tab("C", "3"), tab("A", "1"), tab("B", "2")]).map((x) => x.id)).toEqual(["A", "B", "C"]);
+  it("UT-ADCHK-013 the strip is A → Z by name, whatever the Orders (the live canvas, D151)", () => {
+    const live = [
+      tab("de-w", "1", "Germany Wind"), tab("de-pv", "2", "Germany PV"), tab("pl-pv", "3", "Poland PV"),
+      tab("hr-pv", "15", "Croatia PV"), tab("hr-w", "16", "Croatia Wind"), tab("fi-pv", "11", "Finland PV"),
+    ];
+    expect(sortTabs(live).map((x) => x.name)).toEqual([
+      "Croatia PV", "Croatia Wind", "Finland PV", "Germany PV", "Germany Wind", "Poland PV",
+    ]);
+    // Case does not change the order; equal names fall back to the Order key.
+    expect(sortTabs([tab("b", "2", "spain pv"), tab("a", "1", "Spain PV")]).map((x) => x.id)).toEqual(["a", "b"]);
   });
-  it("UT-ADCHK-014 text orders '10', '2', '1' display as 1, 2, 10", () => {
-    expect(sortTabs([tab("ten", "10"), tab("two", "2"), tab("one", "1")]).map((x) => x.order)).toEqual(["1", "2", "10"]);
+  it("UT-ADCHK-014 the Order-sorted twin: text orders '10', '2', '1' display as 1, 2, 10 (D18 e)", () => {
+    expect(sortTabsByOrderCanvasParity([tab("ten", "10"), tab("two", "2"), tab("one", "1")]).map((x) => x.order))
+      .toEqual(["1", "2", "10"]);
+    expect(sortTabsByOrderCanvasParity([tab("C", "3"), tab("A", "1"), tab("B", "2")]).map((x) => x.id)).toEqual(["A", "B", "C"]);
   });
-  it("UT-ADCHK-015 puts blank and non-numeric orders last, then by text, then by name", () => {
-    const sorted = sortTabs([tab("x", null, "Zeta"), tab("y", "abc"), tab("z", "5"), tab("w", null, "Alpha")]);
+  it("UT-ADCHK-015 the Order-sorted twin puts blank and non-numeric orders last, then by text, then by name", () => {
+    const sorted = sortTabsByOrderCanvasParity([tab("x", null, "Zeta"), tab("y", "abc"), tab("z", "5"), tab("w", null, "Alpha")]);
     expect(sorted.map((x) => x.id)).toEqual(["z", "w", "x", "y"]);
   });
   it("UT-ADCHK-016 tabSortKey parses numbers and pushes blanks to +∞", () => {
@@ -120,8 +130,8 @@ describe("SortTabs / resolveTabId", () => {
     expect(tabSortKey("")).toBe(Number.POSITIVE_INFINITY);
     expect(tabSortKey("n/a")).toBe(Number.POSITIVE_INFINITY);
   });
-  it("UT-ADCHK-017 default tab is the left-most tab when ?tab is missing or unknown", () => {
-    const tabs = sortTabs([tab("B", "2"), tab("A", "1")]);
+  it("UT-ADCHK-017 default tab is the left-most (first by name) when ?tab is missing or unknown", () => {
+    const tabs = sortTabs([tab("B", "1"), tab("A", "2")]);
     expect(resolveTabId(tabs, null)).toBe("A");
     expect(resolveTabId(tabs, "nope")).toBe("A");
   });
@@ -266,12 +276,11 @@ describe("Dialog and busy texts", () => {
     });
     expect(statusDialog({ name: "Row", isActive: false }).title).toBe("Activate checklist item?");
   });
-  it("UT-ADCHK-048 delete dialog says what really happens — no 'permanently'", () => {
+  it("UT-ADCHK-048 delete dialog is the canvas `cmp_DeleteChecklistItem_AdminScreen` text, verbatim (L1705-1706, L1754; D150)", () => {
     const d = deleteDialog({ name: "Row" });
     expect(d.title).toBe("Delete checklist item?");
-    expect(d.description).toContain('"Row"');
-    expect(d.description).not.toContain("permanently");
-    expect(d.description).toContain("not yet approved");
+    expect(d.confirmText).toBe("Delete");
+    expect(d.description).toBe('Are you sure that you want to permanently delete task "Row"?');
   });
   it("UT-ADCHK-049 busy texts match the canvas (typo 'Deleteing' fixed)", () => {
     expect(busyText.save(" A ")).toBe("Checklist item 'A' will be saved, please wait...");

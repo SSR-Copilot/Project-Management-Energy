@@ -49,7 +49,7 @@ vi.mock("@/generated/services/Vsb_countriesService", () => ({ Vsb_countriesServi
 import { vsbTheme } from "@/theme/fluent";
 import { appliedRules } from "@/test/appliedRules";
 import { AppToaster, RowActions } from "@/components";
-import { EditRegular } from "@fluentui/react-icons";
+import { CheckmarkRegular, EditRegular } from "@fluentui/react-icons";
 import { PlanError } from "@/data/executePlan";
 import type { WritePlan } from "@/data/writePlan";
 import { DataError } from "@/platform/errors";
@@ -99,6 +99,19 @@ const addTask = (order: number) => screen.getByTestId(`but_Admin_ProjectGatest_A
 const taskEdit = () => screen.getByTestId(`btn_Admin_ProjectGates_DefaultClusterApproval_Item_ChecklistDefaultApproval_Item_Edit-${TASK_ID}`);
 const taskDelete = () => screen.getByTestId(`btn_Admin_ProjectGates_DefaultClusterApproval_Item_ChecklistDefaultApproval_Item_Delete-${TASK_ID}`);
 
+/*
+ * The panel's people pickers are the shared `PeoplePicker` (the PCF look): each selected person is a
+ * chip in the box with a ✕ whose test id is `<picker canvas name>-remove-<Entra id>`, so "is X
+ * selected in picker P" is "does P's ✕ for X exist".
+ */
+const PICKER = {
+  portfolioManager: "pcf_Admin_ProjectGates_Approvals_Form_Fields_PortfolioManger",
+  contributors: "pcf_Admin_ProjectGates_Approvals_Form_Fields_Approval2",
+  approvers: "pcf_Admin_ProjectGates_Approvals_Form_Fields_Approvals",
+  notifications: "pcf_Admin_ProjectGates_Approvals_Form_Fields_Notifications",
+} as const;
+const chipRemove = (picker: keyof typeof PICKER, entraId: string) => `${PICKER[picker]}-remove-${entraId}`;
+
 beforeEach(() => {
   vi.clearAllMocks();
   access.admin = true;
@@ -139,15 +152,16 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
     await waitFor(() => expect(repo.loadDataset).toHaveBeenCalledWith(FIXTURE_COUNTRIES[0]!.id, 952850001));
   });
 
-  it("UT-ADGATE-903 opening a placeholder gate and cancelling writes nothing", async () => {
+  it("UT-ADGATE-903 opening a placeholder gate ('Edit Approvers', as the canvas) and cancelling writes nothing", async () => {
     renderScreen();
     await screen.findByText("Draft to Cluster 1");
     fireEvent.click(gateEdit(2));
-    expect(await screen.findByText("Add Approvers")).toBeInTheDocument();
+    expect(await screen.findByText("Edit Approvers")).toBeInTheDocument();
+    expect(screen.queryByText("Add Approvers")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled(); // Notifications required
     expect(screen.getByRole("button", { name: "Reset Gate" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    await waitFor(() => expect(screen.queryByText("Add Approvers")).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText("Edit Approvers")).not.toBeInTheDocument());
     noWrites();
   });
 
@@ -171,14 +185,14 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
     await screen.findByText("Draft to Cluster 1");
     fireEvent.click(gateEdit(1));
     expect(await screen.findByText("Edit Approvers")).toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "Project Status" })).toHaveValue("Cluster 1 to Cluster 2");
-    expect(within(screen.getByLabelText("Selected Portfolio Manager")).getByText(person(1).name)).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Project Status" })).toHaveTextContent("Cluster 1 to Cluster 2");
+    expect(screen.getByTestId(chipRemove("portfolioManager", person(1).entraId))).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     // Wait until the gate editor is fully gone before opening the next one.
     await waitFor(() => {
       expect(screen.queryByText("Edit Approvers")).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Reset Gate" })).not.toBeInTheDocument();
-      expect(screen.queryByLabelText("Selected Portfolio Manager")).not.toBeInTheDocument();
+      expect(screen.queryByTestId(chipRemove("portfolioManager", person(1).entraId))).not.toBeInTheDocument();
     });
 
     fireEvent.click(taskEdit());
@@ -193,7 +207,7 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
     expect(local).toBeChecked();
     expect(screen.queryByRole("button", { name: "Reset Gate", ...all })).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "Portfolio Manager", ...all })).not.toBeInTheDocument();
-    expect(within(screen.getByLabelText("Selected Approvers")).getByText(person(8).name)).toBeInTheDocument();
+    expect(screen.getByTestId(chipRemove("approvers", person(8).entraId))).toBeInTheDocument();
     expect(screen.getByRole("switch", { name: "Gate active", ...all })).not.toBeChecked();
     expect(screen.getByRole("combobox", { name: "Check List", ...all })).toBeDisabled();
     noWrites();
@@ -249,26 +263,20 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
     // Shared wording: lead + hint; the raw server text ("Server busy") is traced, not shown.
     expect(screen.getByText(`Could not save the approvals. ${ERROR_HINT.server}`)).toBeInTheDocument();
     expect(screen.queryByText(/Server busy/)).not.toBeInTheDocument();
-    expect(within(screen.getByLabelText("Selected Notifications")).getByText(person(7).name)).toBeInTheDocument();
+    expect(screen.getByTestId(chipRemove("notifications", person(7).entraId))).toBeInTheDocument();
     expect(screen.getByText("Edit Approvers")).toBeInTheDocument();
     expect(exec).toHaveBeenCalledTimes(1);
     expect(sentWrites()[0]).toMatchObject({ op: "update", entitySet: GATE_TEMPLATES, id: "40000000-0000-0000-0000-000000000002" });
     expect(sentWrites()[0]!.data).toMatchObject({ vsb_gateactive: true, vsb_approvalmodecode: 952850002 });
   });
 
-  it("UT-ADGATE-910 Reset Gate asks for confirmation first, then issues one reset", async () => {
+  it("UT-ADGATE-910 Reset Gate asks for confirmation first (SOURCE DEFECT fix kept, D150), in the canvas blue, then issues one reset", async () => {
     /*
-     * CA-19: every role query here is `hidden: true`. In jsdom (no layout) tabster finds no
-     * visible focusable in a freshly opened Fluent dialog, so Fluent focuses the surface itself;
-     * tabster registers the surface's modalizer only after that focus and does not activate a
-     * modalizer whose own element is focused. With NO active modalizer, tabster's deferred
-     * `_hiddenUpdate` (a 250 ms timer) then marks every modalizer — the open drawer AND this
-     * alert dialog — `aria-hidden="true"`, and it stays so (traced, 29 Oct 2026). A default role
-     * query therefore only works if it runs within those 250 ms: under a loaded full run it
-     * did not, and the `findByRole` waited out its 5 s on an element that would never come
-     * back. Not an app defect: in a browser the dialog's first button is focusable, so the
-     * modalizer activates. What this test pins is behaviour (confirmation first, then one
-     * reset), so it waits for the controls to EXIST, not for tabster's a11y state.
+     * CA-19: every role query here is `hidden: true`. In jsdom (no layout) tabster can mark an open
+     * Fluent drawer or dialog `aria-hidden="true"` after its deferred 250 ms update (traced, 29 Oct
+     * 2026), so a default role query only works if it runs within those 250 ms. Not an app defect.
+     * What this test pins is behaviour (confirmation first, then one reset), so it waits for the
+     * controls to EXIST, not for tabster's a11y state.
      */
     const all = { hidden: true } as const;
     renderScreen();
@@ -278,7 +286,10 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
     const dialog = await screen.findByRole("alertdialog", all);
     expect(dialog).toHaveTextContent("Remove all cluster gate participants");
     expect(exec).not.toHaveBeenCalled();
-    fireEvent.click(within(dialog).getByRole("button", { name: "Reset Gate", ...all }));
+    const confirm = within(dialog).getByRole("button", { name: "Reset Gate", ...all });
+    // The canvas `cmp_PopUp_Confirmation` Confirm: 128 px, not the red `destructive` look.
+    expect(confirm.style.width).toBe("128px");
+    fireEvent.click(confirm);
     await waitFor(() => expect(sentWrites()).toEqual([
       expect.objectContaining({ op: "update", entitySet: GATE_TEMPLATES, id: "40000000-0000-0000-0000-000000000001", data: expect.objectContaining({ vsb_gateactive: false }) }),
     ]));
@@ -351,23 +362,21 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
     await user.click(gateEdit(0));
     await screen.findByText("Edit Approvers");
     const all = { hidden: true } as const;
-    const input = await screen.findByRole("combobox", { name: "Notifications", ...all });
+    const input = await screen.findByRole("textbox", { name: "Notifications", ...all });
     await user.click(input);
     await user.keyboard("mü");
-    await screen.findByRole("listbox", { name: "Suggested Notifications", ...all });
+    await screen.findByRole("listbox", { name: "Notifications", ...all });
     expect(input).toHaveFocus();
     await user.keyboard("{Escape}");
-    // The (inline) listbox stays mounted while the input has focus, but it is collapsed.
-    await waitFor(() => expect(input).toHaveAttribute("aria-expanded", "false"));
+    await waitFor(() => expect(screen.queryByRole("listbox", { name: "Notifications", ...all })).not.toBeInTheDocument());
     expect(screen.getByText("Edit Approvers")).toBeInTheDocument();
     expect(input).toHaveFocus();
     // Keyboard only: reopen with typing, ArrowDown, Enter.
     await user.keyboard("ü");
-    // The inline listbox is still mounted (collapsed), so wait for it to EXPAND: the debounced
-    // search for the new text must answer before ArrowDown has an option to move to.
-    await waitFor(() => expect(input).toHaveAttribute("aria-expanded", "true"));
+    await screen.findByRole("listbox", { name: "Notifications", ...all });
     await user.keyboard("{ArrowDown}{Enter}");
-    expect(await within(screen.getByLabelText("Selected Notifications")).findByText("Anna Müller")).toBeInTheDocument();
+    expect(await screen.findByTestId(chipRemove("notifications", anna.entraId))).toBeInTheDocument();
+    expect(screen.getByText("Edit Approvers")).toBeInTheDocument();
     noWrites();
   });
 
@@ -398,7 +407,7 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
     fireEvent.click(taskEdit());
     await screen.findByText("Edit Approvers");
     const all = { hidden: true } as const;
-    expect(screen.getByRole("textbox", { name: "Project Status", ...all })).toHaveValue("Cluster 1 to Cluster 2");
+    expect(screen.getByRole("combobox", { name: "Project Status", ...all })).toHaveTextContent("Cluster 1 to Cluster 2");
     expect(screen.queryByText(GATE_BLANK_MESSAGE)).not.toBeInTheDocument();
     const save = screen.getByRole("button", { name: "Save", ...all });
     expect(save).toBeEnabled();
@@ -425,6 +434,8 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
     expect(await screen.findByText("Project Gates | France | PV")).toBeInTheDocument();
     expect(await screen.findByText("Grid connection request")).toBeInTheDocument();
 
+    // Germany, the first selection, started collapsed (UT-ADGATE-938): open it to reach Wind.
+    fireEvent.click(screen.getByRole("button", { name: "Expand Germany technologies" }));
     fireEvent.click(screen.getByRole("button", { name: "Germany Wind" }));
     expect(await screen.findByText("Project Gates | Germany | Wind")).toBeInTheDocument();
     await waitFor(() => expect(gateCollapse(1)).toHaveAttribute("aria-label", "+"));
@@ -437,20 +448,28 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
     expect(gateCollapse(1)).toHaveAttribute("aria-label", "+");
   });
 
-  it("UT-ADGATE-919 a successful gate create is one POST, closes the panel and confirms", async () => {
+  it("UT-ADGATE-938 every country on the rail starts collapsed, the selected one included (PGAS:118-119 `Expanded, false`)", async () => {
+    renderScreen();
+    expect(await screen.findByText("Project Gates | Germany | Wind")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Expand Germany technologies" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: "Expand France technologies" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("button", { name: "Germany Wind" })).not.toBeInTheDocument();
+  });
+
+  it("UT-ADGATE-919 a successful gate create is one POST, closes the panel and confirms with the canvas text", async () => {
     exec.mockResolvedValue({ done: 1, createdIds: ["40000000-0000-0000-0000-000000000099"] });
     renderScreen();
     await screen.findByText("Draft to Cluster 1");
     fireEvent.click(gateEdit(2));
-    await screen.findByText("Add Approvers");
+    await screen.findByText("Edit Approvers");
     // Satisfy "Notifications required" with the picker.
     repo.searchPeople.mockResolvedValue([person(5)]);
     const user = userEvent.setup();
     const all = { hidden: true } as const;
-    await user.click(screen.getByRole("combobox", { name: "Notifications", ...all }));
+    await user.click(screen.getByRole("textbox", { name: "Notifications", ...all }));
     await user.keyboard("pe");
-    await screen.findByRole("listbox", { name: "Suggested Notifications", ...all });
-    await user.keyboard("{ArrowDown}{Enter}");
+    await screen.findByRole("listbox", { name: "Notifications", ...all });
+    await user.keyboard("{Enter}");
     const save = screen.getByRole("button", { name: "Save", ...all });
     await waitFor(() => expect(save).toBeEnabled());
     fireEvent.click(save);
@@ -461,8 +480,9 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
       vsb_name: "Cluster 2 to Cluster 3", statecode: 0,
       vsb_defaultnotifications: JSON.stringify([{ PersonaKey: person(5).entraId, PersonaName: person(5).name, PersonaRole: person(5).mail }]),
     });
-    await waitFor(() => expect(screen.queryByText("Add Approvers")).not.toBeInTheDocument());
-    expect(await screen.findByText("Approvals for 'Cluster 2 to Cluster 3' were saved.")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("Edit Approvers")).not.toBeInTheDocument());
+    // `pcf_but_…_Save.OnChange` success text, verbatim (PGAS:3891, D22).
+    expect(await screen.findByText("Approvals was successfully saved.")).toBeInTheDocument();
   });
 
   it("UT-ADGATE-920 the mode switch shows / hides the people fields", async () => {
@@ -471,7 +491,7 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
     fireEvent.click(gateEdit(0));
     await screen.findByText("Edit Approvers");
     const all = { hidden: true } as const;
-    const searchBox = (label: string) => screen.queryByRole("combobox", { name: label, ...all });
+    const searchBox = (label: string) => screen.queryByRole("textbox", { name: label, ...all });
     expect(searchBox("Portfolio Manager")).not.toBeInTheDocument();
     expect(searchBox("Approvers")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("radio", { name: "Formal Approval", ...all }));
@@ -543,7 +563,7 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
     fireEvent.click(gateEdit(5));
     await screen.findByText("Edit Approvers");
     const all = { hidden: true } as const;
-    expect(screen.getByRole("textbox", { name: "Project Status", ...all })).toHaveValue("");
+    expect(screen.getByRole("combobox", { name: "Project Status", ...all }).textContent).toBe("");
     expect(screen.queryByText(GATE_BLANK_MESSAGE)).not.toBeInTheDocument();
     const save = screen.getByRole("button", { name: "Save", ...all });
     expect(save).toBeEnabled();
@@ -560,7 +580,10 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
     await screen.findByText("Edit Approvers");
     const all = { hidden: true } as const;
     fireEvent.click(screen.getByRole("radio", { name: "Formal Approval", ...all }));
-    expect(screen.getByRole("combobox", { name: "Portfolio Manager", ...all })).toHaveAttribute("placeholder", "Select Portfolio Manager");
+    const pm = screen.getByRole("textbox", { name: "Portfolio Manager", ...all });
+    expect(pm).toHaveAttribute("placeholder", "Select Portfolio Manager");
+    // `pcf_…_PortfolioManger.Tooltip` (PGAS:3130), verbatim.
+    expect(pm).toHaveAttribute("title", "Search for portfolio manager");
     noWrites();
   });
 
@@ -581,7 +604,7 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
     expect(screen.queryByText("Grid connection request")).not.toBeInTheDocument();
   });
 
-  it("UT-ADGATE-927 the Gate field is the shared ReadOnlyField (disabled, error wired) and task-row icons use RowActions gap 4", async () => {
+  it("UT-ADGATE-927 the Gate field is the canvas disabled dropdown (shared ChoiceField, error wired) and task-row icons use RowActions gap 4", async () => {
     repo.listProjectStates.mockResolvedValue(
       FIXTURE_STATES.map((s) => (s.order === 2 ? { ...s, name: "Abandoned", visibleOnChecklist: false } : s)),
     );
@@ -600,11 +623,90 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
 
     fireEvent.click(gateEdit(1));
     await screen.findByText("Edit Approvers");
-    const gate = screen.getByRole("textbox", { name: "Project Status", hidden: true });
+    const gate = screen.getByRole("combobox", { name: "Project Status", hidden: true });
+    expect(gate).toHaveAttribute("data-testid", "drp_Admin_ProjectGates_Approvals_Form_Fields_State");
     expect(gate).toBeDisabled();
-    expect(gate).toHaveAttribute("readonly");
     expect(gate).toHaveAttribute("aria-invalid", "true");
     expect(describedText(gate)).toContain(GATE_BLANK_MESSAGE);
+  });
+
+  /* ──────────────────────────────────────── canvas parity pass, 20 Nov 2026 ── */
+
+  it("UT-ADGATE-934 the delete dialog is the canvas cmp_PopUp_Confirmation: blue 128-px Confirm with a check mark (never red), 96-px Cancel", async () => {
+    const reference = render(<CheckmarkRegular data-testid="ref-check" />);
+    const checkPath = reference.getByTestId("ref-check").querySelector("path")?.getAttribute("d");
+    reference.unmount();
+    renderScreen();
+    await screen.findByText("Draft to Cluster 1");
+    fireEvent.click(taskDelete());
+    const dialog = await screen.findByRole("alertdialog", { hidden: true });
+    const confirm = within(dialog).getByRole("button", { name: "Delete", hidden: true });
+    const cancel = within(dialog).getByRole("button", { name: "Cancel", hidden: true });
+    // `pcf_PopUpConfirmation_BodyButtons_Confirm`: `FillColor: =themePrimary`, `Width: =128`, `IconName: ="CheckMark"`.
+    expect(appliedRules(confirm)["background-color"]).toMatch(/^(#006eb9|rgb\(0, 110, 185\))$/i);
+    expect(confirm).toHaveStyle({ width: "128px" });
+    expect(confirm.querySelector("svg path")?.getAttribute("d")).toBe(checkPath);
+    // `pcf_PopUpConfirmation_BodyButtons_Cancel`: `Width: =96`, white fill.
+    expect(appliedRules(cancel)["width"]).toBe("96px");
+    noWrites();
+  });
+
+  it("UT-ADGATE-935 the Draft gate editor shows 'Gate active' ON (what Save writes), locked, with the hint (SOURCE DEFECT fix kept, D150)", async () => {
+    repo.loadDataset.mockResolvedValue(fixtureDataset({
+      templates: FIXTURE_TEMPLATES.map((t) => (t.stateId === stateIdOf(0) ? { ...t, gateActive: false } : t)),
+    }));
+    renderScreen();
+    await screen.findByText("Draft to Cluster 1");
+    fireEvent.click(gateEdit(0));
+    await screen.findByText("Edit Approvers");
+    const toggle = screen.getByRole("switch", { name: "Gate active", hidden: true });
+    // Stored OFF, but Save writes `true` for Draft, so the toggle shows what will be saved.
+    expect(toggle).toBeChecked();
+    expect(toggle).toBeDisabled();
+    expect(screen.getByText("The Draft gate is always active.")).toBeInTheDocument();
+  });
+
+  it("UT-ADGATE-936 a mode change that hides saved people warns before Save (SOURCE DEFECT fix kept, D150); Reset Gate's band text is the canvas one", async () => {
+    renderScreen();
+    await screen.findByText("Draft to Cluster 1");
+    fireEvent.click(gateEdit(1));
+    await screen.findByText("Edit Approvers");
+    const all = { hidden: true } as const;
+    fireEvent.click(screen.getByRole("radio", { name: "Only Notifications", ...all }));
+    expect(screen.getByText(/Saving in this mode clears the saved /)).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Portfolio Manager", ...all })).not.toBeInTheDocument();
+    expect(screen.getByTestId("lbl_Admin_ProjectGates_Approvals_Form_Fields_ResetGateApproval_Description"))
+      .toHaveTextContent("Remove all cluster gate participants and deactivate the gate approval.");
+    noWrites();
+  });
+
+  it("UT-ADGATE-937 captions, asterisks and hints as the canvas: Check List required, Gate / Approval Mode not, Notifications by mode, the PCF tooltips", async () => {
+    const all = { hidden: true } as const;
+    const requiredMark = (control: HTMLElement) =>
+      document.querySelector(`label[for="${control.id}"]`)?.querySelector(".fui-Label__required") ?? null;
+    renderScreen();
+    await screen.findByText("Draft to Cluster 1");
+    fireEvent.click(addTask(1));
+    await screen.findByText("Add Approvers");
+    const checkList = screen.getByRole("combobox", { name: "Check List", ...all });
+    expect(checkList).toHaveAttribute("data-testid", "drp_Admin_ProjectGates_Approvals_Form_Fields_State_1");
+    expect(checkList).toBeEnabled();
+    expect(checkList).toHaveTextContent("Land lease signed");
+    expect(screen.queryByText("Select a check list task")).not.toBeInTheDocument();
+    expect(requiredMark(checkList)).not.toBeNull();
+    expect(requiredMark(screen.getByRole("combobox", { name: "Project Status", ...all }))).toBeNull();
+    // Add Task opens in Only Notifications: Notifications is shown and required, with the PCF hint and tooltip.
+    const notifications = screen.getByRole("textbox", { name: "Notifications", ...all });
+    expect(requiredMark(notifications)).not.toBeNull();
+    expect(notifications).toHaveAttribute("placeholder", "Select Notifications");
+    expect(notifications).toHaveAttribute("title", "Select Notifications");
+    // Local Approval: Approvers required; Notifications no longer.
+    fireEvent.click(screen.getByRole("radio", { name: "Local Approval", ...all }));
+    const approvers = screen.getByRole("textbox", { name: "Approvers", ...all });
+    expect(requiredMark(approvers)).not.toBeNull();
+    expect(approvers).toHaveAttribute("title", "Select Approvers");
+    expect(requiredMark(screen.getByRole("textbox", { name: "Notifications", ...all }))).toBeNull();
+    noWrites();
   });
 });
 
@@ -679,13 +781,13 @@ describe("ProjectGatesSettingsScreen — admin access", { timeout: TEST_TIMEOUT 
     await screen.findByText("Draft to Cluster 1");
     fireEvent.click(gateEdit(1));
     expect(await screen.findByText("Edit Approvers")).toBeInTheDocument();
-    expect(within(screen.getByLabelText("Selected Portfolio Manager")).getByText(person(1).name)).toBeInTheDocument();
+    expect(screen.getByTestId(chipRemove("portfolioManager", person(1).entraId))).toBeDisabled();
     expect(screen.getByRole("button", { name: "Save", ...all })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Reset Gate", ...all })).toBeDisabled();
     expect(screen.getByRole("radio", { name: "Formal Approval", ...all })).toBeDisabled();
     expect(screen.getByRole("switch", { name: "Gate active", ...all })).toBeDisabled();
     for (const label of ["Contributors", "Approvers", "Notifications"]) {
-      expect(screen.getByRole("combobox", { name: label, ...all })).toBeDisabled();
+      expect(screen.getByRole("textbox", { name: label, ...all })).toBeDisabled();
     }
     fireEvent.click(screen.getByRole("button", { name: "Cancel", ...all }));
     await waitFor(() => expect(screen.queryByText("Edit Approvers")).not.toBeInTheDocument());

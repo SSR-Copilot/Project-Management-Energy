@@ -8,19 +8,17 @@
  * (`con_Footer_Comment_Section`). Every `data-testid` is the canvas name plus the contract id
  * (repeating rows, CONVENTIONS rule 16).
  *
- * Canvas parity: 0 px left inset, blue chevron and `#0078D4` rule, 16 px headings over 15 px
- * semibold values in 30 px rows, the DevCo tags as a header plus a WRAPPING tag container
- * (ACS:1723-1726). The per-card Apply bar is not built (D67).
+ * Canvas parity: 0 px left inset, blue chevron and `#0078D4` rule, 16 px (`Large`, 12 pt) #595959
+ * headings over 14.67 px (`Medium`, 11 pt) semibold #323130 values in 30 px rows, the DevCo tags as a
+ * header plus a WRAPPING tag container (ACS:1723-1726). The per-card Apply bar is not built (D20, D67).
+ * Restored 20 Nov 2026: a blank Description / Margin Type / margin value is an empty label and the
+ * margin value is the raw number (no grouping), as the canvas.
+ *
+ * SOURCE DEFECT (fix kept, D150): the canvas lists an inactive contract unmarked, so it looks the same as an
+ * active one although it is never used to seed project contracts; here it carries an "Inactive" badge.
  *
  * DIVERGENCE: the canvas card has a hand-computed height and clips long text; here the height is
  * intrinsic and long values wrap.
- * DIVERGENCE: `lbl_Description_Value.Text = ThisItem.Description` and
- * `lbl_MarginType_Value.Text = Text(ThisItem.'Margin Type')` render a blank value as empty; here
- * both show "-".
- * DIVERGENCE: `lbl_MarginFixedValuePercentage_Value.Text` is `Value(…)` (the raw number); here it
- * is `marginValue` — locale-formatted with grouping and at most two decimals.
- * DIVERGENCE: an inactive contract shows an "Inactive" badge (no canvas equivalent; the canvas
- * lists inactive rows unmarked).
  * DIVERGENCE: the DevCo section shows "Loading…" / "DevCo cost links could not be loaded." (no
  * canvas text; CONVENTIONS rule 19).
  *
@@ -35,7 +33,7 @@ import { CollapsibleCard } from "@/components";
 import { useBrandButtonStyles } from "@/theme/buttonStyles";
 import { palette } from "@/theme/tokens";
 import {
-  CARD_TEXT, MARGIN_LABEL, MARGIN_TYPE_LABEL, commentText, formatClosingRef, isInactive, marginValue, marginValueHeading,
+  CARD_TEXT, MARGIN_LABEL, cardDescription, cardMarginType, commentText, formatClosingRef, isInactive, marginValue, marginValueHeading,
   type StandardContract, type TagGroup as TagGroupData,
 } from "./rules";
 
@@ -61,9 +59,10 @@ const useStyles = makeStyles({
     display: "flex", alignItems: "center", minHeight: "30px",
     color: palette.neutralTertiary, fontSize: tokens.fontSizeBase400, fontWeight: tokens.fontWeightRegular,
   },
+  // `lbl_*_Value`: classic Label, `Size: gblAppSizes.Font.Medium` (11 pt = 14.6667 px), Semibold, RGBA(50, 49, 48) (ACS:1316-1328).
   value: {
     display: "flex", alignItems: "center", minHeight: "30px", minWidth: "0",
-    color: "#323130", fontSize: "15px", fontWeight: tokens.fontWeightSemibold,
+    color: "#323130", fontSize: "14.6667px", fontWeight: tokens.fontWeightSemibold,
     overflowWrap: "anywhere", whiteSpace: "pre-wrap", wordBreak: "break-word",
   },
   /* DevCo tag block (ACS:1723-1726): header + a wrapping tag container, 12 px between rows. */
@@ -151,7 +150,7 @@ export function ContractCard({
       <div className={styles.grid1} data-testid={`con_Info_Grid1-${contract.id}`}>
         <div className={styles.field}>
           <Text className={styles.heading}>{CARD_TEXT.description}</Text>
-          <Text className={styles.value}>{contract.description || "-"}</Text>
+          <Text className={styles.value}>{cardDescription(contract)}</Text>
         </div>
         <div className={styles.field}>
           <Text className={styles.heading}>{CARD_TEXT.closingDateReference}</Text>
@@ -170,9 +169,7 @@ export function ContractCard({
           <>
             <div className={styles.field}>
               <Text className={styles.heading}>{CARD_TEXT.marginType}</Text>
-              <Text className={styles.value}>
-                {contract.marginType !== undefined ? MARGIN_TYPE_LABEL[contract.marginType] ?? "-" : "-"}
-              </Text>
+              <Text className={styles.value}>{cardMarginType(contract)}</Text>
             </div>
             <div className={styles.field}>
               <Text className={styles.heading}>{marginValueHeading(contract.marginType, currency)}</Text>

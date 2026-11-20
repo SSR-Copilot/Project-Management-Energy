@@ -332,6 +332,18 @@ describe("FormPanel", () => {
       expect(screen.getByRole("dialog", { name: "Edit thing" })).not.toHaveClass("canvas-panel-close-centered");
     });
 
+    it("UT-SETPANEL-026 closeIconColor tints the ✕ through a class and a custom property; off by default", () => {
+      const { unmount } = render(<Plain closeIconColor="#55a2d6" />);
+      const tinted = screen.getByRole("dialog", { name: "Edit thing" });
+      expect(tinted).toHaveClass("canvas-panel-close-tinted");
+      expect(tinted.style.getPropertyValue("--canvas-panel-close-color")).toBe("#55a2d6");
+      unmount();
+      render(<Plain />);
+      const plain = screen.getByRole("dialog", { name: "Edit thing" });
+      expect(plain).not.toHaveClass("canvas-panel-close-tinted");
+      expect(plain.style.getPropertyValue("--canvas-panel-close-color")).toBe("");
+    });
+
     it("UT-SETPANEL-020 E1 props keep one beforeunload listener", () => {
       const add = vi.spyOn(window, "addEventListener");
       const { unmount } = render(<Plain dirty closePrompt={() => null} messages={{ error: "x" }} coverLabel="c" />);

@@ -51,12 +51,17 @@ export const EMPTY_MESSAGE = "Value cannot be empty.";
 /** `lbl_Admin_ProjectGates_Approvals_Form_Fields_State_ErrMessage.Text` — verbatim (PGAS:2656). */
 export const GATE_BLANK_MESSAGE = "The cluster cannot be blank.";
 /**
- * DIVERGENCE: `lbl_Admin_ProjectGates_Approvals_Form_Fields_State_ErrMessage_1.Text` is
- * "The cluster cannot be blank." under the Check List field (PGAS:2799); this app reworded it to
- * name the field. D22 recorded the canvas wording as kept, and `UT-ADGATE` rules tests pin this
- * wording, so the choice needs a product decision.
+ * SOURCE DEFECT (fix kept, D150): `lbl_Admin_ProjectGates_Approvals_Form_Fields_State_ErrMessage_1.Text` is
+ * "The cluster cannot be blank." under the Check List field (PGAS:2799), the Gate field's text copied
+ * onto the wrong field. This app names the field it belongs to.
  */
 export const CHECKLIST_BLANK_MESSAGE = "The check list item cannot be blank.";
+/**
+ * `pcf_but_Admin_ProjectGates_Approvals_Form_Buttons_Save.OnChange` — the success
+ * `locAdminLoadingDialogText` (PGAS:3891), verbatim, shown as the success toast (D22: "the success
+ * text 'Approvals was successfully saved.' … shown"). Both branches (gate and check list) use it.
+ */
+export const SAVED_MESSAGE = "Approvals was successfully saved.";
 /**
  * `lbl_Admin_ProjectGates_Approvals_Form_Fields_Main_ErrorMessage.Text` — verbatim, including the
  * canvas misspelling "allready" (PGAS:2620). When it shows is a DIVERGENCE (see `hasGateConflict`).
@@ -454,6 +459,18 @@ export const ROLE_LABEL: Record<PeopleRole, string> = {
   notifications: "Notifications",
 };
 
+/** The people pickers' hover hints — each PCF's `Tooltip`, verbatim (CONVENTIONS rule 22). */
+export const ROLE_TOOLTIP: Record<PeopleRole, string> = {
+  /** `pcf_Admin_ProjectGates_Approvals_Form_Fields_PortfolioManger.Tooltip` — verbatim (PGAS:3130). */
+  portfolioManager: "Search for portfolio manager",
+  /** `pcf_Admin_ProjectGates_Approvals_Form_Fields_Approval2.Tooltip` — verbatim (PGAS:3262). */
+  contributors: "Select Contributors",
+  /** `pcf_Admin_ProjectGates_Approvals_Form_Fields_Approvals.Tooltip` — verbatim (PGAS:3393). */
+  approvers: "Select Approvers",
+  /** `pcf_Admin_ProjectGates_Approvals_Form_Fields_Notifications.Tooltip` — verbatim (PGAS:3523). */
+  notifications: "Select Notifications",
+};
+
 /** The people pickers' placeholders. */
 export const ROLE_PLACEHOLDER: Record<PeopleRole, string> = {
   /** `pcf_Admin_ProjectGates_Approvals_Form_Fields_PortfolioManger.HintText` — verbatim. */
@@ -598,14 +615,16 @@ const PANEL_TITLE = { add: "Add Approvers", edit: "Edit Approvers" } as const;
 
 /**
  * `lblAdmin_ProjectGates_Approvals_Form_Title.Text` — `If(IsBlank(locSelectedApprovalsEntity),
- * "Add Approvers", "Edit Approvers")`: "Edit Approvers" for a saved record, "Add Approvers" otherwise.
+ * "Add Approvers", "Edit Approvers")`.
+ * Gate panel: always "Edit Approvers", as the canvas shows it — its Edit creates the row before the
+ * panel opens, so `locSelectedApprovalsEntity` is never blank there (D22: "gates stay 'Edit
+ * Approvers'"). This holds for a placeholder gate too, although this app creates its row only on Save.
  * SOURCE DEFECT: on the check-list branch the canvas tests the GATE variable, which the check-list
- * Edit / Add Task never set, so the title showed whatever the last gate panel left (D22).
- * DIVERGENCE: the canvas gate panel always says "Edit Approvers", because Edit has already created
- * the row; with no row created on open (see `seedGateForm`) a placeholder gate says "Add Approvers".
+ * Edit / Add Task never set, so the title showed whatever the last gate panel left. Here (D22): "Add
+ * Approvers" for Add Task, "Edit Approvers" for a task row's Edit.
  */
 export function panelTitle(target: EditorTarget): string {
-  if (target.kind === "gate") return target.row.template ? PANEL_TITLE.edit : PANEL_TITLE.add;
+  if (target.kind === "gate") return PANEL_TITLE.edit;
   return target.mode === "edit" ? PANEL_TITLE.edit : PANEL_TITLE.add;
 }
 
@@ -726,7 +745,8 @@ export function hasGateConflict(editingId: string | undefined, row: GateRow, tem
 
 /**
  * Roles whose saved people a mode change will clear (warned before Save).
- * DIVERGENCE: NEW — the canvas clears them on Save without a warning.
+ * SOURCE DEFECT (fix kept, D150): the canvas clears them on Save without a word, so saved people
+ * vanish unannounced.
  */
 export function droppedRoles(initial: ApprovalForm, form: ApprovalForm): PeopleRole[] {
   const before = effectivePeople(initial);
@@ -950,8 +970,9 @@ export function deleteConfirmationText(ctx: GateContext, gate: string, taskName:
 }
 
 /**
- * DIVERGENCE: NEW — the canvas Reset Gate writes at once, with no confirmation (doc 09 §2). The
- * first line is `RESET_GATE_DESCRIPTION`; the rest has no canvas source.
+ * SOURCE DEFECT (fix kept, D150): the canvas Reset Gate writes at once, with no confirmation
+ * (`btn_…_ResetGateApproval.OnSelect`, PGAS:3592-3624), although it removes every gate participant and
+ * cannot be undone. The first line is `RESET_GATE_DESCRIPTION`; the rest has no canvas source.
  */
 export function resetConfirmationText(ctx: GateContext, gate: string): string {
   return `${RESET_GATE_DESCRIPTION}\n\n${ctx.countryName} - ${technologyOptionLabel(ctx.technology)}\nGate: '${gate}'\n\nThis cannot be undone.`;
