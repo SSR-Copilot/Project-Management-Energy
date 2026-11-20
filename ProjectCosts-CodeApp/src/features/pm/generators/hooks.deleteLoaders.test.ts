@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const m = vi.hoisted(() => ({
   listDeviceTypes: vi.fn(), listOpexCostIdsForBridges: vi.fn(), loadTurbineAllocations: vi.fn(),
-  listProjectTurbines: vi.fn(), listAllWtgLandLeaseCosts: vi.fn(),
+  listProjectTurbines: vi.fn(), listAllWtgLandLeaseCosts: vi.fn(), loadTurbineAllocationRows: vi.fn(),
 }));
 vi.mock("@/data/generators", async (original) => ({ ...(await original<Record<string, unknown>>()), ...m }));
 
@@ -15,6 +15,8 @@ beforeEach(() => {
   m.listDeviceTypes.mockResolvedValue([{ id: B1, active: true }, { id: B2, active: false }, { id: B3, active: true }]);
   m.listOpexCostIdsForBridges.mockResolvedValue(["c1", "c2", "c3", "c4"]);
   m.loadTurbineAllocations.mockResolvedValue({ allocations: [{ id: "a1", costId: "k1", turbineId: "t1" }], countByCost: { k1: 2 } });
+  // D144: with `replaceLanes` ON (the default) a replace reads the allocation rows only, without the count read.
+  m.loadTurbineAllocationRows.mockResolvedValue([{ id: "a1", costId: "k1", turbineId: "t1" }]);
   m.listProjectTurbines.mockResolvedValue([{ id: "t1", index: 1 }]);
   m.listAllWtgLandLeaseCosts.mockResolvedValue([{ id: "k1", landOwner: null, description: null, allWtgAllocated: true }]);
 });

@@ -31,6 +31,15 @@
 export const WRITE_CONCURRENCY = 8;
 
 /**
+ * The default in-flight limit of a Generators `together()` group while `GENERATORS_PERF.wideGroups` is on (D144): 16 instead of
+ * `WRITE_CONCURRENCY` (8). Used only by `features/pm/generators/rules.ts`; every other screen keeps 8. Worst case in flight: a
+ * group runs alone (`executePlan` awaits groups one after the other), so a save has at most 16 writes in flight, plus the
+ * background reads of the screen (the shared read gate and the reload's query fan-out, about a dozen), well under the 52
+ * concurrent requests per user and web server that Dataverse allows. The leaf and cascade delete tiers below are NOT changed.
+ */
+export const WIDE_GROUP_CONCURRENCY = 16;
+
+/**
  * `items.map(fn)`, run at most `limit` at a time, resolving to the results IN INPUT ORDER.
  *
  * Input order is guaranteed for the results; COMPLETION order is not, so this is only for tasks

@@ -2,13 +2,21 @@
  * Phase 4 of the Generators bulk programme (work package R2, plan §3 phase 4): the N turbines of a new WTG type are ONE
  * `createMany` when `GENERATORS_BULK.turbines` is on; the type stays a single create first. IDs UT-GEN-240..; both halves.
  */
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
+import { setGeneratorsPerfFlags } from "@/data/generatorsPerfFlags";
 import { setBulkBackend, type BulkBackend, type BulkRow } from "@/data/bulkBackend";
 import { executePlan, type PlanClient } from "@/data/executePlan";
 import * as R from "./rules";
 import {
   OBU, OFF, PROJECTS, TURBINE, TYPE, P, changes, counter, genType, model, n, noBulkInGroup, only, steps, turbine, waves,
 } from "./bulkPlans.testkit";
+
+/*
+ * D144 pin: this file tests the D115 / D116 flags and the plan shapes of BEFORE the save-latency work (relaneWrites, replaceLanes,
+ * wideGroups), so those three switches are held OFF here. The same builders with the switches ON are covered by saveLatency.test.ts.
+ */
+beforeEach(() => setGeneratorsPerfFlags({ relaneWrites: false, replaceLanes: false, wideGroups: false }));
+afterEach(() => setGeneratorsPerfFlags(null));
 
 const ON = only("turbines");
 

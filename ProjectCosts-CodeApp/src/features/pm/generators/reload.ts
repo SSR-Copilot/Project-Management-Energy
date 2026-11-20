@@ -172,6 +172,36 @@ export function reloadKeys(
 }
 
 /**
+ * D144 (`GENERATORS_PERF.trimReload`): the copies of the project row a Generators save marks STALE without fetching them (the
+ * job's `staleOnly`; the screen's own `qk.generators(…, "project")` read is NOT in the list and still reloads).
+ *
+ * Why nothing mounted during a Generators save needs them fresh (every consumer read, D144 §3):
+ *  - `qk.milestoneProject` (`useMilestoneProject`, Milestones screen) and `qk.generalDataProject` (`useGeneralDataProject`, General
+ *    Data screen; also warmed by `app/bootPrefetch.ts`) are mounted only on those two screens. On the Generators screen they
+ *    have no observer, so an invalidation never refetched them anyway (`invalidateQueries` refetches ACTIVE queries only); marking
+ *    them stale is what is left, and the next screen that mounts one refetches it (a stale query refetches on mount);
+ *  - `qk.project` is the session's own project query (`SessionProvider`, always mounted: it feeds the header title, the status
+ *    bar and the Cost screens). It is the one that WAS refetched, with three more reads behind it (country, cluster state, area:
+ *    the "reference data" re-reads). The header reads the name, cluster state and approval state, which no Generators save changes;
+ *    the Cost screens read `isoCurrencyCode`, `countryName`, `totalCapacity` and the milestone dates, of which only the
+ *    formula column `totalCapacity` follows the plant roll-ups. They are not mounted during the save, and
+ *    `useRefreshSessionProjectOnLeave` (`hooks.ts`) refetches the session project when the Generators screen unmounts, so a later
+ *    visit sees the new `totalCapacity` (and `refetchOnWindowFocus` covers the rest).
+ * With the switch off, or for a job with no kind (`"full"`, the rollback jobs), the list is empty and every key reloads, as before.
+ */
+export function staleOnlyKeys(
+  projectId: string | undefined, kind: ReloadKind, flags: Readonly<GeneratorsPerfFlags> = generatorsPerf(),
+): readonly QueryKey[] {
+  if (!flags.trimReload || !flags.targetedReload || !projectId) return [];
+  const families = familiesFor(kind);
+  if (!families || !families.includes("project")) return [];
+  return [qk.project(projectId), qk.milestoneProject(projectId), qk.generalDataProject(projectId)];
+}
+
+/** What the trace line names for `staleOnlyKeys`, in the same order. */
+const STALE_ONLY_NAMES = "session project, Milestones project, General Data project";
+
+/**
  * `job` with the reload of `kind` (a no-op while `targetedReload` is off or the kind is `"full"`). The reload is traced
  * (CONVENTIONS rule 23): one `[VSB] ACTION` line when the writes are over, naming the families, before the reload's own
  * `Load` lines.
@@ -183,12 +213,14 @@ export function withReload(
   if (!keys) return job;
   const families = familiesFor(kind) ?? [];
   const previous = job.onWritten;
+  const stale = staleOnlyKeys(projectId, kind, flags);
   return {
     ...job,
     invalidate: keys,
+    ...(stale.length > 0 ? { staleOnly: stale } : {}),
     onWritten: (ok) => {
       previous?.(ok);
-      logAction(`Generators reload after ${kind}${ok ? "" : " (failed)"}: ${families.length} of ${FAMILY_ORDER.length} query groups (${families.join(", ")})`);
+      logAction(`Generators reload after ${kind}${ok ? "" : " (failed)"}: ${families.length} of ${FAMILY_ORDER.length} query groups (${families.join(", ")})${stale.length > 0 ? `; marked stale, not fetched: ${STALE_ONLY_NAMES}` : ""}`);
     },
   };
 }

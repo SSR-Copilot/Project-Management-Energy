@@ -41,7 +41,7 @@ import {
   listAllWtgLandLeaseCosts, listGeneratorsByIds, listOrderableGenerators,
   listProjectTurbines, loadDeviceCosts,
   findPvUnit, listDeviceTypes, listOpexCostIdsForBridges, loadOpexDependency,
-  listPlantSupplierCatalogue, loadTurbineAllocations, loadTypeName,
+  listPlantSupplierCatalogue, loadTurbineAllocationRows, loadTurbineAllocations, loadTypeName,
   type DeviceCosts, type GeneratorsProjectRow,
 } from "@/data/generators";
 import {
@@ -333,11 +333,30 @@ export const SERVER_DECIDES: GeneratorPermissions = {
  */
 export function useGeneratorWrites(projectId: string | undefined) {
   const id = projectId ?? "";
+  // D144 (`trimReload`): a save only marks the session project stale; the screen that owns the writes refetches it once on leaving.
+  useRefreshSessionProjectOnLeave(generatorsPerf().trimReload ? projectId : undefined);
   return usePlanWrite({
     invalidate: [qk.generatorsAll(id), qk.project(id), qk.milestoneProject(id), qk.generalDataProject(id)],
     action: "change this project's generators",
     refresh: "background",
   });
+}
+
+/**
+ * D144 (`GENERATORS_PERF.trimReload`): a Generators save marks the session's project (`qk.project`) stale without fetching it
+ * (`reload.ts`, `staleOnlyKeys`). The session's observer stays mounted when the user goes to another screen, so nothing would
+ * fetch it until a window focus; this hook does it when the Generators screen unmounts: an invalidated session project is
+ * invalidated again WITH a refetch, so the next screen (the Cost screens read `totalCapacity` from it) gets the new value. No request
+ * when the save never marked it stale (`isInvalidated` is false), so a visit with no save costs nothing.
+ */
+export function useRefreshSessionProjectOnLeave(projectId: string | undefined): void {
+  const qc = useQueryClient();
+  useEffect(() => {
+    if (!projectId) return undefined;
+    return () => {
+      if (qc.getQueryState(qk.project(projectId))?.isInvalidated) void qc.invalidateQueries({ queryKey: qk.project(projectId) });
+    };
+  }, [qc, projectId]);
 }
 
 /** A row a permission cancellation can be sent for (any of the four families). */
@@ -431,6 +450,34 @@ export async function loadPvDeleteInputs(projectId: string, pvId: string): Promi
 }
 
 /**
+ * D144 (`GENERATORS_PERF.replaceLanes`): the same Identify reads as the staged version below, as a dependency graph. Every read
+ * starts as soon as the ONE read it needs has answered, not when a whole earlier stage has:
+ *  - the device-type rows, the old type's units and the AllWTG costs need nothing (wave 1, three requests);
+ *  - the O&M costs of the bridge rows need the bridge ids (wave 2, plus the chain members of the heads, wave 3, only when there are any);
+ *  - the land-lease allocations of the units need the unit ids (wave 2).
+ * The staged version's FOURTH read, the count of each cost's allocations (`loadTurbineAllocations`), is dropped: Replace never read its
+ * result (`countByCost` is used only by the deletes). The rows returned are the same.
+ */
+async function loadReplaceInputsInWaves(projectId: string, typeId: string): Promise<ReplaceInputs> {
+  const deviceTypesRead = listDeviceTypes(typeId);
+  const unitsRead = listProjectTurbines([typeId]);
+  const costsRead = listAllWtgLandLeaseCosts(projectId);
+  const opexRead = deviceTypesRead.then((deviceTypes) => listOpexCostIdsForBridges(projectId, deviceTypes.map((d) => d.id)));
+  const allocationsRead = unitsRead.then((units) => loadTurbineAllocationRows(units.map((u) => u.id)));
+  const [deviceTypes, units, landLeaseCosts, opexCostIds, allocations] =
+    await Promise.all([deviceTypesRead, unitsRead, costsRead, opexRead, allocationsRead]);
+  return {
+    bridgeIds: deviceTypes.map((d) => d.id),
+    opexCostIds,
+    unitIds: units.map((u) => u.id),
+    allocations: toReplaceAllocations({
+      allocations, units, allWtgCostIds: new Set(landLeaseCosts.map((c) => c.id)), keepCostIds: true,
+    }),
+    landLeaseCosts,
+  };
+}
+
+/**
  * A replace's T2a "Identify" (G6): the old type's device-type rows and the O&M costs on ALL of them (DEL-3), its
  * units, their land-lease allocations (with each cost's AllWTG flag) and the project's AllWTG costs.
  *
@@ -438,6 +485,7 @@ export async function loadPvDeleteInputs(projectId: string, pvId: string): Promi
  * further bridge row are left behind. This app takes ALL the bridge rows (D116; delete hardening plan claim 2, scenario S7).
  */
 export async function loadReplaceInputs(projectId: string, typeId: string): Promise<ReplaceInputs> {
+  if (generatorsPerf().replaceLanes) return loadReplaceInputsInWaves(projectId, typeId);
   const [deviceTypes, units, landLeaseCosts] = await Promise.all([
     listDeviceTypes(typeId), listProjectTurbines([typeId]), listAllWtgLandLeaseCosts(projectId),
   ]);

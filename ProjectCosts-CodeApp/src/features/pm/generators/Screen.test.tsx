@@ -209,12 +209,13 @@ describe("UT-GEN Screen (connected, D27)", () => {
     expect(job.progress).toBe('Generator "Vestas V150-5.6 - available" will be saved, please wait...');
     expect(job.success).toBe(GENERATOR_TYPE_SAVED_BANNER);
     const plan = await planOf(job);
+    // D144 (relaneWrites, default ON; was: [type, turbines, "update:vsb_projects"]): the roll-up is no longer the last write of this
+    // plan; it is handed to the follow-up and sent in its one wave (asserted below), still after every turbine.
     expect(plan.writes.map((w) => `${w.op}:${w.entitySet}`)).toEqual([
       "create:vsb_generatortypeinprojects", "create:vsb_generatorinprojects", "create:vsb_generatorinprojects",
-      "update:vsb_projects",
     ]);
-    // Save performance (6 Nov 2026): the type alone first; the turbines in one parallel run; the roll-up last.
-    expect(plan.writes.map((w) => Boolean(w.concurrent))).toEqual([false, true, true, false]);
+    // Save performance (6 Nov 2026): the type alone first; the turbines in one parallel run.
+    expect(plan.writes.map((w) => Boolean(w.concurrent))).toEqual([false, true, true]);
     // Names continue from the PROJECT-wide max index (2).
     expect(plan.writes[1]!.data!.vsb_name).toBe("WTG WPN_3");
     expect(plan.writes[0]!.data!.vsb_costperwtg).toBe(950_000);
@@ -223,6 +224,8 @@ describe("UT-GEN Screen (connected, D27)", () => {
     expect(state.loadNewTypeInputs).toHaveBeenCalledWith("wtg", "new-type");
     expect(follow!.writes[0]!.data!.vsb_name).toBe("WTG-0099");
     expect(follow!.writes.every((w) => w.concurrent)).toBe(true);
+    // D144: the roll-up the first plan handed over is written once, in this ONE wave (with the device-type row and the allocations).
+    expect(follow!.writes.filter((w) => w.entitySet === "vsb_projects")).toHaveLength(1);
     // When the create returned the row (`Prefer: return=representation`), its autonumber is used: no read-back.
     state.loadNewTypeInputs.mockClear();
     const fast = await job.then!({
@@ -348,18 +351,19 @@ describe("UT-GEN Screen (connected, D27)", () => {
       "update:vsb_opexprojectcosts", "delete:vsb_generatorinprojects", "delete:vsb_generatorinprojects",
       "delete:vsb_devicetypesinprojects", "delete:vsb_generatortypeinprojects",
       "create:vsb_generatortypeinprojects", "create:vsb_generatorinprojects", "create:vsb_generatorinprojects",
-      "update:vsb_projects",
     ]);
-    // Detach + old units together; the device-type row only after that run (so it cannot take the O&M costs);
-    // the old type, the new type, the new turbines together, the roll-up last.
-    expect(plan.writes.map((w) => Boolean(w.concurrent))).toEqual([true, true, true, false, false, false, true, true, false]);
+    // D144 (replaceLanes, default ON; was: the units, the device-type row and a final "update:vsb_projects" as separate steps): the
+    // detach, then the units and the device-type row in ONE leaf wave (the type delete after it), then the new type and its turbines;
+    // the roll-up moved to the follow-up's first wave (asserted below).
+    expect(plan.writes.map((w) => Boolean(w.concurrent))).toEqual([true, true, true, true, false, false, true, true]);
     // The old turbines are gone, so the new names start again at 1.
     expect(plan.writes[6]!.data!.vsb_name).toBe("WTG WPN_1");
-    const follow = await job.then!({ done: 9, createdIds: ["new-type", "nw1", "nw2"] });
+    const follow = await job.then!({ done: 8, createdIds: ["new-type", "nw1", "nw2"] });
+    // D144: the device-type row and the roll-up (handed over by job 1) are one wave; the O&M re-link runs after it.
     expect(follow!.writes.map((w) => `${w.op}:${w.entitySet}`)).toEqual([
-      "create:vsb_devicetypesinprojects", "update:vsb_opexprojectcosts",
+      "create:vsb_devicetypesinprojects", "update:vsb_projects", "update:vsb_opexprojectcosts",
     ]);
-    expect(follow!.writes.map((w) => Boolean(w.concurrent))).toEqual([false, true]);
+    expect(follow!.writes.map((w) => Boolean(w.concurrent))).toEqual([true, true, true]);
     expect(typeof job.success === "function" ? job.success(follow!) : job.success).toBe(REPLACE_MSG.wtgReplaced);
     // D97 — an open request on the old type is cancelled first; in country nothing is requested.
     expect(state.flows.cancelIfOpen).toHaveBeenCalledWith("wtg", TYPE);
@@ -410,11 +414,12 @@ describe("UT-GEN Screen (connected, D27)", () => {
     expect(plan.writes.at(-1)).toMatchObject({ op: "create", entitySet: "vsb_pvmoduletypeinprojects" });
     expect(job.success).toBe(REPLACE_MSG.pvReplaced);
     const follow = await job.then!({ done: plan.writes.length, createdIds: ["new-pv"] });
+    // D144 (replaceLanes, default ON; was: the bridge, the unit and the PV totals one by one, then the re-links): the device-type row
+    // and the unit are ONE wave, then the PV totals and the O&M re-links are one wave.
     expect(follow!.writes.map((w) => `${w.op}:${w.entitySet}`)).toEqual([
       "create:vsb_devicetypesinprojects", "create:vsb_generatorinprojects", "update:vsb_projects", "update:vsb_opexprojectcosts",
     ]);
-    // The device-type row, the unit and the PV totals one by one; the O&M re-links as one parallel run.
-    expect(follow!.writes.map((w) => Boolean(w.concurrent))).toEqual([false, false, false, true]);
+    expect(follow!.writes.map((w) => Boolean(w.concurrent))).toEqual([true, true, true, true]);
   });
 });
 

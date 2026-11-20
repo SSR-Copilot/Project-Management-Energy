@@ -16,7 +16,8 @@
  *  - The predicates behind the Rendering cases are tested directly: `pageLock`,
  *    `permissionStateTone`, `overHeightLimit`. No case here renders a component.
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { setGeneratorsPerfFlags } from "@/data/generatorsPerfFlags";
 import { CHOICE_PLANT } from "@/data/dataverseNames";
 import * as R from "./rules";
 import { Vsb_generatorsvsb_countryavailability } from "@/generated/models/Vsb_generatorsModel";
@@ -55,6 +56,13 @@ import {
   type CatalogModel, type ProjectedModel, type GeneratorsProject, type GeneratorTypeRow,
   type TurbineRow, type SimpleTypeRow, type TypeFormState, type PvTypeFormState,
 } from "./rules";
+
+/*
+ * D144 pin: this file tests the D115 / D116 flags and the plan shapes of BEFORE the save-latency work (relaneWrites, replaceLanes,
+ * wideGroups), so those three switches are held OFF here. The same builders with the switches ON are covered by saveLatency.test.ts.
+ */
+beforeEach(() => setGeneratorsPerfFlags({ relaneWrites: false, replaceLanes: false, wideGroups: false }));
+afterEach(() => setGeneratorsPerfFlags(null));
 
 /* ═══════════════════════════════════════════════════════════════════ fixtures ═══ */
 

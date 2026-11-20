@@ -3,13 +3,21 @@
  * every plan that uses `allocationCreates` become ONE `createMany` when `GENERATORS_BULK.allocations` is on. IDs
  * UT-GEN-210..; every test pins both halves (flag off = today's plan, flag on = the bulk plan).
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { setGeneratorsPerfFlags } from "@/data/generatorsPerfFlags";
 import { GENERATORS_BULK } from "@/data/generatorsBulkFlags";
 import * as R from "./rules";
 import {
   ALLOC, BRIDGE, OBU, OPEX, OFF, PROJECTS, TURBINE, P, changes, costs, counter, genType, model, n, noBulkInGroup,
   only, reps, steps, turbine, waves, withoutGroupIds,
 } from "./bulkPlans.testkit";
+
+/*
+ * D144 pin: this file tests the D115 / D116 flags and the plan shapes of BEFORE the save-latency work (relaneWrites, replaceLanes,
+ * wideGroups), so those three switches are held OFF here. The same builders with the switches ON are covered by saveLatency.test.ts.
+ */
+beforeEach(() => setGeneratorsPerfFlags({ relaneWrites: false, replaceLanes: false, wideGroups: false }));
+afterEach(() => setGeneratorsPerfFlags(null));
 
 const ON = only("allocations");
 const units = (count: number) => n(count, (i) => ({ id: `w${i}`, name: `WTG WPN_${i}` }));

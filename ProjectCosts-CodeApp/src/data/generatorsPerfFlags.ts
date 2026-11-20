@@ -27,6 +27,22 @@
  *    show a stale catalogue for the length of one read.
  *
  * `optimisticToggle` is declared here and used from phase C, so the module is the one place all the switches live.
+ *
+ * Save latency (D144, `ProjectDocs/app-docs/02-OPEN-DECISIONS.md`): four more switches, each changing only the GROUPING and
+ * ORDER of the writes of a save (or what a save reloads), never WHAT is written. The old plan builders stay reachable
+ * behind them (`GENERATORS_PERF_ALL_OFF` gives today's plans; the golden-master tests `UT-GENLAT-*` compare both).
+ *  - `relaneWrites` (default ON): Add PV Module, Add Individual Generator, Add WTG Type and the status toggle put the writes
+ *    that depend on nothing created beside them into ONE `together()` wave (`rules.ts`: the type update, the roll-up, the
+ *    allocations, the device-type row), instead of one wave after the other. DIVERGENCE (a failure inside such a wave lets
+ *    the wave finish; the canvas waits for each write in turn).
+ *  - `replaceLanes` (default ON): Replace Generator Type / Replace PV Module read their Identify data in fewer waves (the
+ *    unused allocation-count read is dropped, the reads form a dependency graph, not stages), delete their sibling leaf rows
+ *    (units + device-type rows) in ONE wave and create the siblings in one wave. The delete lane and the create lane never
+ *    overlap (D115 decision 5).
+ *  - `trimReload` (default ON): after a Generators save the Milestones, General Data and session copies of the project are
+ *    marked stale without being fetched (`features/pm/generators/reload.ts`); a later visit fetches them.
+ *  - `wideGroups` (default ON): the default in-flight limit of a Generators `together()` group goes from 8 to 16
+ *    (`WIDE_GROUP_CONCURRENCY`). The leaf and cascade delete tiers (16 / 4) are NOT changed.
  */
 export interface GeneratorsPerfFlags {
   targetedReload: boolean;
@@ -40,6 +56,14 @@ export interface GeneratorsPerfFlags {
   optimisticToggle: boolean;
   /** Phase B (D142). */
   persistCatalogue: boolean;
+  /** Save latency (D144). */
+  relaneWrites: boolean;
+  /** Save latency (D144). */
+  replaceLanes: boolean;
+  /** Save latency (D144). */
+  trimReload: boolean;
+  /** Save latency (D144). */
+  wideGroups: boolean;
 }
 
 /** A partial set of the switches, merged over `GENERATORS_PERF` by whoever accepts overrides. */
@@ -54,12 +78,17 @@ export const GENERATORS_PERF: Readonly<GeneratorsPerfFlags> = {
   readsByProject: false,
   optimisticToggle: false,
   persistCatalogue: false,
+  relaneWrites: true,
+  replaceLanes: true,
+  trimReload: true,
+  wideGroups: true,
 };
 
 /** Every switch at its OLD behaviour: today's requests exactly (tests, and the rollback in one line). */
 export const GENERATORS_PERF_ALL_OFF: Readonly<GeneratorsPerfFlags> = {
   targetedReload: false, gateByList: false, prefetch: false, parallelChunks: false,
   readsByProject: false, optimisticToggle: false, persistCatalogue: false,
+  relaneWrites: false, replaceLanes: false, trimReload: false, wideGroups: false,
 };
 
 let override: GeneratorsPerfOverrides | null = null;

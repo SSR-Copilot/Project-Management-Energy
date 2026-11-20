@@ -40,6 +40,8 @@ describe("GENERATORS_PERF — the switches (D141)", () => {
     expect(GENERATORS_PERF).toEqual({
       targetedReload: true, gateByList: true, prefetch: true, parallelChunks: true,
       readsByProject: false, optimisticToggle: false, persistCatalogue: false,
+      // D144 (save latency): the four switches added after D141-D143, all ON.
+      relaneWrites: true, replaceLanes: true, trimReload: true, wideGroups: true,
     });
     expect(generatorsPerf()).toEqual(GENERATORS_PERF);
   });
@@ -137,8 +139,9 @@ describe("targeted reloads — which queries a save refreshes", () => {
     job.onWritten?.(false);
     expect(own).toHaveBeenCalledTimes(2);
     expect(logged.lines).toEqual([
-      "Generators reload after saveSimple:hydrogen: 2 of 11 query groups (project, hydrogen)",
-      "Generators reload after saveSimple:hydrogen (failed): 2 of 11 query groups (project, hydrogen)",
+      // D144 (trimReload, default ON): the line also names the project copies that are only marked stale.
+      "Generators reload after saveSimple:hydrogen: 2 of 11 query groups (project, hydrogen); marked stale, not fetched: session project, Milestones project, General Data project",
+      "Generators reload after saveSimple:hydrogen (failed): 2 of 11 query groups (project, hydrogen); marked stale, not fetched: session project, Milestones project, General Data project",
     ]);
   });
 
@@ -198,6 +201,8 @@ describe("targeted reloads — the safety net: every table a plan writes is cove
     });
     const follow = R.planGeneratorTypeFollowUp({
       project: P, typeId: "t9", typeName: "WTG-0042", hasDeviceType: false, turbines: [{ id: "w1", name: "WTG WPN_1" }], landLeaseCosts: costs(1),
+      // D144 (relaneWrites): the project roll-up is written by the follow-up, handed over by the first plan.
+      ...(create.deferredRollup ? { rollup: create.deferredRollup } : {}),
     });
     const written = tablesWritten(create, follow);
     expect(written.size).toBeGreaterThanOrEqual(5);
