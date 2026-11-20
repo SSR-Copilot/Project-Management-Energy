@@ -70,11 +70,12 @@ const curve = buildNegativePriceRows(2028, [], "WTG");
 const storedCurve = (rows = curve): StoredNegativePrice[] =>
   rows.map((r, i) => ({ id: `n${i + 1}`, year: r.year, reduction: r.reductionValue, isStandard: r.standardAssumption }));
 
+/** `wide: false` = the 8-wide group of the code before the production-save-width change; the golden snapshot below is that plan. */
 const saveNew = (rows = curve, revenues: RevenueRow[] = [revenue("r1", { considerNegativePrices: false }), revenue("r2")], yields: EnergyYieldRow[] = [yieldRow({ id: "i0", considerNegativePrices: true })]) =>
   planSaveYield({
     editing: null, payload: payloadOf(wtgOn), project: project(), seasonality: { on: true, rows: season, storedId: null },
     negativePrices: { on: true, rows, stored: [] }, yields, revenues,
-  });
+  }, { wide: false });
 
 describe("UT-PRODBASE write-plan baseline (the code before optimization)", () => {
   it("UT-PRODBASE-001 the negative-price curve a new yield gets: its length is the N of every save count", () => {

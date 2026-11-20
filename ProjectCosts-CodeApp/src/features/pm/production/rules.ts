@@ -65,6 +65,7 @@ import { addMonths } from "@/domain/dates";
 import { p75, p90, NOT_COMPUTABLE } from "@/domain/yieldStats";
 import { CHOICE_PRODUCTION, ES, ES_FINANCE, ES_PLANT, ES_PRODUCTION } from "@/data/dataverseNames";
 import { bind, dateOnly } from "@/data/odata";
+import { WIDE_GROUP_CONCURRENCY } from "@/data/concurrency";
 import { createdRowRef, together, type PlannedWrite, type WritePlan } from "@/data/writePlan";
 import { textFormat } from "@/features/pm/generators/rules";
 
@@ -1324,6 +1325,11 @@ export function revenueSyncYieldsCanvasParity(yields: readonly EnergyYieldRow[],
  * (`together`, 8 at a time) instead of one round trip each; a curve of 30 negative-price years was
  * 30 sequential writes. They are independent rows, and no plugin or flow fires on the seasonality,
  * negative-price, revenue or energy-yield tables (`hooks.ts` header), so their order is free.
+ *
+ * D145 (number provisional): the group goes out 16 at a time (`WIDE_GROUP_CONCURRENCY`, as the Generators saves since D144)
+ * instead of 8, so a 15-year curve with seasonality and revenue syncs (18 writes) is 2 awaited round trips, not 3, and a
+ * 28-year one (31 writes) 2, not 4. Same writes, same order, same binds. Switch `PRODUCTION_WIDE_GROUPS`; `{ wide: false }`
+ * is the 8-wide plan exactly (CONVENTIONS rule 15).
  */
 export function planSaveYield(args: {
   editing: EnergyYieldRow | null;
@@ -1333,7 +1339,7 @@ export function planSaveYield(args: {
   negativePrices: { on: boolean; rows: readonly NegativePriceRow[]; stored: readonly StoredNegativePrice[] };
   yields: readonly EnergyYieldRow[];
   revenues: readonly RevenueRow[];
-}): WritePlan {
+}, opts: { wide?: boolean } = {}): WritePlan {
   const writes: PlannedWrite[] = [];
   const editing = args.editing;
   const yieldRef = editing ? editing.id : createdRowRef(0);
@@ -1377,8 +1383,17 @@ export function planSaveYield(args: {
     writes.push(upd(ES_PRODUCTION.energyYields, id, { ...YIELD_STATUS.inactive }, "an internal yield superseded by the external one"));
   }
   const [first, ...rest] = writes;
-  return { writes: [first!, ...together(rest)], log: [] };
+  const wide = opts.wide ?? PRODUCTION_WIDE_GROUPS;
+  return { writes: [first!, ...together(rest, wide ? { limit: WIDE_GROUP_CONCURRENCY } : undefined)], log: [] };
 }
+
+/**
+ * Rollout switch (CONVENTIONS rule 15): the Save's write group is sent `WIDE_GROUP_CONCURRENCY` (16) at a time. `false` is the
+ * 8-wide plan exactly. Treat it like `PRODUCTION_GENERATION_WAVES`: a live product decision, not dead code. DIVERGENCE: the
+ * canvas wrote these rows one by one; more of them are in flight at once, so a throttled request (HTTP 429, never seen on
+ * Production, not yet looked for on DEV at 16) can end a Save part-way, as a failure inside an 8-wide group already could.
+ */
+export const PRODUCTION_WIDE_GROUPS = true;
 
 /** The revenue sync writes, sent together after the yield write they follow from (D108). */
 const revenueSyncWrites = (changes: readonly { id: string; considerNegativePrices: boolean }[]): PlannedWrite[] =>

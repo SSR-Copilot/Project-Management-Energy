@@ -8217,3 +8217,41 @@ Each merged step removes one request round trip from the critical path. The roll
 | Replace Generator Type | 5.89 s | 4.30 s (-27%) | 12 -> 8-9 | 31 -> 30 (the unused read) |
 | Replace PV | 4.67 s | 3.78 s (-19%, noisy: 3.0-4.5 s) | 12 -> 6-8 | 15 -> 14 (the unused read) |
 After a save the background reload dropped from 12 requests / 2.6 s to 7 requests / 1.3 s (Add PV), because the reference-data reads no longer fire. The request counts match the plans: the same writes in fewer sequential steps; the data-integrity evidence is the golden-master tests (UT-GENLAT-*), not these runs. The 5x target was NOT reached and cannot be with grouping alone: a save of 4-5 requests is bounded by its forced chain. What is left: Add WTG Type is dominated by its 45 requests (20 turbine creates 8 at a time, then a final group of 23), and Replace still has 8-9 steps (two read waves, the leaf deletes, the type delete, the create chain, the allocation delete). The remaining levers are bulk writes for turbines and allocations (needs the DEV probe of D115) and a Replace create lane beside the delete lane (not built: data-loss risk), or a single server-side call per save.
+
+## D145 — Production: the Save's write group goes out 16 wide (20 Nov 2026; number PROVISIONAL, may be renumbered at merge)
+
+**Status:** implemented in the worktree `production-screen-performance-optimization` (branch `sub/production-screen-performance-optimization`, base `f76dd6e`); NOT product-approved; not run on DEV; not seen in a browser; **nothing was timed against Dataverse**. Switch `PRODUCTION_WIDE_GROUPS` in `rules.ts` (ON). `planSaveYield(args, { wide: false })` is the 8-wide plan exactly (CONVENTIONS rule 15).
+
+**Request:** "Edit Project → Production: advanced performance optimization, minimum 5x target" (autonomous, six read-only analyses: frontend, Dataverse network, business logic, benchmarking, testing, architecture).
+
+**Finding 1 — the premise was partly wrong.** Production does not use bulk Dataverse actions. Its tables (`vsb_energyyields`, `vsb_pvnegativepriceses`, `vsb_pvseasonalityvalueses`, `vsb_projectrevenues`) are not registered for `createMany` / `updateMany`, and a bulk step cannot sit inside a `together()` group. D135 already weighed bulk for this screen and left it out; the cost model of `bulkSend.ts` (about 0.5 s plus 27 ms per row) agrees: a 15 to 30 row curve is a tie at best against 8 to 16 parallel single writes.
+
+**Finding 2 — where the time goes (CONFIRMED from source and from `UT-PRODBASE-*`; counts of awaited round trips, not milliseconds).** Frontend compute is negligible (plan building is a few hundred operations, microseconds). The save is a chain of awaited server round trips. New WTG, 15-year curve, seasonality, two revenue syncs: pre-read 1, the yield write alone 1, the group of 18 writes at 8 in flight 3, the roll-up read 1, the roll-up write 1 = **7**, then a background reload. Edit with a description change only, delete, status change, seasonality-only: **5**. A 28-year curve: **8**.
+
+**Finding 3 — a 5x gain over this code is not available safely.** 5x of 7 round trips is about 1.4; the floor is 2 (the pre-read and the yield write alone). Both protect a standing property: a refused yield sends nothing else (D108), and the plan is built from fresh rows (R-12). Ideas considered and cut, with the reason:
+- Roll-up computed from memory in the children's wave: `savedRow` carries stale numerics, the roll-up column precision is unknown, and D135 rejected it. It would need a `…CanvasParity` twin and a rounding test first.
+- Deep insert of a new yield with its children in one POST (D76): never run live; the host may drop nested arrays.
+- Skipping the fresh reads, or reusing cached stored rows: reintroduces duplicate negative-price creates and upsert resurrection of a deleted seasonality row.
+- Background roll-up, optimistic UI: the last-yield delete guard reads the STORED p50, and the roll-up result decides whether the one-shot generation is due.
+- Client-generated yield id so the children join the yield's wave: breaks "a refused yield sends nothing else".
+- Widening the one-shot generation's groups to 16: once per project, and a throttled create there leaves a family half-built that the existing-contracts check then never completes. Not worth the gain.
+- Skipping job 1's reload when a generation follows: it would leave `refreshing` false for the gap between the two jobs.
+
+**Changed (the one safe lever):** `planSaveYield` sends its group (seasonality, negative prices, revenue syncs, superseded Internals) with `together(rest, { limit: WIDE_GROUP_CONCURRENCY })` (16, as the Generators saves since D144) instead of 8. The yield still goes first and alone. Same writes, same order, same binds, same owning business unit, zero / null / negative values untouched.
+
+**Modelled result (`UT-PRODSAVE-010`, the REAL `executePlan` against a fake-timer client with a fixed latency per request; MODELLED, not Dataverse time):**
+
+| Save (requests) | Write rounds before → after | Whole critical path before → after (write rounds modelled; pre-read and roll-up rounds counted from `hooks.ts`) | Ratio |
+|---|---|---|---|
+| New WTG, 15-year curve + seasonality + 2 syncs (19) | 4 → 3 | 7 → 6 | 1.17x |
+| New WTG, 28-year curve + seasonality + 2 syncs (32) | 5 → 3 | 8 → 6 | 1.33x |
+| Edit (description only), delete, status change, seasonality-only | unchanged | 5 → 5 (4 → 4 for a delete or status change with no revenue sync) | 1.00x |
+
+Peak in flight 8 → 16 (the user-wide cap is 52). **The 5x target is NOT ACHIEVED, and the real-world gain is NOT VERIFIABLE from here:** no DEV access, no timing, and if the host serialises parallel calls the change gains nothing.
+
+**Divergence (proposed, not approved):** the canvas wrote these rows one by one (inside `Concurrent`); 16 are now in flight at once. A throttled request (HTTP 429; there is no write retry on this path) can end a Save part-way, as a failure inside an 8-wide group already could. The Save stays non-transactional.
+
+**Tests:** `UT-PRODSAVE-001…005, 010, 011` in `saveWidth.test.ts` (switch on; group 16 wide, yield first and alone; same rows and binds as the 8-wide plan for eleven scenarios covering add, edit, delete of seasonality, negative prices off, zero / null / negative reductions and an External superseding two Internals; the round counts; the real engine sends the same bodies with every ref resolved, at most 16 in flight; a refused child lets the rest of the group finish and reports true counts). EXISTING TEST CHANGED: the `saveNew` helper of `productionPlans.baseline.test.ts` now passes `{ wide: false }` so its golden snapshot stays the 8-wide plan it was taken from (the snapshot file itself is unchanged).
+
+**Needs a live check (DEV):** time the same Save before and after with `[VSB] ACTION` / `DATA` lines; confirm no HTTP 429 at 16 in flight on `vsb_pvnegativepriceses`; confirm the host really runs the 16 in parallel.
+**Remaining levers, each needing a decision:** the roll-up from memory with a `…CanvasParity` twin and a column-precision test (about 1 round trip); the roll-up's yield read started beside the group when no Internal is superseded (about 1, needs a shared `usePlanWrite` change); the yield update of an EDIT inside the group (about 1, reverses D108's "yield first, alone").

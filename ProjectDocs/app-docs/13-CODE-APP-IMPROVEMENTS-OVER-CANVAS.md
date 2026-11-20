@@ -468,6 +468,13 @@ Branch `feature/azure-maps-integration`; details in `18-AZURE-MAPS-IN-THE-CODE-A
 | Production | A write no longer reloads the session project query: its select list has no yield column and this screen writes only yield columns and the four flags, so it can never change. About six requests and one round trip less in the window where the command bar is off. Milestones and General Data are still marked stale | fixed |
 | Production | Tests: UT-PRODPLAN-001…009 (rows identical to the sequential plan for 400 random assumption sets, runs never hold a parent and its child, the real engine sends the same bodies and ids, a refused create stops the plan), UT-PRODHOOK-005, UT-PRODBASE-* (the baseline and the golden master taken before the change) | new (tests) |
 
+## Production: the Save's write group goes out 16 wide (20 Nov 2026, D145, number provisional) — proposed (not approved, not run on DEV)
+
+| Screen | Change | Status |
+|---|---|---|
+| Production | The Save sends its group (seasonality, negative prices, revenue syncs, superseded Internals) 16 at a time instead of 8, as the Generators saves do since D144. The yield still goes first alone. Same writes, same order, same binds. The write rounds are modelled with the real engine and a fixed latency per request (UT-PRODSAVE-010); the pre-read and the roll-up's two rounds are counted from `hooks.ts`, not modelled: a 15-year curve save is 3 write rounds instead of 4 (critical path 7 to 6), a 28-year curve 3 instead of 5 (8 to 6); an edit of the description only, a delete and a status change are unchanged (5; 4 for a delete or status change with no revenue sync). **No real timing exists; the 5x target was NOT achieved** (D145 gives the arithmetic, the cut ideas and the remaining levers) | proposed (DIVERGENCE: the canvas wrote the rows one by one; more are in flight at once, and a throttled request ends a Save part-way as before). Switch `PRODUCTION_WIDE_GROUPS` (`rules.ts`), `{ wide: false }` is the old plan |
+| Production | Tests: UT-PRODSAVE-001…005, 010, 011 (rows and binds identical to the 8-wide plan for eleven scenarios, zero / null / negative reductions kept, the real engine sends the same bodies with at most 16 in flight, a refused child reports true counts). The `saveNew` helper of UT-PRODBASE passes `{ wide: false }` so its golden snapshot stays the 8-wide plan | new (tests) |
+
 ## Cost: German number audit, the panel boxes open in the user's language (6 Nov 2026, `pm-validation` 4b832e0) — fixed
 
 | Screen | Change | Status |
