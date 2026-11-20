@@ -8539,7 +8539,7 @@ These were **not** treated as defects, so they follow the canvas:
    - Contracts: the Add button is focusable at its limit.
    - Gates: the extra Save checks; the optimistic toggles; inactive tasks are hidden.
 
-**Verification:** each screen's folder tests passed, as did the shared component tests and the control-label, chevron and canvas-identity gates: 30 files, 854 tests. `npm run verify` is listed in the session report. **Not run:** the E2E parity suite (skipped by the user, 21 Nov 2026), DEV and a browser check (icon colours, panel spacing, native drag in the host iframe, Firefox).
+**Verification (21 Nov 2026, merge commit 4f7791b):** `npm run verify`: `check:power` 96 registered, typecheck, lint, control-label (0 missing) and canvas-identity (C1-C5 all 0) gates passed; tests 6,961 passed, 15 skipped, 3 todo, 2 failed (UT-GEN-930, UT-GEN-931 in Generators, untouched by this branch; they fail only under full-suite load and passed alone, 32 of 32, as recorded for D148); build passed. **Not run:** the E2E parity suite (skipped by the user, 21 Nov 2026), DEV and a browser check (icon colours, panel spacing, native drag in the host iframe, Firefox).
 
 ## D154 — Check List Settings: the country / technology tabs sort A → Z by name (21 Nov 2026; number PROVISIONAL, may be renumbered at merge)
 
