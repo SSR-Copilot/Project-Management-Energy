@@ -17,6 +17,7 @@ import type { PlanJob } from "@/data/usePlanWrite";
 import type { WritePlan } from "@/data/writePlan";
 import {
   DEFAULT_DECOMMISSIONING_FLAGS, DEFAULT_DSRA_FLAGS, DEFAULT_VAT_FLAGS, FINANCE_SCREEN_TEXT, FIN_LABEL, INPUT_COL, MSG, SPINNER,
+  financialCloseBoxText,
   type FinanceProject, type FinancingCategory, type FinancingInputRow,
 } from "./rules";
 
@@ -508,6 +509,28 @@ describe("UT-FIN Screen (connected)", () => {
     expect((screen.getByTestId("ico_DecommissioningData_Cost_of_Decommisioning_Reset_to_Standard") as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByTestId("ico_DecommissioningData_Date_of_Issue_Reset_to_Standard_1"));
     await waitFor(() => expect(screen.queryByText(MSG.dateOfIssueBeforeCluster4)).toBeNull());
+  });
+
+  it("UT-FIN-927 Financial Close shows no weekday on the tranche card or in Edit Tranche (bug 15290, D144)", async () => {
+    const WEEKDAY = /Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b/;
+    // 1 September 2033 is a Thursday: the canvas card reads "Thursday, 1 September 2033" in en-GB.
+    state.inputs = inputs.map((i) => (i.id === "t1" || i.id === "t2")
+      ? input(i.id, 3, { ...i.raw, [INPUT_COL.financialClose]: "2033-09-01" })
+      : i);
+    renderScreen();
+    unfold("c3");
+    // Unfolding the category folds every tranche (`toggleCategoryFold`); open t1 again.
+    fireEvent.click(within(card("c3")).getAllByTestId("ico_FinancingInputs_DisplayProject_Body_Form_SeniorDebt_Down")[0]!);
+    // t1's card shows the long date without the weekday (the session language is en-GB).
+    const cardText = (screen.getByTestId("txt_SeniorDebt_Data_Display_Card_FinancialClose") as HTMLInputElement).value;
+    expect(cardText).toBe("1 September 2033");
+    // Edit t2 (Term Sheet): the date box shows the short date without the weekday.
+    fireEvent.click(within(card("c3")).getAllByTestId("btn_FinancingInput_DisplayProject_Body_Form_SeniorDebt_CardHeader_RowTransparent")[1]!);
+    fireEvent.click(await screen.findByRole("button", { name: "Edit Tranche" }));
+    const box = (await screen.findByTestId("dte_SeniorDebt_Data_Financial_Close")) as HTMLInputElement;
+    expect(box.value).toBe(financialCloseBoxText(d("2033-09-01"), "en-GB"));
+    expect(box.value).toContain("2033");
+    expect(box.value).not.toMatch(WEEKDAY);
   });
 
   it("UT-FIN-909 the DSRA/DSRF toggle runs with the canvas spinner", async () => {

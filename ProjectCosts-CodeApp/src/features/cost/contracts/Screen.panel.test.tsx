@@ -257,5 +257,18 @@ describe("DevCo leaf rows as the canvas draws them (D124)", () => {
   });
 });
 
+describe("Add / Edit Contract panel width (responsiveness, 20 Nov 2026)", () => {
+  it("UT-CONPANEL-013 the Development / Construction panel is the canvas Min(960, Parent.Width), not half the window", async () => {
+    await openNewDevelopmentContract();
+    const drawer = document.querySelector(".contract-canvas-panel:not(.contract-rights-panel):not(.contract-target-panel)");
+    // `"full"` = `min(960px, 100vw)` (formPanelWidth, FormPanel.test). It was `"wide"`, `min(960px, 50vw)`, so on a
+    // window under 1920 px the panel was half the window and its two columns stacked below 800 px of panel.
+    expect(drawer).toHaveClass("canvas-panel-full");
+    expect(drawer).not.toHaveClass("canvas-panel-wide");
+    // Both columns are still there, side by side by default (`.canvas-panel-columns`).
+    expect(drawer?.querySelectorAll(".canvas-panel-columns > .canvas-panel-column")).toHaveLength(2);
+  });
+});
+
 // Keeps `CONTRACT` referenced for readers: the mocked `useContracts` returns the same shape.
 void CONTRACT;

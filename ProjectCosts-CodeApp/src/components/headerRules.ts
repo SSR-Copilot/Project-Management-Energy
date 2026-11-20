@@ -8,7 +8,13 @@ import { palette } from "@/theme/tokens";
 
 /*
  * The (i) environment marker. It has no OnSelect and no Tooltip in either canvas app; it only
- * colours the environment. Each `cmp_Header` has two copies:
+ * colours the environment.
+ *
+ * DIVERGENCE (D145, bug 15341, 20 Nov 2026): the code app draws NO (i) marker on any header. It does
+ * nothing when clicked, and the band colour and the environment name already show the environment. The
+ * canvas colour switches are kept below as `…CanvasParity` twins, so the decision stays reversible.
+ *
+ * What the canvas does. Each `cmp_Header` has two copies:
  *
  *                          brand, under "Cloud"          environment block, before Help
  *                          `ico_cmp_Header_Info`         `ico_cmp_Header_Info_4` (`_3` in Project Main Screen's copy)
@@ -33,8 +39,9 @@ import { palette } from "@/theme/tokens";
  * The Cost `cmp_Header`'s `ico_cmp_Header_Info.Color` (projectcosts `cmp_Header.pa.yaml:213`):
  * `Switch(gblEnvironmentName, "Dev", gblAppStyles.Error, "Nightly", gblAppStyles.Warning,
  * "QA", gblAppStyles.Success, Color.Transparent)`. It has no Hotfix case, so Hotfix shows no icon.
+ * Canvas twin only: the code app does not draw the icon (D145).
  */
-export function brandInfoColor(environmentName: string | undefined): string | undefined {
+export function brandInfoColorCanvasParity(environmentName: string | undefined): string | undefined {
   switch (environmentName) {
     case "Dev": return palette.akzent5;
     case "Nightly": return palette.Warning;
@@ -47,8 +54,9 @@ export function brandInfoColor(environmentName: string | undefined): string | un
  * The PM `cmp_Header`'s `ico_cmp_Header_Info_4.Color` (projectmanagement `cmp_Header.pa.yaml:639`):
  * `Switch(gblEnvironmentName, "Dev", gblAppColors.Error, "Nightly", gblAppColors.Warning,
  * "QA", gblAppColors.Success, "Hotfix", gblAppColors.Error, gblAppColors.Transparent)`.
+ * Canvas twin only: the code app does not draw the icon (D145).
  */
-export function environmentInfoColor(environmentName: string | undefined): string | undefined {
+export function environmentInfoColorCanvasParity(environmentName: string | undefined): string | undefined {
   switch (environmentName) {
     case "Dev": case "Hotfix": return palette.akzent5;
     case "Nightly": return palette.Warning;

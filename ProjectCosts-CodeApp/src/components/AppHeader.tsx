@@ -11,7 +11,9 @@
  *   `con_cmp_Header_Version.Text` = "Version " & gblAppVersion &
  *                                   If(gblEnvironmentName = "Dev", " (" & name & ")", "")
  *   `con_cmp_Header_Title_4.Text` = Switch(gblEnvironmentName, "Hotfix"…, "QA" → "Quality Assurance"),
- *                                   with its version and (i) in a block before Help (not a badge)
+ *                                   with its version in a block before Help (not a badge)
+ *   The canvas (i) environment marker (`ico_cmp_Header_Info`, `ico_cmp_Header_Info_4`) is not drawn:
+ *                                   it has no OnSelect and no Tooltip (DIVERGENCE, D145, bug 15341)
  *   `con_cmp_Header.Fill`         = the per-environment band colour (`environmentHeaderFill`)
  *   `lbl_cmp_In_Header_UserName`  = "Hi " & User().FullName
  *   Help menu (`pcf_HeaderContainerReportError_CommandBar_1.Items`):
@@ -30,7 +32,7 @@ import type { Ref } from "react";
 import { layout, media, palette, space } from "@/theme/tokens";
 import { VsbLogo } from "./VsbLogo";
 import {
-  brandInfoColor, brandVersionVisible, environmentHeaderFill, environmentInfoColor, environmentVersionVisible,
+  brandVersionVisible, environmentHeaderFill, environmentVersionVisible,
   projectStatusColour, projectStatusIcon, projectStatusLabel, projectStatusVisible,
 } from "./headerRules";
 
@@ -47,8 +49,8 @@ const useStyles = makeStyles({
   brand: { display: "flex", alignItems: "center", gap: space.s, flexShrink: 0 },
   /*
    * `con_cmp_Header_Logo_Title`: a full-height ManualLayout that stretches to the 70 px brand.
-   * The PM header keeps "Cloud" and the version as a centred column. The Cost header places them,
-   * and its (i) icon, with the `cost*` and `brandIcon` styles below.
+   * The PM header keeps "Cloud" and the version as a centred column. The Cost header places them
+   * with the `cost*` styles below.
    */
   brandText: {
     position: "relative", alignSelf: "stretch",
@@ -62,20 +64,11 @@ const useStyles = makeStyles({
    * screenshot (Dev, 19 Nov 2026): logo-relative, "Cloud" is 8 px lower and the version 7 px lower
    * than the old centred column. The PM `cmp_Header` uses other numbers (a 70 px band, and its
    * version at `ico_cmp_Header_Info.Y+1`), so the PM header keeps the centred column.
+   * The icon itself is not drawn (D145); the version keeps the place the canvas gives it.
    */
   costBrandText: { flexGrow: 1, minWidth: 0 },
   costTitle: { position: "absolute", left: 0, top: "22px", whiteSpace: "nowrap" },
   costVersionLine: { position: "absolute", left: 0, top: "50px", whiteSpace: "nowrap" },
-  /*
-   * The Cost `ico_cmp_Header_Info`: `Icon.Information`, 14 x 14, `X: =5`,
-   * `Y: =Parent.Height-Self.Height-6`. The canvas glyph's circle is 12 px. Fluent's `InfoRegular`
-   * circle is 0.8 em, so the icon is 15 px. Its centre is 0.5 px right of where "Cloud" starts,
-   * and level with the version's middle (the same screenshot).
-   */
-  brandIcon: {
-    position: "absolute", left: "-7px", bottom: "3.5px",
-    width: "15px", height: "15px", fontSize: "15px",
-  },
   /** The logo as a click target: no padding or minimum width, so the logo keeps its place. */
   logoButton: {
     minWidth: 0, paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
@@ -85,7 +78,7 @@ const useStyles = makeStyles({
   // class names, so the canvas.css rule never reached it; the look lives here.
   title: { fontWeight: tokens.fontWeightSemibold, fontSize: "24px", lineHeight: "1.2", color: palette.themePrimary },
   version: { color: tokens.colorNeutralForeground3, fontSize: tokens.fontSizeBase100 },
-  /** The version under "Cloud". The (i) icon is not inline here; it is placed by `brandIcon`. */
+  /** The version under "Cloud". */
   versionLine: { display: "inline-flex", alignItems: "center", gap: space.xs },
   /**
    * Where the screen's command bar lands. Takes the slack so Help stays right-aligned.
@@ -100,23 +93,16 @@ const useStyles = makeStyles({
   /*
    * `con_cmp_Header_Logo_Title_4` — the environment block first in `con_cmp_Header_Service_ReportError`,
    * before the error icon and Help: a 200-wide, full-height ManualLayout holding
-   *  - `ico_cmp_Header_Info_4`: `Icon.Information`, 16 x 16 at X 5, `Y: =Parent.Height - Self.Height - 6`.
-   *    Drawn on PM and admin screens only (see `headerRules`);
+   *  - `ico_cmp_Header_Info_4`: the (i) environment marker, 16 x 16 at X 5. Not drawn (D145);
    *  - `con_cmp_Header_Title_4`: right-aligned Semibold 12 pt black, `PaddingLeft 10`, half the band high
    *    and centred on it;
    *  - `con_cmp_Header_Version_4`: right-aligned, `Lighter` ExtraExtraSmall (the brand version's look) at
-   *    X 7, 12 high, level with the icon.
+   *    X 7, 12 high, near the block's foot.
    */
   envBlock: {
     position: "relative", alignSelf: "stretch", width: "200px", minWidth: 0, flexShrink: 1,
     [media.belowMd]: { width: "140px" },
   },
-  /*
-   * `ico_cmp_Header_Info_4`. The canvas glyph's circle fills its 16 x 16 box (a PM canvas screenshot,
-   * Edit Project, Dev, 19 Nov 2026). Fluent's `InfoRegular` circle is 0.8 em, inset 0.1 em, so a
-   * 20 px icon at left 3 / bottom 4 puts a 16 px circle at X 5, 6 px above the block's foot.
-   */
-  envIcon: { position: "absolute", left: "3px", bottom: "4px", width: "20px", height: "20px", fontSize: "20px" },
   envTitle: {
     position: "absolute", left: 0, right: 0, top: "25%", height: "50%",
     display: "flex", alignItems: "center", justifyContent: "flex-end",
@@ -321,17 +307,15 @@ export function AppHeader({
   const styles = useStyles();
   const badge = environmentBadge(environmentName);
   /*
-   * Which (i) icon shows, as in the canvas screenshots (see `headerRules`):
-   *  - Cost screens (they pass `onLogoClick`, D90): the one under "Cloud" (`ico_cmp_Header_Info`);
-   *  - PM project and admin screens (they pass `onBack`; the `cmp_Header` component): the one
-   *    before Help (`ico_cmp_Header_Info_4`);
-   *  - the project list (neither handler; Project Main Screen's own header copy): none.
-   * The Cost header also has its own brand layout.
+   * DIVERGENCE (D145, bug 15341): no (i) environment marker on any header. The canvas draws one under
+   * "Cloud" on Cost screens (`ico_cmp_Header_Info`) and one before Help on PM and admin screens
+   * (`ico_cmp_Header_Info_4`), coloured per environment. It has no OnSelect and no Tooltip, so it does
+   * nothing when clicked; the band colour and the environment name already show the environment. The
+   * canvas colours are kept in `headerRules` as `brandInfoColorCanvasParity` / `environmentInfoColorCanvasParity`.
+   *
+   * Cost screens (they pass `onLogoClick`, D90) keep their own brand layout.
    */
   const costHeader = !onBack && onLogoClick !== undefined;
-  // Undefined (canvas `Transparent`) means no icon: Prod, an unknown environment, and Hotfix on Cost.
-  const brandIconColor = costHeader ? brandInfoColor(environmentName) : undefined;
-  const envInfoColor = onBack ? environmentInfoColor(environmentName) : undefined;
 
   return (
     <header
@@ -367,14 +351,7 @@ export function AppHeader({
               <Text className={`${styles.version} canvas-brand-version`}>{versionLabel(appVersion, environmentName)}</Text>
             </span>
           ) : null}
-          {/*
-            `ico_cmp_Header_Info` on Cost screens (projectcosts `cmp_Header.pa.yaml:210-219`).
-            The PM `cmp_Header` sets this copy's `Visible` to `false`. It comes after the version,
-            as in the canvas, so it is drawn on top of it.
-          */}
-          {brandIconColor ? (
-            <InfoRegular className={styles.brandIcon} color={brandIconColor} aria-hidden="true" data-testid="ico_cmp_Header_Info" />
-          ) : null}
+          {/* `ico_cmp_Header_Info` (projectcosts `cmp_Header.pa.yaml:210-219`) is not drawn (D145). */}
         </div>
       </div>
 
@@ -445,9 +422,7 @@ export function AppHeader({
 
       <div className={styles.right}>
         <div className={styles.envBlock} data-testid="con_cmp_Header_Logo_Title_4">
-          {envInfoColor ? (
-            <InfoRegular className={styles.envIcon} color={envInfoColor} aria-hidden="true" data-testid="ico_cmp_Header_Info_4" />
-          ) : null}
+          {/* `ico_cmp_Header_Info_4` (projectmanagement `cmp_Header.pa.yaml:639`) is not drawn (D145). */}
           {badge ? <Text className={styles.envTitle} data-testid="con_cmp_Header_Title_4">{badge}</Text> : null}
           {environmentVersionVisible(environmentName) ? (
             <Text className={mergeClasses(styles.version, styles.envVersion)} data-testid="con_cmp_Header_Version_4">

@@ -60,7 +60,7 @@ import {
   currencySuffix, decommissioningDurationLabel, decommissioningSaveJob, defaultEndOfDebtServiceSavings,
   dsraCardToggle, dsraPeriodLabel, dsraSaveJob, dsraToggleDialog, dsraToggleJob, durationOptionName,
   durationRange, endDateOfSaving, equitySaveJob, firstStepUpRow, vatBankMarginResetText, fmtAmount as fmtAmountIn, fmtCard as fmtCardIn, fmtDateDots,
-  fmtLongDate, formatDscr as formatDscrIn, formatUpfrontFee as formatUpfrontFeeIn, financingOptionJob, freeEquityLabel, isOtherBank,
+  financialCloseBoxText, financialCloseCardText, formatDscr as formatDscrIn, formatUpfrontFee as formatUpfrontFeeIn, financingOptionJob, freeEquityLabel, isOtherBank,
   equityCardMode, financingOptionShown, vatBankMarginText, formChanged,
   isPageLocked, isTrancheFolded, mmyyLabel, openDecommissioningForm, openDsraForm, openEquityForm,
   openTrancheForm, openVatForm, pageLock, planCategoryToggle, planDecommissioningSave, planDsraSave,
@@ -582,24 +582,28 @@ function YearMonth({ caption, testIdYears, testIdMonths, maxYears, yy, mm, onCha
 /**
  * The canvas `DatePicker@0.0.46` — the shared `DateField` (modern controls sweep, 20 Oct 2026)
  * with the control's own `Format`: `"dd.mm.yyyy"` on the three Decommissioning dates, the
- * default LongAbbreviated on Financial Close and End of debt service savings. All set
- * `IsEditable: true` and `StartOfWeek` Monday.
+ * default LongAbbreviated on End of debt service savings (and on Financial Close in the canvas; this app
+ * drops its weekday, D144). All set `IsEditable: true` and `StartOfWeek` Monday.
  */
-function DateBox({ caption, testId, value, onChange, disabled, required, error, standard, format = DATE_PICKER_FORMAT }: {
+function DateBox({ caption, testId, value, onChange, disabled, required, error, standard, format = DATE_PICKER_FORMAT, formatDate }: {
   caption: string; testId: string; value: Date | null; onChange: (v: Date | null) => void;
   disabled: boolean; required?: boolean; error?: string;
   /** The canvas standard-assumption pair on the date (rule 20). */
   standard?: boolean;
   /** The control's canvas `Format`. */
   format?: CanvasDateFormat;
+  /** A pure formatter from `rules.ts` that replaces `format` (Financial Close, D144). Pass a module-level function. */
+  formatDate?: (date: Date | null | undefined, locale: string) => string;
 }) {
   const { locale } = useSession();
+  // Stable per locale: the picker re-formats its text whenever this function changes (see `DateInput`).
+  const text = useMemo(() => (formatDate ? (d: Date | null | undefined) => formatDate(d, locale) : undefined), [formatDate, locale]);
   return (
     <DateField
       label={caption} required={required} error={error}
       // the canvas AccessibleLabel is the control name
       name={testId}
-      format={format} locale={locale}
+      format={format} formatDate={text} locale={locale}
       value={value} disabled={disabled} standard={standard}
       onChange={(v) => onChange(dateFromIso(v))}
     />
@@ -1068,7 +1072,7 @@ export default function ProjectFinanceScreen() {
               {field(TRANCHE_FORM_LABEL.kfwTranche, str(r[INPUT_COL.kfwTrancheValue]) ?? "", "txt_SeniorDebt_Data_Display_Card_Status_1")}
               {field(FIN_LABEL.gearing, label(CHOICE_LABEL.gearing, num(r[INPUT_COL.gearing])), "txt_SeniorDebt_Data_Display_Card_Gearing")}
               {field(FIN_LABEL.amount, fmtCard(num(r[INPUT_COL.fixedAmountValue]) ?? 0, CARD_FORMAT.amount), "txt_SeniorDebt_Data_Display_Card_Amount")}
-              {field(TRANCHE_FORM_LABEL.financialClose, fmtLongDate(day(r[INPUT_COL.financialClose]), lang), "txt_SeniorDebt_Data_Display_Card_FinancialClose", trancheFinancialCloseIsStandard(i))}
+              {field(TRANCHE_FORM_LABEL.financialClose, financialCloseCardText(day(r[INPUT_COL.financialClose]), lang), "txt_SeniorDebt_Data_Display_Card_FinancialClose", trancheFinancialCloseIsStandard(i))}
               {field(FIN_LABEL.startRepayment, yearMonthLabel(num(r[INPUT_COL.startRepaymentYear]), num(r[INPUT_COL.startRepaymentMonth])), "txt_SeniorDebt_Data_Display_Card_StartRepayment")}
               {field(FIN_LABEL.tenor, yearMonthLabel(num(r[INPUT_COL.tenorDurationYear]), num(r[INPUT_COL.tenorDurationMonth])), "txt_SeniorDebt_Data_Display_Card_Tenor")}
               {field(FIN_LABEL.repaymentProfile, label(CHOICE_LABEL.repaymentProfile, num(r[INPUT_COL.repaymentProfile])), "txt_SeniorDebt_Data_Display_Card_Status_2")}
@@ -1482,6 +1486,7 @@ export default function ProjectFinanceScreen() {
               <div className={s.trancheDateRow}>
                 <DateBox
                   caption={TRANCHE_FORM_LABEL.financialClose} testId="dte_SeniorDebt_Data_Financial_Close" required
+                  formatDate={financialCloseBoxText}
                   value={form.financialClose} disabled={tDisabled} standard={form.financialCloseStandard === true}
                   onChange={(v) => patchTranche({ financialClose: v, financialCloseStandard: false })}
                 />

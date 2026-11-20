@@ -62,6 +62,7 @@ import {
   dateOfExpiryMessageCanvasParity, decommissioningDurationLabel, drawdownDefault,
   drawdownDefaultCanvasParity, dsraCommitmentFeeMonthsDefault, dsraDurationMonthsCanvasParity,
   dsraPeriodLabel, dsraToggleSpinner, energyYieldDefault, firstStepUpRow, fmtCard, fmtLongDate,
+  financialCloseBoxText, financialCloseBoxTextCanvasParity, financialCloseCardText, financialCloseCardTextCanvasParity,
   inputStatus, isTrancheFolded, openDecommissioningForm, openDsraForm, openEquityForm,
   openTrancheForm, openVatForm, planCategoryToggle, planDecommissioningSave, planDsraSave,
   planDsraToggle, planEquitySave, planFinancingOption, planFinancingOptionOnVisit, planTrancheDelete,
@@ -1958,6 +1959,34 @@ describe("D34 — card formats", () => {
     expect(dsraPeriodLabel(2, 0)).toBe("2 Years 0 Month ");
     expect(dsraPeriodLabel(1, 6)).toBe("1 Year 6 Months");
     expect(decommissioningDurationLabel("0015")).toBe("15 Years 0 Months");
+  });
+});
+
+describe("D144 — Financial Close without the weekday (bug 15290)", () => {
+  const WEEKDAY = /Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b/;
+
+  it("UT-FIN-925 the card shows the long date with no weekday; the canvas twin keeps LongDate", () => {
+    const fc = d("2033-09-01"); // a Thursday
+    expect(financialCloseCardText(fc, "en-US")).toBe("September 1, 2033");
+    expect(financialCloseCardText(fc, "en-GB")).toBe("1 September 2033");
+    expect(financialCloseCardText(fc, "en-GB")).not.toMatch(WEEKDAY);
+    expect(financialCloseCardText(null)).toBe("");
+    expect(financialCloseCardText(new Date(Number.NaN))).toBe("");
+    // The canvas: `Text(ThisItem.'Financial Close', DateTimeFormat.LongDate)`, the reported "Thursday, September 1, 2033".
+    expect(financialCloseCardTextCanvasParity(fc, "en-US")).toBe("Thursday, September 1, 2033");
+    expect(financialCloseCardTextCanvasParity(fc, "en-US")).toBe(fmtLongDate(fc, "en-US"));
+    expect(financialCloseCardTextCanvasParity(null)).toBe("");
+  });
+
+  it("UT-FIN-926 the Add / Edit Tranche box shows the short date with no weekday; the canvas twin keeps LongAbbreviated", () => {
+    const fc = d("2033-09-01");
+    expect(financialCloseBoxText(fc, "en-US")).toBe("Sep 1, 2033");
+    expect(financialCloseBoxText(fc, "en-GB")).not.toMatch(WEEKDAY);
+    expect(financialCloseBoxText(undefined)).toBe("");
+    expect(financialCloseBoxText(new Date(Number.NaN))).toBe("");
+    // The canvas `DatePicker@0.0.46` with no `Format`.
+    expect(financialCloseBoxTextCanvasParity(fc, "en-US")).toBe("Thu, Sep 1, 2033");
+    expect(financialCloseBoxTextCanvasParity(null)).toBe("");
   });
 });
 

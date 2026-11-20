@@ -8136,3 +8136,53 @@ Cells in the page: 26,586 before, 748 after. Dev server: 27 ms median.
 **6. Verification:** see the report of the phase (worktree `generators-perf`, 19 Nov 2026). NOT run: the full suite (the lead runs it), the E2E parity suite, any DEV run, any browser check, a visual comparison of the cards and panels against the previous build.
 
 **Needs a live check on DEV before approval:** (a) open every panel once on a project with a slow network (throttle the chunk): the overlay shows and the panel then opens as before; (b) a project with 20 or more turbines on one type: scroll the list, tab through the Edit / Delete buttons, use the pager (no jump of the scrollbar, focus visible); (c) with `optimisticToggle` set to `true` in a local build: Deactivate and Activate a type (the chip and the command caption change at once, the reload confirms them), and make the save fail (a user without the right, or a type deleted by another user) to see the rollback and the unchanged error text; (d) the cards, the Replace panels and the three confirmations look as before.
+
+## D144 — Finance: Financial Close without the weekday (bug 15290, 20 Nov 2026; number PROVISIONAL, may be renumbered at merge)
+
+**Status:** working tree of `responsive`, **uncommitted, NOT product-approved, not run on DEV, not seen in a browser**. Type: BUG 15290 (QA, Severity 3): "Formatting issue on Financing -> Senior Debt -> Standard Assumptions -> General -> Financial close. I think day of the week doesn't matter at all here." The user asked for the weekday to be removed (20 Nov 2026).
+
+### 1. Canvas (CHECKED in `Project Finance Screen.pa.yaml`)
+
+- Card `txt_SeniorDebt_Data_Display_Card_FinancialClose` (Y:3816): `Value: =Text(ThisItem.'Financial Close', DateTimeFormat.LongDate)` — "Thursday, September 1, 2033".
+- Add / Edit Tranche `dte_SeniorDebt_Data_Financial_Close` (Y:9654): `DatePicker@0.0.46` with no `Format`, so LongAbbreviated — "Thu, Sep 1, 2033".
+
+The code app reproduced both (`fmtLongDate` on the card, `DATE_PICKER_FORMAT` in the box).
+
+### 2. What changed (DIVERGENCE)
+
+| # | Canvas | This app |
+|---|---|---|
+| 1 | Card: "Thursday, September 1, 2033" | "September 1, 2033" (en-US), "1 September 2033" (en-GB): `financialCloseCardText` (`features/pm/finance/rules.ts`). Twin `financialCloseCardTextCanvasParity` (= `fmtLongDate`) |
+| 2 | Panel box: "Thu, Sep 1, 2033" | "Sep 1, 2033" (en-US): `financialCloseBoxText`, handed to the shared `DateField` through the new `formatDate` prop of the screen's `DateBox` (a module-level function, so the picker's text is not re-formatted while typing). Twin `financialCloseBoxTextCanvasParity`. Typing a date is unchanged (`parseCanvasDate`) |
+
+Both texts follow the user's language through the cached `dateFormat` (`domain/locale.ts`).
+
+### 3. Not changed
+
+- End of debt service savings and every other LongAbbreviated date box keep the weekday, as the canvas; the three Decommissioning dates stay `dd.mm.yyyy`. Say if the weekday should go there too.
+- `fmtLongDate` stays: the card twin uses it.
+
+**Tests:** UT-FIN-925 (card text, en-US / en-GB, blank and invalid dates, and the twin "Thursday, September 1, 2033"), UT-FIN-926 (box text and the twin "Thu, Sep 1, 2033"), UT-FIN-927 (screen, session language en-GB: the tranche card reads "1 September 2033" and the Edit Tranche box shows no weekday). One existing assertion was kept unchanged: UT-FIN-233 still pins `fmtLongDate` (the twin).
+
+## D145 — Header: the (i) environment icon removed (bug 15341, 20 Nov 2026; number PROVISIONAL, may be renumbered at merge)
+
+**Status:** working tree of `responsive`, **uncommitted, NOT product-approved, not run on DEV, not seen in a browser**. Type: follow-up to BUG 15341. Commit 33ca317 (19 Nov 2026) placed and coloured the icon as the canvas does. The user (20 Nov 2026): "completely remove info icon from header as it has no function there".
+
+### 1. Canvas
+
+- Cost `cmp_Header`, `ico_cmp_Header_Info` (projectcosts `cmp_Header.pa.yaml:210-219`): under "Cloud"; `Color: Switch(gblEnvironmentName, "Dev", Error, "Nightly", Warning, "QA", Success, Transparent)`.
+- PM `cmp_Header`, `ico_cmp_Header_Info_4` (projectmanagement `cmp_Header.pa.yaml:639`): before Help; the same switch plus "Hotfix".
+- Neither has an `OnSelect` or a `Tooltip`: clicking does nothing.
+
+### 2. What changed (DIVERGENCE)
+
+`AppHeader` draws neither icon on any header (Cost screens, PM project and admin screens, the project list) in any environment. Removed: the two render blocks and the styles `brandIcon` / `envIcon`. The canvas colour switches stay in `components/headerRules.ts` as the twins `brandInfoColorCanvasParity` and `environmentInfoColorCanvasParity` (were `brandInfoColor` / `environmentInfoColor`); restoring the icon means rendering them again as in 33ca317.
+
+The environment still shows through the band colour (`environmentHeaderFill`), the environment name and version before Help, and the " (Dev)" suffix of the version.
+
+### 3. Not changed
+
+- The project-status glyph (`ico_cmp_Header_ProjectStatus`), the Help menu's "VSB Cloud InfoCenter" item and the user menu's Version row keep their icons: they carry a status or an action.
+- The Cost version line keeps its canvas position (the canvas places it at the icon's X / Y; it does not move now the icon is gone).
+
+**Tests:** UT-HEADER-003 (the twins, the canvas colours unchanged), UT-HEADER-004 (no icon on the three kinds of header in seven environments, and no SVG under "Cloud" or in the environment block), UT-HEADER-004d (the version and the environment name still show). The placement tests of 33ca317 (old UT-HEADER-004, 004d, 004e) were replaced; UT-HEADER-004b only had its comment updated.

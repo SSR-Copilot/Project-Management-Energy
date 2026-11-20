@@ -313,6 +313,10 @@ Found while porting about 6,100 canvas lines against the newer `.pa.yaml`: 13 de
 - **Fixed:** typing in a cell redrew the whole sheet (about 28,000 cells) up to three times per keystroke, and re-read and re-validated the whole sheet each time. Now an edit rebuilds only its own row, the grid is not reloaded when it already shows the typed value, and the read-back and validation wait for a 200 ms pause. Save reads back an edit made within that pause first, so it always saves what the grid shows. In a jsdom benchmark a keystroke went from about 3.5–6.1 s to 1.1–1.8 s. One redraw per keystroke remains, inside `react-spreadsheet` itself.
 - **Fixed (D140):** in a real browser typing still took 0.6–1.9 s per key. Now the grid's cells update only when their own state changes (`src/platform/useContextSelector.ts`), and only the cells in view are drawn, with column widths pinned from every row. Measured on the real screen in Edge (production build): a keystroke 21–28 ms, a click 16–33 ms, scrolling smooth. Selection, keys, copy, paste and Save still work on the whole sheet.
 
+## Add Cost from Table, text colour of the read-only rows (20 Nov 2026) — fixed
+
+- **Fixed:** the header row and the grey account rows (`80000`, `Turbine / PV Supply Agreement`, `*Account*`) were drawn in light grey; the canvas draws them black. `react-spreadsheet` adds `.Spreadsheet__cell--readonly { color: rgba(0, 0, 0, 0.4) }` when the sheet loads, after the app's stylesheet, so at equal specificity it beat the ported `.header` / `.filled-row` black. In the PCF the control's CSS loaded last, so black won there. `MySpreadsheet.css` now sets black on `.Spreadsheet__cell.header` and `.Spreadsheet__cell.filled-row`, which outrank the library's rule whatever the load order. Column letters and row numbers stay grey, as in the canvas. CSS only; no test (jsdom does not apply the cascade), checked against the user's DEV and canvas screenshots, 20 Nov 2026; not yet seen in a browser after the change.
+
 ## One-hour parity harness, any screen (3–4 Nov 2026, D80) — new gate, proposed (not approved)
 
 - **New gate:** `npm run parity` checks one screen across every layer, in both apps, within an hour. The layers are visual,
@@ -798,3 +802,18 @@ Implemented in the worktree `optimize-finance-perf`, uncommitted until approved.
 | Generators | The eight form panels are loaded on first use (`React.lazy`), preloaded when the browser is idle; a named loading overlay shows if one is opened before its chunk has arrived. The Generators `Screen` chunk goes from 86.0 kB to 75.1 kB (gzip 22.6 to 22.1 kB). UT-GENPERF-340..346 | **new** (performance only) |
 | Generators | **DIVERGENCE (timing only):** a panel opened before its chunk has arrived shows a loading overlay for the length of one small download. UT-GENPERF-341, 343 | **proposed (not approved)** |
 | Cross-cutting (tests) | Render-count tests with a render probe (`sections/renderProbe.ts`) for the memoized sections; a hand mutation check (removing `memo`) fails six of the seven tests. UT-GENPERF-330..336 | **new test** |
+
+## Finance: Financial Close without the weekday (20 Nov 2026, D144, number provisional, bug 15290) — fixed (DIVERGENCE, not approved, not run on DEV)
+
+| Screen | Change | Status |
+|---|---|---|
+| Finance, Senior Debt card | Financial Close reads "September 1, 2033" ("1 September 2033" in en-GB) instead of the canvas `DateTimeFormat.LongDate` "Thursday, September 1, 2033": the weekday says nothing about a financial close date. UT-FIN-925, 927 | **fixed** (DIVERGENCE, twin `financialCloseCardTextCanvasParity`) |
+| Finance, Add / Edit Tranche | The Financial Close date box shows "Sep 1, 2033" instead of the canvas LongAbbreviated "Thu, Sep 1, 2033", so the panel matches the card; typing a date is unchanged. UT-FIN-926, 927 | **fixed** (DIVERGENCE, twin `financialCloseBoxTextCanvasParity`) |
+| Finance | End of debt service savings and the other date boxes keep the canvas format (weekday included) | **reproduced**, see D144 §3 |
+
+## Header: the (i) environment icon removed (20 Nov 2026, D145, number provisional, bug 15341) — DIVERGENCE (the user's request, not approved, not run on DEV)
+
+| Screen | Change | Status |
+|---|---|---|
+| Every header (Cost, PM project and admin, project list) | The (i) environment marker is gone in every environment: the canvas draws it under "Cloud" on Cost screens (`ico_cmp_Header_Info`) and before Help on PM screens (`ico_cmp_Header_Info_4`), with no OnSelect and no Tooltip, so it did nothing when clicked. The band colour, the environment name and the version still show the environment. UT-HEADER-004, 004d | **DIVERGENCE** (the user's request), twins `brandInfoColorCanvasParity`, `environmentInfoColorCanvasParity` (UT-HEADER-003) |
+| Header | The project-status glyph, the Help menu's InfoCenter item and the user menu's Version row keep their icons | **reproduced** |

@@ -511,11 +511,16 @@
 }
 
 /*
- * `con_Contracts_RightPanel_NewEdit_DevCoCosts.Width` is
- * `If(Parent.Width >= 800, Parent.Width/2, Parent.Width)` — the split is decided by the
- * PANEL's width, not the window's. A media query cannot see that (the panel is
- * `min(960px, 50vw)`), so the body is a container and the columns stack on its inline size,
- * at the same 800 the canvas uses.
+ * The panel is `min(960px, 100vw)` (`con_Contracts_RightPanel_NewEdit_Body.Width: =Min(960, Parent.Width)`),
+ * and in the canvas its two columns never stack: `_Body_Content` is a horizontal autolayout without
+ * `LayoutWrap`, `_ColumnLeft` is `Max(400, Parent.Width/3)` and `_ColumnRight` has `LayoutMinWidth: =560`
+ * (Contracts Screen:3916-6224). So at 960 the columns sit side by side, as here.
+ *
+ * DIVERGENCE (responsive): only when the panel itself is 800 px or narrower (a window that narrow) do the
+ * columns stack here, where the canvas would push the right column off the panel. 800 is the canvas's
+ * own `con_Contracts_RightPanel_NewEdit_DevCoCosts.Width` threshold
+ * (`If(Parent.Width >= 800, Parent.Width/2, Parent.Width)`), which sizes the DevCo list inside the right
+ * column. The body is a container so the rule follows the PANEL's width, not the window's.
  */
 @container (max-width: 800px) {
   .canvas-panel-columns { grid-template-columns: minmax(0, 1fr); height: auto; }

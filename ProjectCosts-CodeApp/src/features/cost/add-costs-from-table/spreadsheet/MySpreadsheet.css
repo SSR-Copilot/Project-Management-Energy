@@ -17,3 +17,15 @@
   background-color: #ffffff;
   font-weight: 400;
 }
+
+/*
+ * The header row and the grey account rows are read-only, and their text stays black as in the canvas.
+ * react-spreadsheet adds `.Spreadsheet__cell--readonly { color: rgba(0, 0, 0, 0.4) }` to <head> when the
+ * sheet loads, after this file, so at equal specificity its grey beat `.header` / `.filled-row` above. In
+ * the PCF the control's own CSS loaded after the library's, so black won there. Two classes outrank one,
+ * whatever the load order. The column letters and row numbers (`Spreadsheet__header`) stay grey, as in the canvas.
+ */
+.Spreadsheet__cell.header,
+.Spreadsheet__cell.filled-row {
+  color: black;
+}

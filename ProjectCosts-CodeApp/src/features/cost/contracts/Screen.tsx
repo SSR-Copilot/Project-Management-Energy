@@ -1015,6 +1015,13 @@ function ContractsScreenBody() {
 
       {/* ── the Development / Construction contract panel ───────────────── */}
       <FormPanel centerClose
+        /*
+         * `con_Contracts_RightPanel_NewEdit_Body.Width: =Min(960, Parent.Width)` (Contracts Screen:3858): 960
+         * wide, or the whole screen when that is narrower. It was the default `"wide"` (`min(960px, 50vw)`), so on
+         * a window under 1920 px the panel was half the window, and at 800 px or less its two columns stacked
+         * (`canvas.css` `@container`) — the canvas kept them side by side (20 Nov 2026).
+         */
+        width="full"
         // D120 §5: a click on the scrim does not close the panel and drop what was typed. The canvas overlay
         // (`con_Contracts_RightPanel_NewEdit*`, 70% scrim, no `OnSelect`) closes only through its X and Cancel.
         keepOpenOnOutsideClick
