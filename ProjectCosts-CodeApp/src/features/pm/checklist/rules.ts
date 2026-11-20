@@ -614,6 +614,23 @@ function neighbour(
 }
 
 /**
+ * D150 (`earlyRows`, `earlyVisit`): the selected cluster as soon as the states and the trackings are known, WITHOUT waiting for the
+ * gates. The gates only fill `hasGate` / `gateId` of an entry (`toSequenceEntry`); which cluster is selected is decided by the states,
+ * the start cluster, the trackings and the user's pick, so the id (and the name) are the same as the full sequence's
+ * (`defaultSelectedCluster(buildOperationalSequence(states, start, gates), trackings)`, pinned by UT-CHKPERF-076). The entry it returns
+ * has `hasGate: false` and is only used to start a read and the visit's own writes; the screen shows nothing derived from it.
+ */
+export function earlyClusterEntry(a: {
+  states: ProjectStateRef[];
+  startCluster: number;
+  trackings: TrackingRow[];
+  selectedClusterId: string | null;
+}): SequenceEntry | null {
+  const operational = buildOperationalSequence(a.states, a.startCluster);
+  return operational.find((x) => x.id === a.selectedClusterId) ?? defaultSelectedCluster(operational, a.trackings);
+}
+
+/**
  * Rule 9 — `Coalesce(LookUp(colProjectStatesForChecklist, State.StateProgress =
  * 'Approval Cluster States'.'In Progress'), First(colProjectStatesForChecklist))`.
  */
@@ -692,6 +709,8 @@ export function shouldMaterialiseChecklist(
 export interface MaterialiseOptions {
   bulk?: boolean;
   newId?: () => string;
+  /** D150 (`wideCopy`): the in-flight limit of the single creates' group. Absent = the engine's default (eight), as before. */
+  limit?: number;
 }
 
 export function planChecklistMaterialisation(
@@ -740,7 +759,7 @@ export function planChecklistMaterialisation(
     plan.log.push(`Created ${bulkRows.length} checklist task(s) from the defaults.`);
     return plan;
   }
-  plan.writes.push(...together(creates, { stopOnFailure: true }));
+  plan.writes.push(...together(creates, { stopOnFailure: true, ...(opts.limit !== undefined ? { limit: opts.limit } : {}) }));
   if (plan.writes.length) {
     plan.log.push(`Created ${plan.writes.length} checklist task(s) from the defaults.`);
   }

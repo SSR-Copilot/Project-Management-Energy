@@ -41,13 +41,14 @@ import {
 import { DATE_PICKER_FORMAT } from "@/domain/canvasDate";
 import { useSession } from "@/app/SessionContext";
 import { CHOICE_PROCESS } from "@/data/dataverseNames";
+import { checklistPerf } from "@/data/checklistPerfFlags";
 import { palette, space } from "@/theme/tokens";
 import {
   ARIA, COMMENT_MAX_LENGTH, COMPLETION_DATE_MESSAGE, MSG, PAGE_LOCK_TITLE, READ_GATE_MSG, SCREEN_TEXT, UI,
   approvalDueDateDefault, approvalSettingsHint, approvalSettingsNeeded, approvalSettingsState, buildDisplaySequence, buildOperationalSequence, canCancelApproval, canRequestApproval, canSavePanel,
   checklistIsLoading, checklistLoadErrorMode, checklistPersonaTooltip, checklistTableTitle, checklistTitleTooltip, commentAsteriskVisible,
   commentBlockVisible, commentError, commentPatch, commentReadOnly, completeTaskPatch, completionDatePatch,
-  defaultSelectedCluster, fmtCanvasDate, gateFor, gatePersonaTooltip, gateRelevanceLabel, historyDescriptor,
+  defaultSelectedCluster, earlyClusterEntry, fmtCanvasDate, gateFor, gatePersonaTooltip, gateRelevanceLabel, historyDescriptor,
   holdingColumnToggleLabel, inProgressTogglePatch, nextClusterCaption, nextClusterEnabled, nextClusterIcon,
   nextClusterTooltip, nextState, pageLock, parseNoteHtml, previousState, projectIsTerminal,
   requestApprovalCaption, resetToPreviousCaption, returnConfirmation, rightPanelTitle, rowActionEnabled,
@@ -487,11 +488,31 @@ function CheckListScreenBody() {
   const next = nextState(operational, current?.id ?? null);
   const previousTracking = trackingFor(trackings, previous?.id ?? null);
 
+  // D150 (`earlyRows`, `earlyVisit`): the selected cluster does not depend on the gates (they only fill `hasGate` / `gateId`), so
+  // once the states and the trackings are known the rows can be read, and the visit's own work (back-fill, copy of the templates)
+  // can start, while the gates and their Entra lookups are still on their way. The screen shows nothing derived from this early
+  // entry: `loading` still holds the loader until the gates have answered (D127 §1), and `current` stays null until then.
+  const perf = checklistPerf();
+  const earlyRows = perf.earlyRows;
+  const earlyVisit = perf.earlyVisit;
+  const coreReady = sequenceQ.coreReady === true; // a hook double without the field has no early cluster
+  const early: SequenceEntry | null = useMemo(
+    () => ((earlyRows || earlyVisit) && project !== null && coreReady
+      ? earlyClusterEntry({ states, startCluster, trackings, selectedClusterId }) : null),
+    [earlyRows, earlyVisit, project, coreReady, states, startCluster, trackings, selectedClusterId],
+  );
   // C10 (CF-3): the project's own refetch counts too, so a visit does not start from a half-refreshed project.
-  const sequenceReady = project !== null && !projectQ.isLoading && !projectQ.isFetching && !sequenceQ.isLoading && !sequenceQ.isFetching;
-  const orchestration = useChecklistOrchestration({ project, states, trackings, sequenceReady, selected: current, writes });
+  // With `earlyVisit` the gates are not waited for (the back-fill and the copy read no gate); a hook double without `coreSettled`
+  // (a screen test that mocks `./hooks`) keeps the old rule.
+  const sequenceReady = earlyVisit && sequenceQ.coreSettled !== undefined
+    ? project !== null && !projectQ.isLoading && !projectQ.isFetching && coreReady && sequenceQ.coreSettled
+    : project !== null && !projectQ.isLoading && !projectQ.isFetching && !sequenceQ.isLoading && !sequenceQ.isFetching;
+  const orchestration = useChecklistOrchestration({
+    project, states, trackings, sequenceReady, selected: earlyVisit ? (current ?? early) : current, writes,
+  });
 
-  const checklistQ = useClusterChecklist(projectId, current?.id ?? null);
+  const rowsCluster = current ?? (earlyRows ? early : null);
+  const checklistQ = useClusterChecklist(projectId, rowsCluster?.id ?? null);
   const rows = checklistQ.data;
   const settingsQ = useChecklistApprovalSettings(projectId, rows);
   const settings = settingsQ.data;

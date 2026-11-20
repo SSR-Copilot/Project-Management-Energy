@@ -5,7 +5,7 @@
  * ones; the Dataverse loaders (`@/data/checklist`), the cloud flows (`@/data/flows`) and `executePlan` (the sender) are stubbed.
  * The stub answers a refused plan with the real `PlanRefusedError`, so a stale-state refusal behaves as it does in the app.
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
@@ -49,6 +49,7 @@ vi.mock("@/data/flows", () => ({
 import { executePlan } from "@/data/executePlan";
 import { CHOICE_PROCESS, ES } from "@/data/dataverseNames";
 import { qk } from "@/data/keys";
+import { CHECKLIST_PERF_ALL_OFF, setChecklistPerfFlags } from "@/data/checklistPerfFlags";
 import {
   APP_ID_MSG, STALE_MSG, type ChecklistProject, type ChecklistRow, type SequenceEntry, type TrackingRow,
 } from "./rules";
@@ -97,6 +98,8 @@ beforeEach(() => {
   h.count.mockResolvedValue(3);
   h.templates.mockResolvedValue([]);
 });
+// D150: a test that runs with the switches off puts them back for the next one.
+afterEach(() => { setChecklistPerfFlags(null); });
 
 describe("the write hook's refresh and prepareCluster (C5)", () => {
   it("UT-CHKHOOK-001 a write refreshes the project, trackings, rows, approvals and history plus the other screens' copies, and NOT the states, gates or Entra data", async () => {
@@ -111,6 +114,8 @@ describe("the write hook's refresh and prepareCluster (C5)", () => {
     expect(parts).not.toContain("gates");
     expect(keys).not.toContainEqual(qk.checklistAll(PROJECT));
 
+    // D150: this is the behaviour of `targetedReload` OFF (the rollback); with it ON a row patch reloads the rows only (UT-CHKHOOK-018).
+    setChecklistPerfFlags(CHECKLIST_PERF_ALL_OFF);
     const { result, spy } = writesHook();
     await act(async () => { await result.current.patchRow(row(), { vsb_taskstate: 1 }, { progress: "go", error: (d) => d }); });
     expect(invalidated(spy)).toEqual(keys);

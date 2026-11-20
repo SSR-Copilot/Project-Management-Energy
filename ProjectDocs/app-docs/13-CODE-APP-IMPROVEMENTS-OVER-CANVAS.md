@@ -783,6 +783,17 @@ Implemented in the worktree `optimize-finance-perf`, uncommitted until approved.
 | Cluster Checklist | Component extraction so typing no longer re-renders the rows; one batched people request; dropping the guarded reads of Move to Cluster (rejected: removes the D127 §5 protection) | **proposed (not approved)**, see D138 |
 
 
+## Cluster Checklist: rows read beside the gates, a rows-only reload for row patches, a copy that reads ahead (20 Nov 2026, D150, number provisional) — new / divergences (not approved, not run on DEV)
+
+| Screen | Change | Status |
+|---|---|---|
+| Cluster Checklist | The cluster's rows and the visit's own work no longer wait for the gates and their Entra lookups: a usual visit is usable after 4 round trips instead of 6 (modelled); the loader still shows until the gates answer | **new** (timing only), switches `earlyRows`, `earlyVisit` |
+| Cluster Checklist | Completing a task, toggling In Progress, and saving a date or comment reload the rows only: 3 requests instead of 11 and 3 round trips instead of 4 (modelled); the project, trackings, approval settings and the session project are no longer refetched for a change that cannot touch them | **new**, switch `targetedReload` |
+| Cluster Checklist | The first visit to a cluster reads the approval settings of the templates while it copies them, keeps the templates in the cache, and a Move warms the next cluster's templates during its own writes: 11 round trips instead of 16 for a Move into an empty cluster, 6 instead of 11 for a first visit with 10 templates (modelled) | **new**, divergence: up to three extra read-only requests per Move (proposed, not approved), switch `prefetchCopy` |
+| Cluster Checklist | The template creates go out 16 wide instead of 8 | **new**, divergence (proposed, not approved), switch `wideCopy` |
+| Cluster Checklist | Tests pin which plans may reload only the rows (every other plan builder is checked), the early cluster against the full sequence in 400 generated cases, the screen with the gates held back, and an opt-in modelled benchmark that reproduces the baseline with the switches off | **new** (test gate) |
+| Cluster Checklist | Entra lookups off the critical path, a boot prefetch, pre-flighted guards of a Move, an optimistic Complete | **proposed (not approved)**, see D150; the 5x target was not reached (best 1.83x modelled) |
+
 ## Generators screen: targeted reloads, a split load gate and a prefetch (19 Nov 2026, D141, number provisional) — new / divergences (not approved, not run on DEV)
 
 | Screen | Change | Status |
