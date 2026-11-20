@@ -8348,6 +8348,94 @@ The environment still shows through the band colour (`environmentHeaderFill`), t
 
 **Verification (D147 and D148):** `npm run verify` on 13a5282 (20 Nov 2026): `check:power`, typecheck, lint and the control-label and canvas-identity gates passed; tests 6,766 passed, 2 failed, 3 todo (334 files). The two failures, UT-GEN-930 and UT-GENPERF-041 (Generators, not touched here), failed only under full-suite load and pass when run alone (41 of 41). The build passed separately. **Not run:** the E2E parity suite (skipped by the user), knip, a DEV or browser check.
 
+
+## D149 — Finance: the tranche Save's write group goes out 16 wide (20 Nov 2026; number PROVISIONAL, may be renumbered at merge)
+
+**Status:** implemented in the worktree `finance-screen-performance-optimization` (branch `sub/finance-screen-performance-optimization`, base `edf38c9`); NOT product-approved; not run on DEV; not seen in a browser; **nothing was timed against Dataverse**. Switch `wideGroups` in `data/financeFlags.ts` (ON; `FINANCE_PERF_ALL_OFF` and `{ wideGroups: false }` give the 8-wide group exactly, CONVENTIONS rule 15).
+
+**Request:** the same "end-to-end performance optimization, minimum 5x" exercise as Production (D145), for the Finance (Financing) screen.
+
+**Finding 1 — the 5x was already taken by D137.** The D137 bench (`financePerf.bench.test.ts`, modelled rounds, three runs on this machine) takes a tranche Save from about 47 awaited rounds (every D137 switch off) to 9 (switches on): about 5x to 6x. The Financing Options cascade (5 writes), the visit seeds (6 writes in one job), the one-write panel saves and the tranche Delete (already 16 wide, `LEAF_DELETE_CONCURRENCY`) are at or near their floor. The reads, the reload and the duplicate-tranche check are D137's and are business rules or already parallel. A further 5x over the current code is not available: the floor is the duplicate read, the tranche write alone (a refused tranche sends nothing else) and the reload.
+
+**Finding 2 — the one lever left is the tranche Save's group width.** After the tranche write, up to 29 schedule writes (25 repayments, 4 step-ups) go out as ONE group at the default 8 in flight: 4 awaited rounds. No flow or plugin fires on `vsb_financinginput`, its repayment or its step-up table (`hooks.ts` header, `04-flow-inventory.md`), so their order is free. At 16 (`WIDE_GROUP_CONCURRENCY`, as the Generators saves since D144 and the Production Save since D145) the same group is 2 rounds.
+
+**Changed:** `optimizeTrancheSavePlan` sends its group with `limit: 16` when `wideGroups` is on. The tranche write is still first and alone; `stopOnFailure` is kept. Same writes, same order, same binds. Nothing else changed: not the Delete (already 16), not the option cascade (5 writes) or the seeds (6), not `bulkSchedules`.
+
+**Modelled result (`UT-FINPERF-002` / `003`, the real hooks, reads, rules, `perf.ts` and `executePlan` against fake services with a fixed latency; MODELLED, not Dataverse time; three runs):**
+
+| Flow | Requests | Rounds, all switches off | Rounds, D137 (8 wide) | Rounds, now (16 wide) | Now vs D137 |
+|---|---:|---:|---:|---:|---:|
+| Tranche save, EDIT (1 tranche + 25 repayments + 4 step-ups, duplicate read and reload included) | 34 | 47 | 9 | 7 | 1.29x |
+| Tranche save, NEW (same rows) | 34 | 45-47 | 9 | 7 | 1.29x |
+| Tranche delete, option switch, seeds, one-write panel saves, visit reads | unchanged | | | unchanged | 1.00x |
+
+**The 5x target is NOT ACHIEVED** over the current code (1.29x on the one flow that changes), and the real-world gain is **NOT VERIFIABLE** from here: no DEV access, no timing, and if the host serialises parallel calls the change gains nothing.
+
+**Side finding:** with the per-row group at 16 the per-row path (7 rounds) is now as fast as or faster than the bulk path (`bulkSchedules`, 8 rounds, 11 requests), which stays OFF. Its case now rests on fewer requests, not fewer rounds; the DEV probe of D137 §2.1 is the place to decide.
+
+**Divergence (proposed, not approved):** the canvas ran these writes with `Concurrent` (D137); 16 are in flight at once instead of 8. A throttled request (HTTP 429; no write retry on this path) can end a Save part-way, as a failure inside an 8-wide group already could. `stopOnFailure` stops every NEW write after the first failure; up to 16 already in flight finish and are counted (UT-FINPERF-129).
+
+**Tests:** `UT-FINPERF-170…173` in `perf.test.ts` (same rows as the 8-wide plan for edit, new, an edit that drops stored years and a small schedule; tranche first and alone, 16 wide on / 8 wide off; 29 group writes are 2 rounds instead of 4; every switch off sends no group), `UT-FINPERF-129` (a failed child with the group 16 wide). EXISTING TESTS CHANGED, each for a stated reason: **UT-FINPERF-101** lists the default switches, so it gains `wideGroups: true`; **UT-FINPERF-128** pins "no new child after a failure, window 8", so it now runs with `wideGroups: false` (its twin is 129); **UT-FINPERF-002** compared the bulk path with the per-row path, which is now faster, so it compares bulk with the 8-wide per-row path (`afterNarrow`) and also asserts the new fact (same requests, fewer rounds).
+
+**Needs a live check (DEV):** time a tranche Save with about 25 repayments before and after with `[VSB] ACTION` / `DATA`; confirm no HTTP 429 at 16 in flight on the repayment and step-up tables; confirm the host really runs the 16 in parallel.
+
+## D150 — Cluster Check List: rows read in parallel with the gates, a rows-only reload for row patches, a copy that reads ahead and writes 16 wide (20 Nov 2026; number PROVISIONAL, may be renumbered at merge)
+
+**Status:** implemented in the worktree `cluster-checklist-performance-optimization` (branch `sub/cluster-checklist-performance-optimization`, base `7a332b8`); NOT product-approved; not run on DEV; not seen in a browser; **nothing was timed against Dataverse**. Every switch is in `data/checklistPerfFlags.ts` (`CHECKLIST_PERF`; `CHECKLIST_PERF_ALL_OFF` is today's behaviour, CONVENTIONS rule 15). No flow, no `data/flows.ts`, no write, no write order, no payload, no text and no guarded read was changed.
+
+**Request:** "Cluster Checklist screen: end-to-end performance optimization, minimum 5x" (autonomous; six read-only analyses: frontend, Dataverse and network, functional parity, benchmarking, testing, architecture; Power Automate out of scope).
+
+**Finding 1 — D138 had already taken the frontend.** Typing costs one commit and about 8 ms of render per keystroke with 40 tasks (jsdom, development build, `UT-CHKPERF-066`); the sequences, the stepper, the task table and the approval maps are memoised; algorithmic cost is O(states x gates) and O(rows). The time is awaited server round trips, not CPU.
+
+**Finding 2 — where the round trips go (MODELLED by a logical critical-path counter on the REAL screen, hooks, `usePlanWrite`, plan builders and `executePlan`; only the SDK edge is stubbed; see "Method").**
+- *Usual visit:* project, then the gates (their rows, then Entra), then the rows, then the approval settings (their rows, then Entra). The rows waited for the gates although the selected cluster does not depend on them (`toSequenceEntry` uses the gates only for `hasGate` / `gateId`).
+- *Row action:* guard read, PATCH, then a reload of nine keys behind the overlay: the project, trackings, rows, approvals and the session project (two chained hops, four requests). A row PATCH writes only `vsb_projectchecklists`, on which no flow or plug-in fires (`04-flow-inventory.md`).
+- *First visit / Move to the next cluster:* the template and settings reads sat after the count, one after the other, and the 8-wide group needed a second wave from ten templates.
+
+**Result (MODELLED: logical round trips at one fixed hop; no server time, throttling, Entra latency or flow time; React in jsdom). HEAD = `7a332b8`; with the switches off the changed tree is identical to HEAD on all six scenarios; ON = shipped.**
+
+| Scenario | HEAD rounds / requests | ON rounds / requests | Rounds | Requests |
+|---|---|---|---|---|
+| Usual visit, mount to a usable screen (40 tasks) | 6 / 10 | 4 / 10 | 1.50x | 1.00x |
+| First visit, 10 templates, to a quiet screen | 11 / 29 | 6 / 23 | 1.83x | 1.26x |
+| First visit, 40 templates | 14 / 59 | 8 / 53 | 1.75x | 1.11x |
+| Complete one task, click to overlay gone | 4 / 11 | 3 / 3 | 1.33x | 3.67x |
+| Move to next cluster (next cluster empty, 10 templates), Save to quiet | 16 / 43 | 11 / 38 | 1.45x | 1.13x |
+| Refresh icon, click to quiet | 10 requests | 10 requests | not claimed | 1.00x |
+| Typing, commits and render time per keystroke (jsdom) | 1 commit, about 8 ms | 1 commit, about 8 ms | 1.0x | n/a |
+
+Every row but Refresh is identical across three runs (the harness fails if repeats differ). The depth of a Refresh flips between 2 and 3 under CPU load even with every switch off, so no gain is claimed for it (its request count is stable); the runs were taken on a quiet machine and the last ones, on a loaded one, are not used. **The 5x target is NOT ACHIEVED on any end-to-end duration; the best is 1.83x (first visit) and 3.67x on the requests of a row action.** The real-world gain is NOT VERIFIABLE from here: no DEV access, no timing, and if the host serialises calls the parallel parts gain less.
+
+**Changed (four switches):**
+1. `targetedReload`: a job whose plan writes ONLY `vsb_projectchecklists` rows (the four row patches; the template copy when the tracking already exists, also as a bulk create) reloads the cluster's rows and nothing else (`reload.ts`, pure). Anything that writes a tracking, a note or the project, and every flow job, keeps the full list.
+2. `earlyRows` and `earlyVisit`: once the project, states and trackings have answered, the cluster's rows are read and the visit's own work (back-fill, copy) starts while the gates and their Entra lookups are still on their way. The loader stays until the gates answer (D127 §1 unchanged, UT-CHKPERF-080).
+3. `prefetchCopy`: the cluster's templates go through the query cache (30 s); the approval settings of the templates being copied are read while the copy writes; a Move warms the next cluster's templates during its own sequential writes (one count read and, for an empty cluster, its templates; the settings are read by the copy itself, because the Move's own reload invalidates them). The cached templates are keyed by the project's country and technology, and their reads do not retry (the plain read never did). The count that decides whether to copy stays a fresh read (D138).
+4. `wideCopy`: the template creates are one group 16 wide instead of 8 (`WIDE_GROUP_CONCURRENCY`, as D144 and D145). Same rows and payloads (UT-CHKPERF-075).
+
+**Deliberately NOT done (and why):**
+- Parallel or reordered tracking writes, the note beside the project update, dropping or pre-flighting the guarded existence reads: the tracking order drives `SynchroniseProjectState` and the guards are the D127 §5 protection. Pre-flighting the two tracking guards of a Move would save 1 to 2 rounds but changes the pinned order (`UT-CHKPERF-004`) and needs a decision.
+- Making the Entra lookups non-blocking (two of the four rounds of a usual visit): the mail is written onto the tracking by Request Approval and feeds the flow payloads, so the approval paths would have to wait for it. Needs a decision.
+- A boot prefetch of the checklist's reads (D119 pattern): about one round, through the shared `bootPlan` / `routes` files.
+- Optimistic Complete with a background reload (4 to 2 rounds): a DIVERGENCE from the canvas spinner.
+- Turning on `CHECKLIST_BULK.materialise` (D138): still needs the DEV test.
+- Component extraction so typing re-renders no rows: typing is already one commit and about 8 ms with 40 tasks; not worth the churn here.
+
+**Divergences (timing only; proposed, not approved):** the canvas `OnVisible` loads the gates before it runs the back-fill, and `earlyVisit` starts the back-fill and the copy first (neither reads a gate); the rows and the visit's writes can start while the loader still shows (`earlyRows`, `earlyVisit`); with `earlyVisit` the visit needs the states and the trackings to have an answer, so when either read fails it no longer runs on empty lists (the blocking error shows either way); a cached template list can be up to 30 s old (an admin edit inside that window is read at the next visit; Refresh clears it); a Move may send up to three extra read-only requests (`prefetchCopy`); a row action no longer refreshes the project, trackings or the other screens' project copies (they cannot change on a checklist-row write); 16 creates in flight instead of 8 (a throttled request ends a copy part-way, as a failure inside an 8-wide group already could; after a failure up to 15 creates can land instead of 7, and a partly copied cluster is never copied again because the count is then above zero, the D138 limitation, now with a wider window).
+
+**Existing test changed:** `UT-CHKHOOK-001` (`hooks.writes.test.tsx`) pins the OLD full reload after a row patch; it now runs with the switches off (two lines) and `UT-CHKHOOK-018` pins the new behaviour. No other existing test was changed.
+
+**Method (and two harness defects found and fixed before the numbers were recorded):** `checklistVisit.bench.test.tsx` (opt-in, `CHKBENCH=1`, about a minute). A request's depth is one more than the deepest request completed when it started, so it is logical and deterministic; a hop is 120 ms of wall time (a 20 ms hop gave a depth that varied by one between repeats because a React commit sits between "simultaneous" requests). Defect 1: the settle loop ran inside `act()`, which holds back renders and effects, so dependent requests started after the measurement had ended (the baseline of Refresh read 2 instead of 3). Defect 2: the bench client had no `staleTime` and its store did not keep created rows, so the screen refetched what the app would reuse and never read the settings of copied rows. The recorded baseline was re-taken on pristine `7a332b8` (production files stashed) after both fixes.
+
+**Tests:** `UT-CHKPERF-070…077` (`checklistPerf.test.ts`: switches; which plans are narrowed, over the real builders of every job; the 16-wide copy; the early cluster equals the full sequence's in 400 generated cases), `UT-CHKHOOK-018…027` (`hooks.perf.test.tsx`: what each job reloads, what is read ahead, the cache key, a failed warm-up changes nothing), `UT-CHKPERF-080…086` (`Screen.early.test.tsx`: the screen with the gates held back by a promise, a first visit and a back-fill that run once; no timing), `UT-CHKPERF-060…066, 099` (the opt-in bench).
+
+**Review:** two independent read-only reviews of the diff (architecture and functional parity) found no serious defect; four small points were fixed (the template cache key now carries country and technology; the template reads no longer retry; the Move no longer warms settings its own reload would invalidate; the visit-runs-once assertions).
+
+**Verification (20 Nov 2026):** `npm run verify` on the tree before the rebase (base `7a332b8`): exit 0, 341 files / 6,867 tests passed, build OK, labels 0 missing, canvas identities C1 to C5 all 0, `.power` 96 registered, 0 problems. After the rebase onto `c216294` (the Revenues, Finance and Header work, D146 to D149; this entry was renumbered from D146 to D150, with no code conflict and one append-only conflict in this file, kept on both sides) it was run twice and stopped at the same single failure, `UT-GEN-930` (`generators/Screen.rollback.test.tsx`, 6,895 other tests passed), so the build step of that chain did not run; `npm run build` was then run separately and passed. **That failure is not caused by this change:** the unmodified base `c216294` (a clean detached worktree, no part of this commit) fails the same test the same way in the same full run (6,867 passed, 1 failed); it passes alone 3 of 3; it is the first test of its file and waits 1 s for the Generators panel's lazy chunk (D143), and the file took 57 s in the full run on a machine whose CPU another application held near 80 %. Nothing in this change is imported by the Generators code or its tests (the only file outside the checklist folder is the new `data/checklistPerfFlags.ts`). Owner action: give that test a longer wait or pre-load the panel; not changed here. NOT run: the E2E parity suite (it needs a signed-in browser, live data and the Canvas and Code app URLs, which were not supplied; the question was not put to the user separately because the task pre-authorised the delivery), any DEV or browser check, `npx -y knip@5` (a DEV-push step). The opt-in benchmark was last run on a quiet machine; later runs on a loaded one were not used.
+
+**Needs a live check (DEV):** a Complete and a Move with the `[VSB]` console lines (a row action should show the rows read only); a first visit to an empty cluster (rows copied once, owner bind on every row, no 429 at 16 in flight on `vsb_projectchecklists`); that the host really runs the reads and creates in parallel; the Entra lookups are the likely largest remaining cost and are unmeasured.
+**Remaining levers, each needing a decision:** Entra off the critical path (Request Approval waits for the mails), the boot prefetch, the pre-flighted guards of a Move, an optimistic Complete, and `CHECKLIST_BULK.materialise` after its DEV test.
+
+
 ## D152 — Check List Settings: Reorder by drag-and-drop, as the canvas (20 Nov 2026; number PROVISIONAL, may be renumbered at merge)
 
 **Status:** working tree of `application-settings-bugs`, **uncommitted, NOT product-approved, not run on DEV, not seen in a browser**. The user (20 Nov 2026), with a screenshot of the canvas Checklist settings screen: "application settings sorting like canvas is not in code apps".

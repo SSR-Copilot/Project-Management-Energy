@@ -268,11 +268,13 @@ async function reloadAfter(client: QueryClient, kind: ReloadKind): Promise<void>
 
 /* ═══════════════════════════════════════════════════════════════ scenarios ══ */
 
-type Mode = "before" | "after" | "afterBulk";
+type Mode = "before" | "after" | "afterBulk" | "afterNarrow";
 const MODES: Record<Mode, Partial<FinancePerfFlags>> = {
   before: FINANCE_PERF_ALL_OFF,
   after: {},
   afterBulk: { bulkSchedules: true },
+  /** D149: the defaults with the tranche group back at 8 wide (`wideGroups` off): the state before D149. */
+  afterNarrow: { wideGroups: false },
 };
 
 interface Row { scenario: string; before: Metrics; after: Metrics; afterBulk?: Metrics }
@@ -312,12 +314,17 @@ describe("UT-FINPERF before / after (modelled round trips, see the file header)"
   });
 
   it("UT-FINPERF-002 tranche SAVE, edit: 1 tranche + 25 repayments + 4 step-ups, reload included", async () => {
-    const r = await compare(saveFlow(true), ["before", "after", "afterBulk"]);
+    const r = await compare(saveFlow(true), ["before", "after", "afterBulk", "afterNarrow"]);
     table.push({ scenario: "tranche save, EDIT (duplicate read + 30 writes + reload)", before: r.before, after: r.after, afterBulk: r.afterBulk });
     expect(r.after.requests).toBeLessThan(r.before.requests);
     expect(r.after.rounds).toBeLessThan(r.before.rounds);
     expect(r.afterBulk.requests).toBeLessThan(r.after.requests);
-    expect(r.afterBulk.rounds).toBeLessThanOrEqual(r.after.rounds);
+    // D149: the bulk path still beats the per-row path of D137 (8 wide) on rounds; the 16-wide per-row path (`after`) is now as
+    // fast or faster than the bulk one, which is why `bulkSchedules` stays off until the DEV probe shows a reason.
+    expect(r.afterBulk.rounds).toBeLessThanOrEqual(r.afterNarrow.rounds);
+    expect(r.after.requests).toBe(r.afterNarrow.requests); // `wideGroups` changes how the group is sent, not what is sent
+    expect(r.after.rounds).toBeLessThan(r.afterNarrow.rounds);
+    console.info(`[FINPERF] D149 tranche save EDIT: ${r.afterNarrow.requests} requests, ${r.afterNarrow.rounds} rounds (8 wide) -> ${r.after.rounds} rounds (16 wide); bulk path ${r.afterBulk.requests} requests, ${r.afterBulk.rounds} rounds`);
   });
 
   it("UT-FINPERF-003 tranche SAVE, new: 1 tranche + 25 repayments + 4 step-ups, reload included", async () => {

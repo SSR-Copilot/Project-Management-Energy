@@ -36,9 +36,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ES, ES_PROCESS } from "@/data/dataverseNames";
 import { qk } from "@/data/keys";
 import { CHECKLIST_BULK } from "@/data/checklistBulkFlags";
+import { checklistPerf } from "@/data/checklistPerfFlags";
+import { WIDE_GROUP_CONCURRENCY } from "@/data/concurrency";
 import { resetChecklistPeopleCache } from "@/data/checklistPeople";
 import type { ScreenData } from "@/data/notConnected";
 import { usePlanWrite } from "@/data/usePlanWrite";
+import { trace } from "@/platform/telemetry";
 import { emptyPlan, refusePlan } from "@/data/writePlan";
 import {
   cancelChecklistApproval as cancelChecklistApprovalFlow, cancelGateApproval as cancelGateApprovalFlow,
@@ -60,6 +63,7 @@ import {
   type HistoryQueryDescriptor, type ProjectStateRef, type SequenceEntry, type TerminalStaging,
   type TrackingRow, type WritePlan,
 } from "./rules";
+import { checklistReloadKeys } from "./reload";
 
 /** NEW (6 Nov 2026): how long, and how often, the screen waits for the gate flow to move a cluster on. */
 const TRANSITION_WAIT_MS = 30_000;
@@ -148,7 +152,7 @@ export function useChecklistProject(projectId: string | undefined): ReadResult<C
 export function useClusterSequence(
   projectId: string | undefined,
   project: ChecklistProject | null,
-): ReadResult<ClusterSequenceData> & { isFetching: boolean } {
+): ReadResult<ClusterSequenceData> & { isFetching: boolean; coreReady: boolean; coreSettled: boolean } {
   const id = projectId ?? "";
   const states = useQuery({
     queryKey: qk.checklist(id, "states"),
@@ -169,6 +173,10 @@ export function useClusterSequence(
     data: { states: states.data ?? NONE, trackings: trackings.data ?? NONE, gates: gates.data ?? NONE },
     isLoading: states.isLoading || trackings.isLoading || gates.isLoading,
     isFetching: states.isFetching || trackings.isFetching || gates.isFetching,
+    /** D150: the states and the trackings have an answer (the gates, which only decide `hasGate`, may still be on their way). */
+    coreReady: states.data !== undefined && trackings.data !== undefined,
+    /** D150: the states and the trackings are neither loading nor refetching. */
+    coreSettled: !states.isLoading && !trackings.isLoading && !states.isFetching && !trackings.isFetching,
     error: states.error ?? trackings.error ?? gates.error ?? undefined,
     connected: true,
     // Every part that is asked for has an answer (the gates are asked for once the project is known).
@@ -276,6 +284,9 @@ export interface WriteEnd { onWritten: (ok: boolean) => void }
 const endOf = (after?: WriteEnd): { onWritten?: (ok: boolean) => void; reloadProgress?: string } =>
   after ? { onWritten: after.onWritten, reloadProgress: MSG.loading } : {};
 
+/** How long a cluster's templates and their approval settings are kept (the screen's own `staleTime`). */
+const COPY_FRESH_MS = 30_000;
+
 /** Runs the screen's writes and refreshes the screen, the header and the other project views. */
 export function useChecklistWrites(projectId: string | undefined) {
   const id = projectId ?? "";
@@ -285,6 +296,50 @@ export function useChecklistWrites(projectId: string | undefined) {
     action: "change this project's checklist",
   });
   const ctx = (project: ChecklistProject) => ({ projectId: project.id, owningBusinessUnitId: project.owningBusinessUnitId });
+
+  /**
+   * D150 (`prefetchCopy`): the cluster's templates, through the query cache (30 s), so a read started earlier (see `warmCopy`) is
+   * reused. The key carries the project's country and technology, which the read is scoped by (a change of either is a different
+   * read). `retry: false`: the app's default retries a retryable failure, the plain read never did. OFF: the plain read, as before.
+   */
+  const templatesFor = (project: ChecklistProject, clusterId: string) => checklistPerf().prefetchCopy
+    ? qc.fetchQuery({
+      queryKey: qk.checklist(id, "templates", clusterId, project.countryId ?? "", String(project.technology)),
+      queryFn: () => listClusterTemplates(project, clusterId), staleTime: COPY_FRESH_MS, retry: false,
+    })
+    : listClusterTemplates(project, clusterId);
+
+  /**
+   * D150 (`prefetchCopy`): reads the approval settings of the templates that are about to be copied while the copy writes. The rows
+   * the copy creates carry these templates' ids, and the screen's approval query is keyed by them, so the reload finds them
+   * ready. Read-only, never awaited; a failure is left to the screen's own query, which reads again.
+   */
+  const warmSettings = (templates: readonly { id: string }[]) => {
+    const ids = [...new Set(templates.map((t) => t.id).filter(Boolean))].sort();
+    if (!checklistPerf().prefetchCopy || ids.length === 0) return;
+    void qc.prefetchQuery({
+      queryKey: qk.checklist(id, "approvals", ...ids), queryFn: () => listChecklistApprovalSettings(ids), staleTime: COPY_FRESH_MS, retry: false,
+    });
+  };
+
+  /**
+   * D150 (`prefetchCopy`): during a Move's sequential writes, warms what the next cluster's first visit will read: whether it has rows
+   * (one read) and, when it has none, its templates. The approval settings are NOT warmed here: the Move's own reload invalidates every
+   * approvals key, so they are read by the copy itself (`warmSettings`), while it writes. Speculative and read-only; the visit still
+   * counts the rows afresh before it copies anything (D138).
+   */
+  const warmCopy = (project: ChecklistProject, next: SequenceEntry | null) => {
+    if (!checklistPerf().prefetchCopy || !next) return;
+    void (async () => {
+      try {
+        if ((await countClusterChecklistRows(id, next.id)) !== 0) return;
+        await templatesFor(project, next.id);
+      } catch (e) {
+        // a warm-up only: the visit reads again and reports its own failure; the cause is traced (CONVENTIONS rule 23)
+        trace("error", "The checklist's next-cluster warm-up failed (the visit reads again)", e);
+      }
+    })();
+  };
 
   /** `btn_CheckList_EnsureSkippedClusterStatesCompleted` (Y:443-604), from a fresh read. */
   const backfill = (project: ChecklistProject, states: ProjectStateRef[]) => w.run({
@@ -312,22 +367,35 @@ export function useChecklistWrites(projectId: string | undefined) {
         listChecklistTrackings(id), countClusterChecklistRows(id, selected.id),
       ]);
       const tracking = trackingFor(trackings, selected.id);
-      const templates = needsTemplates(tracking, selected, count) ? await listClusterTemplates(project, selected.id) : [];
+      const templates = needsTemplates(tracking, selected, count) ? await templatesFor(project, selected.id) : [];
+      warmSettings(templates);
       // D138 (B1): with the switch on, the bulk backend learns the table (a separate chunk, loaded only now).
       const bulk = CHECKLIST_BULK.materialise && templates.length > 0;
       if (bulk) (await import("@/data/checklistBulk")).registerChecklistBulk();
+      // D150 (`wideCopy`): the single creates go out sixteen wide (the default is eight). Same rows and payloads.
+      const wide = checklistPerf().wideCopy;
+      const materialise = bulk || wide
+        ? { ...(bulk ? { bulk: true } : {}), ...(wide ? { limit: WIDE_GROUP_CONCURRENCY } : {}) }
+        : undefined;
       plan = planPrepareCluster({
-        selected, tracking, existingRowCount: count, templates, ctx: ctx(project), ...(bulk ? { materialise: { bulk: true } } : {}),
+        selected, tracking, existingRowCount: count, templates, ctx: ctx(project), ...(materialise ? { materialise } : {}),
       });
     } catch (e) {
       return w.run({ progress: MSG.loading, plan: () => Promise.reject(e) });
     }
     if (plan.writes.length === 0) return [];
-    return w.run({ progress: MSG.loading, plan });
+    const reload = checklistReloadKeys(id, plan);
+    return w.run({ progress: MSG.loading, plan, ...(reload ? { invalidate: reload } : {}) });
   };
 
-  const patchRow = (row: ChecklistRow, data: Record<string, unknown>, texts: { progress: string; success?: string; error: (d: string) => string }) =>
-    w.run({ progress: texts.progress, ...(texts.success ? { success: texts.success } : {}), errorText: texts.error, plan: planChecklistRowPatch(row.id, data, row.title) });
+  const patchRow = (row: ChecklistRow, data: Record<string, unknown>, texts: { progress: string; success?: string; error: (d: string) => string }) => {
+    const plan = planChecklistRowPatch(row.id, data, row.title);
+    const reload = checklistReloadKeys(id, plan);
+    return w.run({
+      progress: texts.progress, ...(texts.success ? { success: texts.success } : {}), errorText: texts.error, plan,
+      ...(reload ? { invalidate: reload } : {}),
+    });
+  };
 
   /** `pcf_…_Buttons_Save` (Y:5235-5411): the direct move, with the cluster's task table as the note. */
   const saveTransition = (req: TransitionRequest, after?: WriteEnd) => w.run({
@@ -336,6 +404,7 @@ export function useChecklistWrites(projectId: string | undefined) {
     // No green "Cluster data '…' will be saved." bar after the move (PO, 3 Nov 2026).
     errorText: MSG.projectStatusError,
     plan: async () => {
+      warmCopy(req.project, req.next);
       const [trackings, rows] = await Promise.all([listChecklistTrackings(id), listClusterChecklist(id, req.state.id)]);
       // C6: the fresh read must still show the cluster In Progress, as the button did when it was drawn.
       const stale = staleSaveRefusal(req.state, trackingFor(trackings, req.state.id));

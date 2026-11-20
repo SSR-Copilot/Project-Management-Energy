@@ -159,8 +159,8 @@ afterEach(() => { setBulkBackend(null); setFinancePerfFlags(null); });
 describe("UT-FINPERF switches", () => {
   it("UT-FINPERF-101 the defaults: every switch on except the bulk one, which waits for the live probe", () => {
     expect(financePerf()).toEqual({
-      parallelReads: true, lazyReads: true, targetedReload: true, concurrentWrites: true, bulkSchedules: false,
-    });
+      parallelReads: true, lazyReads: true, targetedReload: true, concurrentWrites: true, wideGroups: true, bulkSchedules: false,
+    }); // D149: `wideGroups` joined the list (on)
   });
 
   it("UT-FINPERF-102 a test override replaces switches, and null restores the defaults", () => {
@@ -374,12 +374,29 @@ describe("UT-FINPERF a tranche Save leaves the same rows however it is sent", ()
     const plan = optimizeTrancheSavePlan(planTrancheSave({
       form: seniorForm({ trancheId: "t1", repaymentRows: repayRows(ys, true), stepUpRows: [], stepUpEnabled: false }),
       project, seniorDebtCategoryId: "c3", duplicateIds: ["t1"], storedRepayments: storedRepay(ys), storedStepUps: [],
-    }), flags());
+    }), flags({ wideGroups: false })); // D149: this pin is the 8-wide group, so it runs with `wideGroups` off
     const error = await executePlan(plan, "test", env.client).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(PlanError);
     // 1 tranche + at most the writes that were already in flight when the third one failed (the gate is 8).
     expect(env.sent.length).toBeLessThan(1 + 40);
     expect(env.sent.length).toBeLessThanOrEqual(1 + 3 + 8);
+  });
+
+  it("UT-FINPERF-129 with `wideGroups` on, the group is 16 wide and a failed child still stops every NEW child (the window is 16)", async () => {
+    const ys = years(2029, 40);
+    const env = makeEnv(initialSchedule(ys, 0));
+    let updates = 0;
+    env.failWhen = (kind, es) => kind === "update" && es === ES_FINANCE.financingInputsRepaymentAmounts && (updates += 1) === 3;
+    const plan = optimizeTrancheSavePlan(planTrancheSave({
+      form: seniorForm({ trancheId: "t1", repaymentRows: repayRows(ys, true), stepUpRows: [], stepUpEnabled: false }),
+      project, seniorDebtCategoryId: "c3", duplicateIds: ["t1"], storedRepayments: storedRepay(ys), storedStepUps: [],
+    }), flags());
+    expect(plan.writes[0]!.concurrent).toBeUndefined(); // the tranche is first and alone
+    expect(plan.writes.slice(1).every((w) => w.concurrent === true && w.concurrencyLimit === 16)).toBe(true);
+    const error = await executePlan(plan, "test", env.client).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(PlanError);
+    expect(env.sent.length).toBeLessThan(1 + 40); // nothing new started after the failure
+    expect(env.sent.length).toBeLessThanOrEqual(1 + 3 + 16);
   });
 });
 
@@ -542,3 +559,66 @@ describe("UT-FINPERF the inputs read no longer waits for the categories", () => 
 });
 
 beforeEach(() => { setFinancePerfFlags(null); });
+
+
+/* ═══ D149: the tranche Save's group is 16 wide with the rows of the 8-wide group ═══ */
+
+describe("UT-FINPERF D149 wideGroups: the same rows, a wider group", () => {
+  /** The writes with every concurrency marker removed: what the 8-wide and the 16-wide plan must share. */
+  const plain = (plan: WritePlan) =>
+    plan.writes.map(({ concurrent: _c, concurrencyGroup: _g, concurrencyLimit: _l, stopOnFailure: _s, ...rest }) => rest);
+  /** Awaited rounds of a plan's write steps: the tranche is one, the group is ceil(size / limit). */
+  const rounds = (plan: WritePlan): number => {
+    const group = plan.writes.filter((w) => w.concurrent);
+    const limit = group[0]?.concurrencyLimit ?? 8;
+    return plan.writes.length - group.length + (group.length === 0 ? 0 : Math.ceil(group.length / limit));
+  };
+  const planOf = (over: Partial<SeniorDebtFormState>, ys: number[], wide: boolean): WritePlan =>
+    optimizeTrancheSavePlan(planTrancheSave({
+      form: seniorForm(over), project, seniorDebtCategoryId: "c3", duplicateIds: over.trancheId ? ["t1"] : [],
+      storedRepayments: over.trancheId ? storedRepay(ys) : [], storedStepUps: [],
+    }), flags({ wideGroups: wide }));
+
+  const ys25 = years(2029, 25);
+  const SCENARIOS: [string, Partial<SeniorDebtFormState>, number[]][] = [
+    ["edit, 25 repayments + 4 step-ups", { trancheId: "t1", repaymentRows: repayRows(ys25, true), stepUpRows: stepUps(4) }, ys25],
+    ["new, 25 repayments + 4 step-ups", { trancheId: null, repaymentRows: repayRows(ys25, false), stepUpRows: stepUps(4) }, []],
+    ["edit that drops stored years", { trancheId: "t1", repaymentRows: repayRows(ys25.slice(0, 5), true), stepUpRows: stepUps(2) }, ys25],
+    ["small schedule (8 repayments, 2 step-ups)", { trancheId: "t1", repaymentRows: repayRows(years(2029, 8), true), stepUpRows: stepUps(2) }, years(2029, 8)],
+  ];
+
+  it.each(SCENARIOS)("UT-FINPERF-170 %s: the same writes, in the same order, as the 8-wide plan", (_n, over, ys) => {
+    expect(plain(planOf(over, ys, true))).toEqual(plain(planOf(over, ys, false)));
+  });
+
+  it("UT-FINPERF-171 the tranche is first and alone; the group is 16 wide with `wideGroups` and 8 wide without", () => {
+    const wide = planOf(SCENARIOS[0]![1], SCENARIOS[0]![2], true);
+    const narrow = planOf(SCENARIOS[0]![1], SCENARIOS[0]![2], false);
+    for (const plan of [wide, narrow]) {
+      expect(plan.writes[0]).toMatchObject({ entitySet: ES_FINANCE.financingInputs });
+      expect(plan.writes[0]!.concurrent).toBeUndefined();
+      expect(plan.writes.slice(1).every((w) => w.concurrent === true && w.stopOnFailure === true)).toBe(true);
+    }
+    expect(new Set(wide.writes.slice(1).map((w) => w.concurrencyLimit))).toEqual(new Set([16]));
+    expect(new Set(narrow.writes.slice(1).map((w) => w.concurrencyLimit))).toEqual(new Set([undefined]));
+  });
+
+  it("UT-FINPERF-172 the awaited write rounds: 29 group writes are 2 rounds instead of 4; a group of 10 is 1 instead of 2", () => {
+    const edit = SCENARIOS[0]!;
+    expect(planOf(edit[1], edit[2], true).writes.length - 1).toBe(29);
+    expect(rounds(planOf(edit[1], edit[2], false))).toBe(1 + 4);
+    expect(rounds(planOf(edit[1], edit[2], true))).toBe(1 + 2);
+    const small = SCENARIOS[3]!;
+    expect(planOf(small[1], small[2], true).writes.length - 1).toBe(10);
+    expect(rounds(planOf(small[1], small[2], false))).toBe(1 + 2); // 10 at 8 wide: a round of 8, then a round of 2
+    expect(rounds(planOf(small[1], small[2], true))).toBe(1 + 1); // 10 at 16 wide: one round
+  });
+
+  it("UT-FINPERF-173 with every switch off (`concurrentWrites` off) the plan is the sequential one: no group, no limit", () => {
+    const plan = optimizeTrancheSavePlan(planTrancheSave({
+      form: seniorForm({ trancheId: "t1", repaymentRows: repayRows(ys25, true), stepUpRows: stepUps(4) }),
+      project, seniorDebtCategoryId: "c3", duplicateIds: ["t1"], storedRepayments: storedRepay(ys25), storedStepUps: [],
+    }), FINANCE_PERF_ALL_OFF);
+    expect(plan.writes.every((w) => w.concurrent === undefined && w.concurrencyLimit === undefined)).toBe(true);
+  });
+});
