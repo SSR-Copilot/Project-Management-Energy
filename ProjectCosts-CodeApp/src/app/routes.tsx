@@ -16,7 +16,8 @@ import { Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams } 
 import { EmptyState, LoadingOverlay } from "@/components";
 import { useSession } from "./SessionContext";
 import { costLocation, launchCostPath, launchPmPath } from "./deepLinks";
-import { loadGeneralDataScreen, loadProjectOverviewScreen } from "./screenLoaders";
+import { loadGeneralDataScreen, loadGeneratorsScreen, loadProjectOverviewScreen } from "./screenLoaders";
+import { useGeneratorsWarmup } from "./generatorsWarmup";
 
 // The two screens the app usually opens on load through `screenLoaders.ts`, so `bootPrefetch.ts` can start them early.
 const ProjectOverviewScreen = lazy(loadProjectOverviewScreen);
@@ -32,7 +33,7 @@ const AddCostsFromTableScreen = lazy(() => import("@/features/cost/add-costs-fro
  */
 const GeneralDataScreen = lazy(loadGeneralDataScreen);
 const MilestonesScreen = lazy(() => import("@/features/pm/milestones/Screen"));
-const GeneratorsScreen = lazy(() => import("@/features/pm/generators/Screen"));
+const GeneratorsScreen = lazy(loadGeneratorsScreen);
 const ProductionScreen = lazy(() => import("@/features/pm/production/Screen"));
 const CheckListScreen = lazy(() => import("@/features/pm/checklist/Screen"));
 const TeamScreen = lazy(() => import("@/features/pm/team/Screen"));
@@ -125,6 +126,8 @@ export function ProjectScreenGate() {
   const { project, projectId, projectIdInvalid, projectNotFound, loading, error } = useSession();
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  // D141: once a project's Project Management screen is open, the Generators screen's chunk and independent reads start early.
+  useGeneratorsWarmup(loading || projectIdInvalid || error || projectNotFound || !project ? undefined : projectId, pathname);
   const action = { label: "Back to Projects", onClick: () => navigate("/projects") };
   if (loading) return <LoadingOverlay mode="inline" label="Loading project…" />;
   if (projectIdInvalid) return <EmptyState title="This project link is invalid"

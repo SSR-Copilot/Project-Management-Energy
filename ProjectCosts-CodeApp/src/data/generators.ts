@@ -46,6 +46,7 @@ import { registerDefaultBulkBackend } from "./bulkBackend";
 import { fetchAll, fetchPage } from "./client";
 import { mapLimit } from "./concurrency";
 import { createGeneratorsBulkBackend } from "./generatorsBulk";
+import { generatorsPerf } from "./generatorsPerfFlags";
 import { ACTIVE, and, chunk, eq, gtDate, guid, idIn, lookupEq, lookupIn, numberOf, or } from "./odata";
 
 registerDefaultBulkBackend(createGeneratorsBulkBackend);
@@ -55,6 +56,25 @@ const str = (v: unknown): string | null => (typeof v === "string" && v !== "" ? 
 const num = (v: unknown): number | null => numberOf(v) ?? null;
 const bool = (v: unknown): boolean | null => (typeof v === "boolean" ? v : null);
 const raw = <T,>(rows: T[]): Raw[] => rows as unknown as Raw[];
+
+/** Id-chunk reads of one call in flight at once (`GENERATORS_PERF.parallelChunks`, D142); the same width as `OPEX_READ_CONCURRENCY`. */
+export const GENERATORS_READ_CONCURRENCY = 4;
+
+/**
+ * Runs `read` once per chunk of `ids` (`CHUNK` = 40 per request) and returns the chunks' rows joined IN CHUNK ORDER.
+ *
+ * `GENERATORS_PERF.parallelChunks` ON (D142): the chunks run through the shared pool (`mapLimit`, at most
+ * `GENERATORS_READ_CONCURRENCY` at once), so a project with 200 types costs 2 round trips of the chain, not 5. The result is
+ * the one the serial loop gave: same rows, same order, and the first failed chunk fails the read (no chunk is STARTED after
+ * a failure; the ones already in flight finish and are discarded). OFF: the old loop, one chunk after another.
+ */
+async function readChunks<R>(ids: readonly string[], read: (part: string[]) => Promise<R[]>): Promise<R[]> {
+  const parts = chunk(ids);
+  if (generatorsPerf().parallelChunks) return (await mapLimit(parts, read, GENERATORS_READ_CONCURRENCY)).flat();
+  const out: R[] = [];
+  for (const part of parts) out.push(...(await read(part)));
+  return out;
+}
 
 /* ═══════════════════════════════════════════════════════════════ the project ══ */
 
@@ -195,16 +215,11 @@ export async function listOrderableGenerators(fid: string | null): Promise<Catal
 
 /** The `Generator` rows of the project's WTG types (`ThisItem.Generator.…` on the cards). */
 export async function listGeneratorsByIds(ids: readonly string[]): Promise<CatalogModel[]> {
-  const out: CatalogModel[] = [];
-  for (const part of chunk([...new Set(ids)])) {
-    const rows = raw(await fetchAll(
-      "load the project's generator models",
-      (o) => Vsb_generatorsService.getAll(o),
-      { select: GENERATOR_SELECT, filter: idIn(GENERATOR_COL.id, part) },
-    ));
-    out.push(...rows.map(toModel));
-  }
-  return out;
+  return readChunks([...new Set(ids)], async (part) => raw(await fetchAll(
+    "load the project's generator models",
+    (o) => Vsb_generatorsService.getAll(o),
+    { select: GENERATOR_SELECT, filter: idIn(GENERATOR_COL.id, part) },
+  )).map(toModel));
 }
 
 /* ═════════════════════════════════════════════════════ WTG types and turbines ══ */
@@ -255,28 +270,56 @@ const TURBINE_SELECT = [
  * project-wide. `Index = Value(Last(Split(Name, "_")))`.
  */
 export async function listProjectTurbines(typeIds: readonly string[]): Promise<TurbineRow[]> {
-  const out: TurbineRow[] = [];
-  for (const part of chunk(typeIds)) {
-    const rows = raw(await fetchAll(
-      "load the project's turbines",
-      (o) => Vsb_generatorinprojectsService.getAll(o),
-      { select: TURBINE_SELECT, filter: lookupIn("vsb_moduletypeinprojectid", part) },
-    ));
-    out.push(...rows.map((r) => ({
-      id: String(r[GEN_INSTANCE_COL.id]),
-      name: str(r[GEN_INSTANCE_COL.name]),
-      typeId: str(r[GEN_INSTANCE_COL.moduleTypeInProject]),
-      index: turbineIndex(str(r[GEN_INSTANCE_COL.name])),
-      effectiveCapacity: num(r[GEN_INSTANCE_COL.effectiveCapacity]),
-      effectiveHubHeight: num(r[GEN_INSTANCE_COL.effectiveHubHeight]),
-      effectiveHubHeightChanged: bool(r[GEN_INSTANCE_COL.effectiveHubHeightChanged]) === true,
-      foundationPlinth: num(r[GEN_INSTANCE_COL.foundationPlinth]),
-      hubHeightExclPlinth: num(r[GEN_INSTANCE_COL.hubHeightExclPlinth]),
-      totalHeight: num(r[GEN_INSTANCE_COL.totalHeight]),
-      status: num(r.statecode) ?? 0,
-    })));
-  }
-  return out;
+  return readChunks(typeIds, async (part) => raw(await fetchAll(
+    "load the project's turbines",
+    (o) => Vsb_generatorinprojectsService.getAll(o),
+    { select: TURBINE_SELECT, filter: lookupIn("vsb_moduletypeinprojectid", part) },
+  )).map(toTurbine));
+}
+
+const toTurbine = (r: Raw): TurbineRow => ({
+  id: String(r[GEN_INSTANCE_COL.id]),
+  name: str(r[GEN_INSTANCE_COL.name]),
+  typeId: str(r[GEN_INSTANCE_COL.moduleTypeInProject]),
+  index: turbineIndex(str(r[GEN_INSTANCE_COL.name])),
+  effectiveCapacity: num(r[GEN_INSTANCE_COL.effectiveCapacity]),
+  effectiveHubHeight: num(r[GEN_INSTANCE_COL.effectiveHubHeight]),
+  effectiveHubHeightChanged: bool(r[GEN_INSTANCE_COL.effectiveHubHeightChanged]) === true,
+  foundationPlinth: num(r[GEN_INSTANCE_COL.foundationPlinth]),
+  hubHeightExclPlinth: num(r[GEN_INSTANCE_COL.hubHeightExclPlinth]),
+  totalHeight: num(r[GEN_INSTANCE_COL.totalHeight]),
+  status: num(r.statecode) ?? 0,
+});
+
+/**
+ * The navigation path the by-project turbine read filters through (D142, `GENERATORS_PERF.readsByProject`, default OFF).
+ *
+ * `vsb_generatorinproject` has NO project column of its own: its parent is `vsb_moduletypeinprojectid`, a POLYMORPHIC lookup
+ * (a WTG type or a PV type; the writes bind `vsb_ModuleTypeInProjectId_vsb_generatortypeinproject@odata.bind`, `rules.ts`
+ * `moduleTypeWtg`). The filter goes through that navigation property to the WTG type's project lookup. The repo already
+ * filters through single-valued navigation properties (`vsb_BoPContractStandardAssumption/_vsb_country_value`, `adminContract.ts`),
+ * but NOT through a polymorphic one, and nobody has run this against VSBCloud_Dev: hence the switch is OFF until the probe
+ * (`ProjectDocs/app-docs/GENERATORS-READ-PERF-DEV-PROBE.md`) shows the server answers it with the same rows. If the probe shows
+ * a different spelling, this constant is the one place to change.
+ */
+export const TURBINES_BY_PROJECT_NAVIGATION = "vsb_ModuleTypeInProjectId_vsb_generatortypeinproject";
+
+/** The turbine read's filter for one project (exported for the tests and the probe). */
+export const turbinesByProjectFilter = (projectId: string): string =>
+  `${TURBINES_BY_PROJECT_NAVIGATION}/${GEN_TYPE_COL.project} eq ${guid(projectId)}`;
+
+/**
+ * `listProjectTurbines` without the types read first: every turbine whose WTG type belongs to the project, in ONE request
+ * (paged by `fetchAll`), so the turbines no longer wait for the types (D142, `GENERATORS_PERF.readsByProject`). The same rows
+ * as the by-type read when the types read has no stale or in-flight difference; the order is the server's (the by-type read has
+ * no `$orderby` either, and the screen sorts by `index`). OFF by default: see `TURBINES_BY_PROJECT_NAVIGATION`.
+ */
+export async function listProjectTurbinesByProject(projectId: string): Promise<TurbineRow[]> {
+  return raw(await fetchAll(
+    "load the project's turbines",
+    (o) => Vsb_generatorinprojectsService.getAll(o),
+    { select: TURBINE_SELECT, filter: turbinesByProjectFilter(projectId) },
+  )).map(toTurbine);
 }
 
 /* ═══════════════════════════════════════════════════════ the six other families ══ */
@@ -340,14 +383,13 @@ async function catalogueSuppliers(
   kind: "inverter" | "substructure", ids: readonly string[],
 ): Promise<Map<string, string | null>> {
   const out = new Map<string, string | null>();
-  for (const part of chunk([...new Set(ids)])) {
-    const rows: Raw[] = kind === "inverter"
-      ? raw(await fetchAll("load the inverter catalogue", (o) => Vsb_invertersService.getAll(o),
-        { select: ["vsb_inverterid", "vsb_tier1supplier"], filter: idIn("vsb_inverterid", part) }))
-      : raw(await fetchAll("load the substructure catalogue", (o) => Vsb_substructuresService.getAll(o),
-        { select: ["vsb_substructureid", "vsb_tier1supplier"], filter: idIn("vsb_substructureid", part) }));
-    for (const r of rows) out.set(String(r[kind === "inverter" ? "vsb_inverterid" : "vsb_substructureid"]), str(r.vsb_tier1supplier));
-  }
+  const idColumn = kind === "inverter" ? "vsb_inverterid" : "vsb_substructureid";
+  const rows = await readChunks([...new Set(ids)], async (part) => kind === "inverter"
+    ? raw(await fetchAll("load the inverter catalogue", (o) => Vsb_invertersService.getAll(o),
+      { select: ["vsb_inverterid", "vsb_tier1supplier"], filter: idIn("vsb_inverterid", part) }))
+    : raw(await fetchAll("load the substructure catalogue", (o) => Vsb_substructuresService.getAll(o),
+      { select: ["vsb_substructureid", "vsb_tier1supplier"], filter: idIn("vsb_substructureid", part) })));
+  for (const r of rows) out.set(String(r[idColumn]), str(r.vsb_tier1supplier));
   return out;
 }
 
@@ -681,28 +723,24 @@ export async function loadTurbineAllocations(turbineIds: readonly string[]): Pro
   countByCost: Record<string, number>;
 }> {
   const allocations: { id: string; costId: string; turbineId: string }[] = [];
-  for (const part of chunk(turbineIds)) {
-    const rows = raw(await fetchAll(
-      "load the turbines' land-lease allocations",
-      (o) => Vsb_landleaseallocationwtgsService.getAll(o),
-      { select: ["vsb_landleaseallocationwtgid", "_vsb_projectcost_value", "_vsb_generatorinproject_value"], filter: lookupIn("vsb_generatorinproject", part) },
-    ));
-    for (const r of rows) {
-      const costId = str(r._vsb_projectcost_value);
-      if (costId) allocations.push({ id: String(r.vsb_landleaseallocationwtgid), costId, turbineId: String(r._vsb_generatorinproject_value) });
-    }
+  const allocationRows = await readChunks(turbineIds, async (part) => raw(await fetchAll(
+    "load the turbines' land-lease allocations",
+    (o) => Vsb_landleaseallocationwtgsService.getAll(o),
+    { select: ["vsb_landleaseallocationwtgid", "_vsb_projectcost_value", "_vsb_generatorinproject_value"], filter: lookupIn("vsb_generatorinproject", part) },
+  )));
+  for (const r of allocationRows) {
+    const costId = str(r._vsb_projectcost_value);
+    if (costId) allocations.push({ id: String(r.vsb_landleaseallocationwtgid), costId, turbineId: String(r._vsb_generatorinproject_value) });
   }
   const countByCost: Record<string, number> = {};
-  for (const part of chunk([...new Set(allocations.map((a) => a.costId))])) {
-    const rows = raw(await fetchAll(
-      "count the land-lease costs' allocations",
-      (o) => Vsb_landleaseallocationwtgsService.getAll(o),
-      { select: ["vsb_landleaseallocationwtgid", "_vsb_projectcost_value"], filter: lookupIn("vsb_projectcost", part) },
-    ));
-    for (const r of rows) {
-      const c = String(r._vsb_projectcost_value);
-      countByCost[c] = (countByCost[c] ?? 0) + 1;
-    }
+  const countRows = await readChunks([...new Set(allocations.map((a) => a.costId))], async (part) => raw(await fetchAll(
+    "count the land-lease costs' allocations",
+    (o) => Vsb_landleaseallocationwtgsService.getAll(o),
+    { select: ["vsb_landleaseallocationwtgid", "_vsb_projectcost_value"], filter: lookupIn("vsb_projectcost", part) },
+  )));
+  for (const r of countRows) {
+    const c = String(r._vsb_projectcost_value);
+    countByCost[c] = (countByCost[c] ?? 0) + 1;
   }
   return { allocations, countByCost };
 }

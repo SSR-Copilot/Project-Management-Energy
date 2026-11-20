@@ -17,7 +17,8 @@ import { localeInfo } from "@/domain/locale";
 import { ensureInitialized } from "@/platform/powerClient";
 import { trace } from "@/platform/telemetry";
 import { bootTarget, needsLaunchParams, type BootTarget } from "./bootPlan";
-import { loadGeneralDataScreen, loadProjectOverviewScreen } from "./screenLoaders";
+import { generatorsPerf } from "@/data/generatorsPerfFlags";
+import { loadGeneralDataScreen, loadGeneratorsScreen, loadProjectOverviewScreen } from "./screenLoaders";
 import { sessionProjectQueryOptions, sessionQueryOptions } from "./SessionContext";
 import { startupFlags } from "./startupFlags";
 
@@ -33,6 +34,16 @@ const quietly = (what: string, work: () => Promise<unknown>): Promise<void> =>
   Promise.resolve().then(work).then(() => undefined, (error: unknown) => trace("warning", `boot prefetch: ${what} failed`, { error }));
 
 export async function prefetchTarget(qc: QueryClient, target: BootTarget): Promise<void> {
+  if (target.kind === "generators") {
+    // D141 (`GENERATORS_PERF.prefetch`): the reads that need only the project id; the rest wait for them inside the screen.
+    if (!generatorsPerf().prefetch) return;
+    await quietly("generators", async () => {
+      const q = await import("@/features/pm/generators/queries");
+      await q.prefetchGenerators(qc, target.projectId);
+    });
+    return;
+  }
+
   if (target.kind === "projects") {
     await quietly("project list", async () => {
       // The screen's own modules, loaded on demand so the entry bundle does not carry them.
@@ -80,7 +91,8 @@ export async function prefetchTarget(qc: QueryClient, target: BootTarget): Promi
 
 function preloadChunk(target: BootTarget): void {
   const load = target.kind === "projects" ? loadProjectOverviewScreen
-    : target.kind === "general-data" ? loadGeneralDataScreen : undefined;
+    : target.kind === "general-data" ? loadGeneralDataScreen
+      : target.kind === "generators" && generatorsPerf().prefetch ? loadGeneratorsScreen : undefined;
   // A chunk that cannot be fetched is the router's problem when it needs it (it shows its error then).
   load?.().catch(() => undefined);
 }

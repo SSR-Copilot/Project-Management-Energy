@@ -759,3 +759,42 @@ Implemented in the worktree `optimize-finance-perf`, uncommitted until approved.
 | Cluster Checklist | The first visit to a cluster can copy its default templates as one bulk create instead of N single creates (switch `CHECKLIST_BULK.materialise`, OFF until the DEV test; projects without an Owning Business Unit keep the single creates) | **new**, behind a switch |
 | Cluster Checklist | Request-count and render-count tests (`UT-CHKPERF-*`) pin the baseline and the result | **new** (test gate) |
 | Cluster Checklist | Component extraction so typing no longer re-renders the rows; one batched people request; dropping the guarded reads of Move to Cluster (rejected: removes the D127 §5 protection) | **proposed (not approved)**, see D138 |
+
+
+## Generators screen: targeted reloads, a split load gate and a prefetch (19 Nov 2026, D141, number provisional) — new / divergences (not approved, not run on DEV)
+
+| Screen | Change | Status |
+|---|---|---|
+| Generators | A save reloads only the queries it can change (the types, that type's turbines, the one family it wrote, the project roll-up) instead of every Generators query; rollback and Retry cleanup keep the full reload. A BESS save is modelled at 3 requests instead of 12 to 14 (from the code, not measured). Switch `GENERATORS_PERF.targetedReload`. UT-GENPERF-004..031 | **new** (performance only), behind a switch |
+| Generators | **DIVERGENCE:** what no plan writes (planning, other families, unrelated turbines) is no longer refetched after a save; another user's change to it shows at the next visit or window focus. UT-GENPERF-006..012 | **proposed (not approved)** |
+| Generators | The first view waits only for what the list shows; the orderable catalogue, price index, device costs and AllWTG costs load when a panel or confirmation that needs them opens. Writes stay held back until they have landed (F3 unchanged), the Delete Turbine and Delete PV confirmations stay open until their read has landed. Switch `GENERATORS_PERF.gateByList`. UT-GENPERF-032..050 | **new** (performance only), behind a switch |
+| Generators | **DIVERGENCE:** a panel that needs one of those reads shows its Save disabled for the length of one read; the Canvas loaded everything in `OnVisible`. UT-GENPERF-040..046 | **proposed (not approved)** |
+| Generators | The ten reads that need only the project id start before the screen mounts for a Generators deep link, and 1.5 s after any Project Management screen of the project opens (once per project), together with the screen's chunk (D119 pattern). Switch `GENERATORS_PERF.prefetch`. UT-GENPERF-051..064 | **new** (performance only), behind a switch |
+| Generators | **DIVERGENCE:** ten small speculative reads per project start whether or not the person goes to Generators. UT-GENPERF-062..064 | **proposed (not approved)** |
+| Cross-cutting (tests) | A safety net for the reload map: the real plan builders of every kind are run and every table they write must be covered; `rules.ts` is scanned so a table added to a plan builder fails the suite until it is mapped. UT-GENPERF-015..028 | **new test** |
+
+
+## Generators screen: reads without load chains, and a catalogue kept across sessions (19 Nov 2026, D142, number provisional) — new / divergences (not approved, not run on DEV)
+
+| Screen | Change | Status |
+|---|---|---|
+| Generators | The id-chunked reads (turbines by type, generator models, inverter and substructure suppliers, the turbines' land-lease allocations) send their chunks together (at most 4 at once) instead of one after another; same rows, same order, a failed chunk still fails the read. Switch `GENERATORS_PERF.parallelChunks`. UT-GENPERF-200..210 | **new** (performance only), behind a switch (ON) |
+| Generators | The turbines can be read by the project in one request instead of waiting for the types and then reading by type ids (a filter through the turbine's WTG-type lookup). Not verified against the server: the switch `GENERATORS_PERF.readsByProject` ships OFF until the DEV probe (`GENERATORS-READ-PERF-DEV-PROBE.md`). UT-GENPERF-220..223, 270..275 | **new** (performance only), behind a switch (OFF) |
+| Generators | **DIVERGENCE:** with `readsByProject` on, the turbine list is the server's answer for the project's WTG types at read time, not the rows of the type ids an earlier read returned; the two differ only if a type is created or removed between the reads. UT-GENPERF-220, 223 | **proposed (not approved)** |
+| Generators | The orderable generator catalogue is kept across sessions in IndexedDB (version key with the build id, 12 h maximum age, shown at once and re-read in the background, any storage failure behaves as an empty cache, only the catalogue's model columns, no personal data). Seeded rows never allow a save before the fresh read has landed. Switch `GENERATORS_PERF.persistCatalogue`. UT-GENPERF-240..265, 280..286 | **new** (performance only), behind a switch (OFF) |
+| Generators | **DIVERGENCE:** with `persistCatalogue` on, the catalogue panel can show a copy up to 12 h old for the length of one read at the start of a session, where the Canvas always read it fresh. UT-GENPERF-281, 284 | **proposed (not approved)** |
+| Cross-cutting | A reusable `data/persistedReference.ts` (stale-while-revalidate storage in IndexedDB with version, age, timeout and a never-throws fallback) and its tests against a fake `IDBFactory`. UT-GENPERF-240..265 | **new** (reusable module, test gate) |
+| Generators | Models by project and PV types without waiting: not done. The generator table has no project column and the SDK has no `$expand`; the PV types are already read by the project and do not wait | **not done**, see D142 section 2 |
+
+
+## Generators screen: optimistic status toggle, a split screen component, long lists and lazy panels (19 Nov 2026, D143, number provisional) — new / divergences (not approved, not run on DEV)
+
+| Screen | Change | Status |
+|---|---|---|
+| Generators | Activate / Deactivate can show the new status at once (the type's chip and the command caption, its turbines' status) and puts the exact previous rows back if the save fails, is stopped part-way or finds its rows gone, with the existing error and partial-save texts; the targeted reload still runs after a success and after a failure. The write plan is built from the real rows and the screen holds every command back until the reload has replaced the optimistic rows (F3). Switch `GENERATORS_PERF.optimisticToggle`, ships OFF. UT-GENPERF-300..307, 310..316, 320..323 | **new** (perceived speed), behind a switch (OFF) |
+| Generators | **DIVERGENCE:** with `optimisticToggle` on, the status changes before the save has landed; the Canvas shows it after the writes and the reload. Twin: `optimisticTypesCanvasParity`, `optimisticTurbinesCanvasParity`; switch off = today. UT-GENPERF-302, 316, 321 | **proposed (not approved)** |
+| Generators | The 3,159-line screen is split: seven memoized family sections and eight panels in their own files, stable handlers, memoized id lists and PV rows. An update of one family's query, a card selection or a fold re-renders that family's section only; typing in a panel re-renders none. No visible change; the existing tests pass unedited. UT-GENPERF-330..336, 347..349, 360, 361 | **new** (performance and maintainability, no switch) |
+| Generators | An expanded WTG card with 10 or more turbines on its page is skipped by the browser while far off screen (`content-visibility: auto`, no windowing, no new dependency); rows, buttons, test ids and keyboard focus are unchanged. UT-GENPERF-350..352 | **new** (performance only) |
+| Generators | The eight form panels are loaded on first use (`React.lazy`), preloaded when the browser is idle; a named loading overlay shows if one is opened before its chunk has arrived. The Generators `Screen` chunk goes from 86.0 kB to 75.1 kB (gzip 22.6 to 22.1 kB). UT-GENPERF-340..346 | **new** (performance only) |
+| Generators | **DIVERGENCE (timing only):** a panel opened before its chunk has arrived shows a loading overlay for the length of one small download. UT-GENPERF-341, 343 | **proposed (not approved)** |
+| Cross-cutting (tests) | Render-count tests with a render probe (`sections/renderProbe.ts`) for the memoized sections; a hand mutation check (removing `memo`) fails six of the seven tests. UT-GENPERF-330..336 | **new test** |

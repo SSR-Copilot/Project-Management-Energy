@@ -37,840 +37,42 @@
  * "Add Others" (`ItemParentKey: "addOthers"`) while nothing is selected. The app's `CommandBar` has no
  * sub-menus, so they render flat, right after "Add Others" (`commandBarOrder`), and "Add Others" itself
  * does nothing — it has no `Switch` arm in the canvas `OnSelect` (D15c, D27).
+ *
+ * D143 (split of this file, no visible change): the galleries are memoized sections (`sections/WtgSection.tsx`,
+ * `sections/FamilySections.tsx`), the eight form panels are lazily loaded components (`sections/panels/`, `sections/panelLoader.ts`),
+ * and each panel's derived values are pure functions (`sections/panelModels.ts`). What stays here: the screen's state (selection,
+ * folding, the forms), the reads, the command bar, the confirmations and every write handler, so the write order is where it was.
  */
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import {
-  Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface,
-  DialogTitle, Dropdown, MessageBar, MessageBarBody, Option, Radio, Switch,
-  Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow, Text, Tooltip,
-  makeStyles, mergeClasses, tokens,
-} from "@fluentui/react-components";
-import {
-  ArrowLeftRegular, ArrowPreviousRegular, ArrowRightRegular, CheckmarkRegular,
-  DeleteRegular, DismissRegular, EditRegular,
-  InfoRegular, LockClosedRegular,
-} from "@fluentui/react-icons";
-import {
-  CommandBar, ConfirmDialog, EmptyState, FIELD_APPEARANCE, FormPanel, InformationPopUp, LoadingOverlay, ReadOnlyField,
-  WriteFeedback, type Command, useFieldControlClass,
-  ExpandChevron, HINTS,
-} from "@/components";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { QueryClient } from "@tanstack/react-query";
+import { Button, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, MessageBar, MessageBarBody } from "@fluentui/react-components";
+import { CheckmarkRegular, LockClosedRegular } from "@fluentui/react-icons";
+import { CommandBar, ConfirmDialog, EmptyState, InformationPopUp, LoadingOverlay, ReadOnlyField, WriteFeedback, type Command } from "@/components";
 import { useSession } from "@/app/SessionContext";
-import { CHOICE_PLANT } from "@/data/dataverseNames";
 import { GENERATORS_BULK } from "@/data/generatorsBulkFlags";
-import { media, palette, space } from "@/theme/tokens";
-import {
-  CANCEL_REQUEST, COMMAND_BAR_LABEL, DIALOG_LABELS, DIALOG_TEXT, GENERATORS_PAGE_SIZE, PERMISSION_MSG,
-  buildGeneratorPermissionPayload, buildInverterPermissionPayload, buildSubstructurePermissionPayload,
-  permissionModuleName, requiresPermissionRequest, type PermissionFamily,
-  GENERATORS_SCREEN_TEXT, GENERATOR_TYPE_SAVED_BANNER, HEIGHT_LIMIT_PM_MESSAGE, HYDROGEN_CARD_LABELS,
-  HYDROGEN_PANEL_LABELS, INVERTER_CARD_LABELS, LAST_CAPACITY_MESSAGES, LAST_CAPACITY_TITLES, PAGER_TOOLTIPS,
-  PAGE_LOCK_TITLE, PANEL_BUTTONS, PV_CAPACITY_MAX_LENGTH, PV_DEGRADATION_MAX_LENGTH, PV_FIELD_LABELS,
-  PV_MODULE_LABEL_MAX_LENGTH, PV_MSG, PV_OTHER_SUPPLIER_LABEL, PV_PANEL_TITLES, PV_SUPPLIER_PLACEHOLDER,
-  SIMPLE_CAPACITY_MAX_LENGTH, SIMPLE_TEXT_MAX_LENGTH, STORAGE_CARD_LABELS, STORAGE_PANEL_LABELS, SUBSTATION_CARD_LABELS,
-  SUBSTATION_PANEL_LABELS, SUBSTRUCTURE_CARD_LABELS, SUBSTRUCTURE_COST_INFO, SUBSTRUCTURE_COST_NOTE,
-  TOTAL_CAPACITY_LABEL, TURBINE_PANEL_LABELS, TURBINE_TABLE_LABELS, TYPE_DETAIL_FIELD_LABELS,
-  TYPE_PANEL_LABELS, TYPE_PANEL_TOOLTIPS, WRITE_ERROR, WRITE_MSG, WTG_CARD_LABELS,
-  buildTurbineNames, canAddGenerator, canSavePvType, canSaveSimple, canSaveTurbine,
-  canSaveType, typeSaveBlockedReason, cancelRequestVisible, capacityGuardReason, cascadeOptions, changeStatusDialog,
-  commandBarOrder, commandBarState, commandParentKey, costPerWtg, currencyCaption, defaultSelection, fmtCapacity, fmtHeight, forLanguage,
-  generatorCommandIcon, generatorsTotalRowsText, heightBlocksSave, heightLimitExceeded,
-  heightPopupTypeName, inverterCardValues, isBodyVisible, isDummySupplier, isOtherSupplierModule,
-  isPageLocked, newTurbineHeights, nextTurbineIndex, numberOfGeneratorsMessage, numericOr,
-  opexDependencyMessage, overHeightLimit, pageCount, pageLock, pagerVisible, paginationText,
-  permissionStateLabel, permissionStateTone, planCreateGeneratorType, planDeleteGeneratorType, planDeleteInverterOrSubstructure,
-  planDeletePvType, planDeleteSimple, planDeleteTurbine, planGeneratorTypeFollowUp, planPvFollowUp,
-  planSavePvType, planSaveSimple, planSaveTurbine, planToggleStatus, projectCatalog, pvCardValues,
-  pvSaveErrorText, pvSaveProgressText, pvDeleteErrorText, pvSupplierOptions, resolveModel, rowClickFolds,
-  selectedIn, selectionAfterAddPv, selectionAfterAddWtg, showsPermissionChip, simpleCardValues,
-  simpleFormDefaults, simpleSaveProgressText, statusLabel,
-  GUARD_READ_MSG, dataSettling, fmtTurbineTotalHeightBox, loadErrorMode, opexGuardBlock, opexReadBanner, opexReadState,
-  pvDegradationPrefill, pvFollowUpIsNew,
-  ROLLBACK_DETAIL_MAX, ROLLBACK_MSG, deletePartialMessage, describeLeftovers, planRollbackCreate, plannedDeleteRows, remainingRows,
-  rollbackApplies, substructureCardValues,
-  substructureCostNoteVisible, toggleExpanded, toggleSelection, turbineFormDefaults,
-  turbineHeightBlocksSave, turbinePanelPrefix, turbinePanelTitle, turbinePanelTotalHeight,
-  turbineSaveProgressText, typeFieldBlankMessage, typeFilterMessage, typeSaveLabel, typeSaveProgressText,
-  validateEffectiveCapacity, validateEffectiveHubHeight, validateFoundationPlinth, validatePvTypeForm,
-  validateSimpleForm, validateTurbineName, validateTypeForm, wtgCardValues, wtgFoldSelection,
-  INVERTER_PANEL_LABELS, INVERTER_TYPE_LABELS, REPLACE_LABELS, REPLACE_MSG, SUBSTRUCTURE_MSG,
-  SUBSTRUCTURE_PANEL_LABELS, SUBSTRUCTURE_TYPE_LABELS, canSaveInverter, canSaveSubstructure,
-  effectiveOtherSupplier, fmtHubHeight, inverterFormDefaults, inverterPanelTitle, inverterSaveProgressText,
-  isPlantOtherSupplier, planReplaceGeneratorType, planReplaceGeneratorTypeFollowUp, planReplacePvType,
-  planReplacePvTypeFollowUp, planSaveInverter, planSaveSubstructure, plantPanelSaveLabel,
-  plantRequestsPermission, plantSupplierDisplayName, plantSupplierOptions, replaceGeneratorTitle,
-  replaceProgressText, replacePvProgressText, replacePvTitle, replaceSuccessText, replaceWtgSaveable,
-  substructureFormDefaults, substructureNeedsPvCapacity, substructurePanelTitle,
-  substructureSaveProgressText, validateInverterForm, validateSubstructureForm,
-  type CapacityGuardReason, type CatalogModel, type GeneratorCommandKey, type GeneratorTypeRow,
-  type LandedRowRef, type RollbackScenario,
-  type InverterFormState, type PlanProject, type PlantFamily, type PvTypeFormState, type ReplaceInputs,
-  type ReplaceWtgForm, type SelectedRow, type SimpleCapacityFamily, type SimpleFormState,
-  type SimpleTypeRow, type SubstructureFormState, type TurbineFormState, type TurbineRow, type TypeFormState,
-} from "./rules";
+import { generatorsPerf } from "@/data/generatorsPerfFlags";
+import { COMMAND_BAR_LABEL, DIALOG_LABELS, DIALOG_TEXT, PERMISSION_MSG, buildGeneratorPermissionPayload, buildInverterPermissionPayload, buildSubstructurePermissionPayload, permissionModuleName, requiresPermissionRequest, type PermissionFamily, GENERATORS_SCREEN_TEXT, GENERATOR_TYPE_SAVED_BANNER, LAST_CAPACITY_MESSAGES, LAST_CAPACITY_TITLES, PAGE_LOCK_TITLE, PV_MSG, TOTAL_CAPACITY_LABEL, WRITE_ERROR, WRITE_MSG, buildTurbineNames, capacityGuardReason, changeStatusDialog, commandBarOrder, commandBarState, commandParentKey, defaultSelection, forLanguage, generatorCommandIcon, heightLimitExceeded, heightPopupTypeName, isBodyVisible, isPageLocked, nextTurbineIndex, numericOr, opexDependencyMessage, pageLock, planCreateGeneratorType, planDeleteGeneratorType, planDeleteInverterOrSubstructure, planDeletePvType, planDeleteSimple, planDeleteTurbine, planGeneratorTypeFollowUp, planPvFollowUp, planSavePvType, planSaveSimple, planSaveTurbine, planToggleStatus, projectCatalog, pvSaveErrorText, pvSaveProgressText, pvDeleteErrorText, rowClickFolds, selectedIn, selectionAfterAddPv, selectionAfterAddWtg, simpleFormDefaults, simpleSaveProgressText, GUARD_READ_MSG, dataSettling, loadErrorMode, opexGuardBlock, opexReadBanner, opexReadState, pvDegradationPrefill, pvFollowUpIsNew, ROLLBACK_DETAIL_MAX, ROLLBACK_MSG, deletePartialMessage, describeLeftovers, planRollbackCreate, plannedDeleteRows, remainingRows, rollbackApplies, toggleExpanded, toggleSelection, turbineFormDefaults, turbineSaveProgressText, typeSaveProgressText, wtgFoldSelection, REPLACE_MSG, SUBSTRUCTURE_MSG, inverterFormDefaults, inverterSaveProgressText, planReplaceGeneratorType, planReplaceGeneratorTypeFollowUp, planReplacePvType, planReplacePvTypeFollowUp, planSaveInverter, planSaveSubstructure, replaceProgressText, replacePvProgressText, replaceSuccessText, substructureFormDefaults, substructureNeedsPvCapacity, substructureSaveProgressText, type CatalogModel, type GeneratorCommandKey, type GeneratorTypeRow, type LandedRowRef, type RollbackScenario, type InverterFormState, type PlanProject, type PlantFamily, type PvTypeFormState, type ReplaceInputs, type ReplaceWtgForm, type SelectedRow, type SimpleCapacityFamily, type SimpleFormState, type SimpleTypeRow, type SubstructureFormState, type TurbineFormState, type TurbineRow, type TypeFormState } from "./rules";
 import { emptyPlan, type WritePlan } from "@/data/writePlan";
 import type { PlanResult } from "@/data/executePlan";
+import { SERVER_DECIDES, loadAllocations, loadNewTypeInputs, loadPvDeleteInputs, loadPvFollowUpInputs, useModulePermissionFlows, loadReplaceInputs, loadTypeDeleteInputs, useAllWtgLandLeaseCosts, useDeviceCosts, useEntraObjectId, useGeneratorCatalog, useGeneratorModels, useGeneratorTypes, useGeneratorWrites, useGeneratorsProject, useInflationIndex, useInverterTypes, useOpexDependency, usePlantSupplierCatalog, useProjectPlanning, useProjectTurbines, usePvModuleCatalog, usePvModuleTypes, useSimpleTypes, useSubstructureTypes } from "./hooks";
+import { confirmNeedsLazyRead, lazyNeeds, lazyPending, loadGate, readKnown } from "./loadGate";
+import { withReload, type ReloadKind } from "./reload";
+import { applyOptimisticToggle, nextToggleStatus } from "./optimisticToggle";
+import { HydrogenSection, InverterSection, PvSection, StorageSection, SubstationSection, SubstructureSection } from "./sections/FamilySections";
+import { PanelHost } from "./sections/lazyPanels";
 import {
-  SERVER_DECIDES, loadAllocations, loadNewTypeInputs, loadPvDeleteInputs, loadPvFollowUpInputs, useModulePermissionFlows,
-  loadReplaceInputs, loadTypeDeleteInputs,
-  useAllWtgLandLeaseCosts, useDeviceCosts, useEntraObjectId, useGeneratorCatalog, useGeneratorModels,
-  useGeneratorTypes, useGeneratorWrites, useGeneratorsProject, useInflationIndex, useInverterTypes,
-  useOpexDependency, usePlantSupplierCatalog, useProjectPlanning, useProjectTurbines, usePvModuleCatalog,
-  usePvModuleTypes, useSimpleTypes, useSubstructureTypes,
-} from "./hooks";
-
-/* ────────────────────────────────────────────────────────────────── styles */
-
-/**
- * The 1-px rule under every card header: `rec_…_Separator.Fill: RGBA(0, 120, 212, 1)` (Y:2435, and the same on
- * every type's header), not the app's themePrimary (#006eb9). It was #e0e0e0, sampled on 17 Nov 2026 (D90) from
- * a WTG card, whose container keeps the `GroupContainer` default `DropShadow.Light` and so draws the blue rule
- * with a grey shadow over it; the PV, substructure, storage, hydrogen and substation rules are plainly blue on
- * the canvas (user screenshot pair, 18 Nov 2026). The WTG / inverter shadow is `cardShadow`.
- */
-const CARD_RULE = "rgb(0, 120, 212)";
-/** `ColorFade(ColorValue(gblAppTheme.palette.Warning), 60%)` — the Height Limitation tag. */
-const HEIGHT_TAG_FILL = "rgb(248, 212, 158)";
-/** `con_Milestones_Page_LockMessage_1.Fill` and its icon / text colour. */
-const LOCK_FILL = "rgb(89, 89, 89)";
-const LOCK_TEXT = "rgb(255, 255, 255)";
-
-/** The gallery's `X: 20` inset, carried by each card's header and details (see `gallery`). */
-const CARD_INSET = "20px";
-
-/*
- * Layout transcribed from the canvas containers (UI layout pass, 20 Oct 2026):
- *  - `con_Generators_DisplayProject_Body_Form`: vertical; the command bar is the shell's slot;
- *  - `…_FirstColumn_PlantInfo_Fields`: PaddingTop 10, one 280 × 70 cell, caption at X 20;
- *  - each gallery (`gal_…`, X 20, Width `Parent.Width - 40`) is a list of CARDS: a 42-px header
- *    (selection dot at X 10, title at X 40, the chips and the fold icon right, a 1-px
- *    `RGBA(0,120,212)` rule at Y 41) and, while expanded, `…_CardDetails` (PaddingLeft / Right 20):
- *    the read-only fields in four `Parent.Width / 4` columns of 64-px cells (two rows when the
- *    card has more than four), then the WTG turbine bar, pager and grid (Width 850).
- */
-const useStyles = makeStyles({
-  /** The command bar's first icon starts on the left edge of the content under it (PO, 21 Oct 2026); `CommandBar` has no inset of its own. Main bar: over "Total Capacity" (the capacity block's 20 px inset). */
-  commandBar: { paddingLeft: "20px" },
-  /** The expanded card's "Add Generator" bar: over "Supplier" (the detail grid's 20 px inset). */
-  // The first detail column is flush with the card padding (see `detailCellFirst`), so no inset of its own.
-  cardCommandBar: {},
-  /*
-   * The page fills the shell's content column and does not grow past it: the command bar and Total Capacity stay
-   * put and only `scrollBody` scrolls, as `con_Generators_DisplayProject_Body_Form_FirstColumn` does in the canvas
-   * (`Height: Parent.Height - 155`, `LayoutOverflowY: Scroll`, Y:1302-1314; user, 18 Nov 2026).
-   */
-  page: { display: "flex", flexDirection: "column", flex: "1 1 auto", minHeight: 0, minWidth: 0 },
-  scrollBody: {
-    display: "flex", flexDirection: "column", flex: "1 1 auto", minHeight: 0, minWidth: 0,
-    overflowY: "auto", overflowX: "hidden", paddingBottom: "15px",
-  },
-  /** `con_…_PlantWtgCapacity` — 280 wide, 70 high, the caption and input inset 20. */
-  capacity: {
-    boxSizing: "border-box", width: "280px", maxWidth: "100%", minHeight: "70px",
-    marginTop: "10px", paddingLeft: "20px", paddingRight: "20px",
-  },
-  /** `con_Milestones_Page_LockMessage_1` — horizontal, items centred, LayoutGap 10, PaddingLeft 20. */
-  lock: {
-    display: "flex", alignItems: "center", columnGap: "10px",
-    paddingLeft: "20px", backgroundColor: LOCK_FILL, color: LOCK_TEXT,
-  },
-  /** `con_Milestones_pagelock_section_1` — Padding 8. */
-  lockBullets: {
-    display: "flex", flexDirection: "column", gap: space.xxs, color: LOCK_TEXT,
-    paddingTop: "8px", paddingBottom: "8px", paddingLeft: "8px", paddingRight: "8px",
-  },
-  lockTitle: { fontWeight: 600, color: LOCK_TEXT },
-  /**
-   * `gal_…` sits at X 20, but the card's blue header rule runs edge to edge (PO, 28 Oct 2026): the
-   * list has no margin, and its 20-px inset moves into the card header and details (`CARD_INSET`).
-   */
-  gallery: { display: "flex", flexDirection: "column", minWidth: 0 },
-  /** `con_…_Card` — the canvas `Width: Parent.Width - 10` gap is dropped so the rule runs end to end. */
-  card: { display: "flex", flexDirection: "column", minWidth: 0 },
-  /**
-   * `con_…_GeneratorType_Card` (Y:1344) and `con_…_Invertors_Card` (Y:3963) leave `DropShadow` at the
-   * `GroupContainer@1.5.0` default, `DropShadow.Light` (every other card container sets `DropShadow.None`): the
-   * WTG and inverter cards carry the light shadow the other screens draw as `shadow4`.
-   */
-  cardShadow: { boxShadow: tokens.shadow4 },
-  /** `con_…_CardHeader` — Height 42, the separator 1 px at Y 41. */
-  cardHeader: {
-    display: "flex", alignItems: "center", columnGap: space.s, minHeight: "42px",
-    paddingLeft: CARD_INSET,
-    borderBottomWidth: "1px", borderBottomStyle: "solid", borderBottomColor: CARD_RULE,
-  },
-  /** `img_…_RowSelectionDot` — 18 × 18 at X 10; the title starts at X 40. */
-  cardDot: { flexShrink: 0, marginLeft: "1px", width: "30px" },
-  cardTitle: { flex: 1, minWidth: 0, display: "flex", "& > span": { flex: 1, minWidth: 0 } },
-  /** `ico_…_Up` / `_Down` — 20 × 18, 32 from the right edge. */
-  // 8, not the canvas 12: the 28-px button (`foldButton`) keeps the glyph centred 22 px from the edge, as the 20-px canvas icon is.
-  cardFold: { flexShrink: 0, marginRight: "8px" },
-  /**
-   * `ico_…_Up` / `_Down` — a `Classic/Icon` (`Icon.ChevronUp` / `ChevronDown`) whose glyph spans the
-   * full 20-px width of its box. Fluent's chevron path fills only ~68 % of its em box, so the icon is
-   * 28 px to draw a ~20-px glyph. `Color: gblAppColors.Icon.Color` = themePrimary, `DisabledColor` =
-   * Grayscale10 (App.pa.yaml:1321-1323).
-   */
-  foldIcon: { fontSize: "28px", width: "28px", height: "28px", color: palette.themePrimary },
-  /** Fluent caps an icon-only small button at `max-width: 24px` with 1-px padding; lift it for the 28-px icon. */
-  foldButton: {
-    minWidth: "28px", maxWidth: "none", width: "28px", height: "28px",
-    paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
-  },
-  foldIconDisabled: { color: palette.Grayscale10 },
-  /** `con_…_CardDetails` — PaddingLeft / PaddingRight 20, LayoutGap 10. */
-  cardDetails: {
-    display: "flex", flexDirection: "column", rowGap: "10px",
-    paddingLeft: `calc(${CARD_INSET} + 20px)`, paddingRight: "20px", paddingTop: space.s, paddingBottom: space.s,
-  },
-  /** Four `Parent.Width / 4` columns of 64-px cells, filled column by column. */
-  detailGrid: {
-    display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gridAutoRows: "64px",
-    [media.belowMd]: { gridTemplateColumns: "repeat(2, minmax(0, 1fr))" },
-  },
-  detailGridTwoRows: { gridTemplateRows: "repeat(2, 64px)", gridAutoFlow: "column" },
-  /**
-   * `con_…_PvModule_CardDetails`: a horizontal auto-layout (LayoutGap 20) of `Width: 260` columns,
-   * each two 64-px cells stacked with LayoutGap 2.
-   */
-  /**
-   * Replace Generator / Replace PV Module Type: "Replace from" and "Replace to" side by side, each
-   * under its heading rule (canvas screenshots, 28 Oct 2026). WTG: 280 + 314 px, 120 apart; PV: 310 + 310, 40 apart.
-   */
-  replaceGrid: {
-    display: "grid", gridTemplateColumns: "280px 314px", columnGap: "120px", alignItems: "start",
-    [media.belowMd]: { gridTemplateColumns: "minmax(0, 1fr)", rowGap: space.l },
-  },
-  replaceGridPv: { gridTemplateColumns: "310px 310px", columnGap: "40px" },
-  replaceColumn: { display: "flex", flexDirection: "column", gap: space.m, minWidth: 0 },
-  /**
-   * The "Replace to" country toggle: its caption runs ~50 px past the 314-px fields on the canvas, so
-   * it wraps on two lines (about 300 px of text), not three (user screenshot, 3 Nov 2026).
-   */
-  /*
-   * The "Replace to" country filter as the canvas `con_GeneratorData_RightPanel_Form_Filter_Country`
-   * (Y:14039-14169, the same block the Add Generator Type panel uses): a 94-high container holding
-   *  - `tgl_…_Filter_Country`, a `Toggle@1.1.5` with NO label of its own, 40 high at the left;
-   *  - `lbl_…_Filter_Country_Text`, a separate classic Label at X + 60 / Y 3 (5-px padding), 40 high,
-   *    text centred, `gblAppSizes.Font.Medium` (11 pt = 14.67 px), rgb(50, 49, 48) — two lines;
-   *  - `con_…_Filter_CountryAvailability`, its own 32-high row under the toggle: the 18-px info icon
-   *    15 px in, the message 20 px after it.
-   * Positions measured off the 1.21.753 canvas Replace panel (3 Nov 2026): the caption runs ~50 px past
-   * the 314-px fields, and the availability row sits 63 px down.
-   */
-  // +70: the caption's 14.67-px first line ("…available in my", ~292 px on the canvas) needs ~320 px of
-  // text width to wrap on two lines, not three — still inside the 830-px panel.
-  countryFilter: { position: "relative", flexShrink: 0, height: "95px", width: "calc(100% + 70px)", marginTop: "5px" },
-  countryFilterSwitch: { position: "absolute", left: "3px", top: 0, height: "40px", display: "flex", alignItems: "center" },
-  countryFilterText: {
-    position: "absolute", left: "65px", right: 0, top: "3px", height: "40px",
-    display: "flex", alignItems: "center",
-    fontSize: "14.67px", lineHeight: "20px", color: "rgb(50, 49, 48)",
-  },
-  countryFilterInfo: {
-    position: "absolute", left: "15px", right: 0, top: "63px", height: "32px",
-    display: "flex", alignItems: "center", columnGap: "5px", fontSize: "14px", color: "#242424",
-  },
-  /** The column heading: semibold, over a 1-px rule that runs a little past the fields. */
-  replaceHeading: {
-    fontSize: "15px", fontWeight: tokens.fontWeightSemibold, color: "#323130",
-    paddingBottom: "6px", marginRight: "-20px",
-    borderBottomWidth: "1px", borderBottomStyle: "solid", borderBottomColor: "#8a8886",
-  },
-  pvGrid: {
-    display: "grid", gridTemplateRows: "repeat(2, 64px)", gridAutoFlow: "column", gridAutoColumns: "260px",
-    columnGap: "20px", rowGap: "2px", maxWidth: "100%", overflowX: "auto",
-  },
-  /**
-   * `con_…_{Storage,Hydrogen,Substation}_CardDetails_Context`: one horizontal auto-layout row
-   * (LayoutGap 20) of `Width: Parent.Width/4` cells.
-   */
-  simpleGrid: {
-    display: "grid", gridAutoFlow: "column", gridAutoColumns: "25%", gridTemplateRows: "64px",
-    columnGap: "20px", maxWidth: "100%",
-    [media.belowMd]: { gridAutoFlow: "row", gridAutoColumns: "auto", gridTemplateRows: "none", gridAutoRows: "64px" },
-  },
-  /** One read-only card field: the 20-px caption at X 20, the value box 5 px under it. */
-  detailCell: {
-    display: "flex", flexDirection: "column", rowGap: "5px", minWidth: 0,
-    paddingLeft: "20px", paddingRight: "20px", fontSize: "14px",
-  },
-  /** Column 1's caption and box sit at X 0 and span the column (`Width: Parent.Width - Self.X*2`, X unset). */
-  detailCellFirst: { paddingLeft: 0, paddingRight: 0 },
-  /** The canvas card captions are Semibold. */
-  detailLabel: {
-    lineHeight: "20px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-    fontWeight: tokens.fontWeightSemibold,
-  },
-  /**
-   * PV module card: `lbl_…_PvModule_CardDetails_*` is `Width: =Parent.Width-Self.X*2` while its box is a fixed
-   * `Width: =260`, so a long caption ("Degradation Remaining Years [% per annum]") runs on past the box in full.
-   */
-  detailLabelFull: { overflow: "visible", textOverflow: "clip" },
-  /** The canvas read-only `TextInput` (the `.canvas-field > input` look). */
-  detailValue: {
-    display: "flex", alignItems: "center", minHeight: "32px", boxSizing: "border-box",
-    paddingLeft: "12px", paddingRight: "12px", borderRadius: "4px",
-    backgroundColor: "#f4f4f4", color: "#242424",
-    overflow: "hidden", whiteSpace: "nowrap",
-  },
-  /** The turbine grid (`FluentDetailsList`, Width 850): Semibold header captions. */
-  turbineHead: { fontWeight: tokens.fontWeightSemibold },
-  turbineTable: { tableLayout: "fixed", width: "850px", maxWidth: "100%" },
-  /*
-   * `…_GeneratorsList.Height: If(TotalRows < PageSize, TotalRows * 35 + 50, PageSize * 35 + 50)` (Y:2085-2098),
-   * while the PowerCAT DetailsList inside draws a 42-px header and 42-px rows, so the canvas grid overflows its
-   * box and scrolls (last row cut, vertical scrollbar; user screenshot pair, 18 Nov 2026). The box is the
-   * `maxHeight` set inline per card; the table keeps the 42-px rows.
-   */
-  turbineScroll: { overflowY: "auto", overflowX: "hidden", maxWidth: "100%", scrollbarGutter: "stable" },
-  turbineHeadRow: { height: "42px" },
-  /**
-   * The over-height-limit icon, 16 px (Y:2382-2391). The column sets `TagColor: "rgb(255, 140, 0)"` and a per-row
-   * `ImageColor` of `rgb(255, 172, 28)` (Y:2147-2148); the live grid draws the darker orange (user, 18 Nov 2026).
-   */
-  turbineInfo: { color: "rgb(255, 140, 0)", fontSize: "16px", display: "block" },
-  /**
-   * `columns_Items` `ColWidth` plus the list's cell padding: the name `Max(850 - 570, 40)`, Total
-   * Height 155, Effective Capacity 255, then the 18- / 16-px edit and delete icons side by side.
-   */
-  turbineColName: { width: "296px" },
-  turbineColHeight: { width: "171px" },
-  turbineColCapacity: { width: "279px" },
-  turbineColIcon: { width: "34px" },
-  /** `AlternateRowColor: gblAppTheme.palette.Grayscale30` — every other row, starting with the first. 42-px rows (see `turbineScroll`). */
-  turbineRow: { height: "42px", "&:nth-child(odd)": { backgroundColor: palette.Grayscale30 } },
-  /** Numbers are right-aligned in the canvas card boxes (`Align.Right`). */
-  detailValueNumeric: { justifyContent: "flex-end" },
-  // 10 px between the tags: `con_Generator_GeneratorHeightLimitationTag.X = con_Generator_GeneratorStatus.X - Self.Width - 10`.
-  title: { display: "flex", alignItems: "center", flexWrap: "wrap", gap: "10px" },
-  /** `txt_…_GeneratorType` takes the header's width; the chips sit right of it. */
-  /** `txt_…_GeneratorType` is a `Text@0.0.51` with no `Weight`: regular. */
-  titleText: { flex: "1 1 auto", fontWeight: tokens.fontWeightRegular },
-  /** `con_…_RequestState` / `lbl_Generator_GeneratorStatus` — a 24-px chip, Medium / ExtraSmall. */
-  chip: {
-    display: "inline-flex", alignItems: "center", justifyContent: "center",
-    minHeight: "24px", minWidth: "100px", boxSizing: "border-box",
-    // `con_Generator_GeneratorStatus.Radius*: =34` — a pill, as on the live screen.
-    borderRadius: "34px",
-    paddingLeft: space.s, paddingRight: space.s,
-    fontSize: "12px", color: palette.Grayscale00,
-    borderTopWidth: "1px", borderRightWidth: "1px", borderBottomWidth: "1px", borderLeftWidth: "1px",
-    borderTopStyle: "solid", borderRightStyle: "solid", borderBottomStyle: "solid", borderLeftStyle: "solid",
-    borderTopColor: palette.Grayscale10, borderRightColor: palette.Grayscale10,
-    borderBottomColor: palette.Grayscale10, borderLeftColor: palette.Grayscale10,
-    backgroundColor: palette.Grayscale40,
-  },
-  /**
-   * `con_…_RequestState` (Y:3688-3758): a 165 × 24 box, 1-px border, the label centred at
-   * `gblAppSizes.Font.Medium`, coloured by state — border and text `gblAppColors.Success / Error /
-   * Warning`, fill the matching `…Bg` (the palette colour + `20` alpha: 12.5 %). Canceled: no border
-   * or fill, the text `ButtonDisabledBg` #bdbdbd.
-   */
-  permChip: {
-    display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-    width: "165px", height: "24px", boxSizing: "border-box", borderRadius: "4px",
-    fontSize: "14.67px", whiteSpace: "nowrap",
-    borderTopWidth: "1px", borderRightWidth: "1px", borderBottomWidth: "1px", borderLeftWidth: "1px",
-    borderTopStyle: "solid", borderRightStyle: "solid", borderBottomStyle: "solid", borderLeftStyle: "solid",
-    borderTopColor: "transparent", borderRightColor: "transparent",
-    borderBottomColor: "transparent", borderLeftColor: "transparent",
-  },
-  permSuccess: {
-    color: palette.akzent3, backgroundColor: `${palette.Green}20`,
-    borderTopColor: palette.akzent3, borderRightColor: palette.akzent3,
-    borderBottomColor: palette.akzent3, borderLeftColor: palette.akzent3,
-  },
-  permError: {
-    color: palette.akzent5, backgroundColor: `${palette.Error}20`,
-    borderTopColor: palette.akzent5, borderRightColor: palette.akzent5,
-    borderBottomColor: palette.akzent5, borderLeftColor: palette.akzent5,
-  },
-  permWarning: {
-    color: palette.Warning, backgroundColor: `${palette.Warning}20`,
-    borderTopColor: palette.Warning, borderRightColor: palette.Warning,
-    borderBottomColor: palette.Warning, borderLeftColor: palette.Warning,
-  },
-  permDisabled: { color: "#bdbdbd" },
-  // `con_Main_PopUp_Common_Generators_PreventTotalCapacity_Information` (Y:17341-17506) is the
-  // shared `InformationPopUp` (`@/components`), at its default (Generators) size.
-  /** `con_Generator_GeneratorStatus` while Active: Green border, SuccessLight fill. */
-  chipActive: {
-    borderTopColor: palette.Green, borderRightColor: palette.Green,
-    borderBottomColor: palette.Green, borderLeftColor: palette.Green,
-    backgroundColor: palette.SuccessLight,
-  },
-  /** `con_Generator_GeneratorHeightLimitationTag` */
-  /**
-   * `con_Generator_GeneratorHeightLimitationTag` (Y:2779): 120 wide (`Max(lbl.Width = 120, 50)`), the label
-   * `ColorFade(Warning, -60%)` on `ColorFade(Warning, 60%)`, the border the status tag's (Green while Active).
-   */
-  heightTag: {
-    backgroundColor: HEIGHT_TAG_FILL, color: "rgb(95, 59, 5)",
-    width: "120px", minWidth: 0, paddingLeft: 0, paddingRight: 0, flexShrink: 0,
-  },
-  heightTagActive: {
-    borderTopColor: palette.Green, borderRightColor: palette.Green,
-    borderBottomColor: palette.Green, borderLeftColor: palette.Green,
-  },
-  /**
-   * `con_Generator_GeneratorStatus` (Y:2538): 80 wide (`Max(lbl.Width = 80, 50)`) at `X = Parent.Width -
-   * Padding.Page (10) - Self.Width - 40`, so it ends 50 px from the header's right edge, 18 px before the
-   * chevron's 20-px box at `Parent.Width - 32`; the 28-px fold button starts 36 from the edge, hence 6 + gap 8.
-   */
-  chipStatus: { width: "80px", minWidth: 0, paddingLeft: 0, paddingRight: 0, flexShrink: 0, marginRight: "6px" },
-  // 850 for the turbine grid plus room for the scroll box's vertical scrollbar (`turbineScroll`,
-  // `scrollbar-gutter: stable`), which otherwise ate the last (info) column (user screenshot, 18 Nov 2026).
-  expanded: { display: "flex", flexDirection: "column", gap: space.s, maxWidth: "870px", minWidth: 0, overflowX: "auto" },
-  warning: { fontSize: tokens.fontSizeBase200, color: palette.Warning },
-  /**
-   * The turbine panel's "Apply to all" warning as the canvas draws it (canvas pair, 17 Nov 2026): an
-   * orange Information icon before the text, the pair tucked just under its checkbox.
-   */
-  applyAllWarning: {
-    // Smaller and tighter than `warning` (12/16 px): the canvas text is ~11 px on 11-px lines, so the two
-    // lines take ~half the height they did ("…of the selected" / "WTG type?" break kept).
-    display: "flex", alignItems: "flex-start", columnGap: "6px", marginTop: "-8px", width: "345px", maxWidth: "100%",
-    fontSize: "11px", lineHeight: "12px",
-    "& > svg": { flexShrink: 0, marginTop: "-1px" },
-  },
-  note: { fontSize: tokens.fontSizeBase200, color: palette.Error },
-  /**
-   * `con_…GeneratorType_CardDetails_Pagination_Buttons` (Y:1885): a 24-high horizontal row, `LayoutGap: =5`,
-   * `LayoutJustifyContent: End`, `Width: =<GeneratorList>.Width - 20` (850 − 20) — so the pager ends 20 px
-   * short of the grid's right edge, not at the left of the card (screenshot, 6 Nov 2026).
-   */
-  pager: {
-    display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "5px",
-    width: "830px", maxWidth: "100%", height: "24px", flexShrink: 0,
-  },
-  /** `lbl_…_GeneratorsList_TotalRows` (Y:1914): Width 100, `Align: Start`, `Size: =12` (modern Text, px). */
-  pagerTotalRows: { width: "100px", flexShrink: 0, textAlign: "left", fontSize: "12px", whiteSpace: "nowrap" },
-  /** `lbl_…_GeneratorsList_Pagination` (Y:1993): Width 120, `Align: Center`, `Size: =12`. */
-  pagerPage: { width: "120px", flexShrink: 0, textAlign: "center", fontSize: "12px", whiteSpace: "nowrap" },
-  /**
-   * The three `cat_PowerCAT.Icon`s, `IconType: IconButon` (Y:1925 / 1955 / 2005): 24 × 24, `FillColor`
-   * themePrimary with a white 16-px glyph (`FontColor` white, `FontSize: =16`), `HoverFillColor` themeLighter /
-   * `HoverFontColor` themePrimary; disabled, a light grey square — the Project list pager's `iconButton`, at 24.
-   */
-  pagerButton: {
-    minWidth: "24px", width: "24px", height: "24px", padding: 0, flexShrink: 0,
-    borderRadius: "2px",
-    backgroundColor: palette.themePrimary, color: palette.white,
-    "& svg": { fontSize: "16px", width: "16px", height: "16px" },
-    ":hover:enabled": {
-      backgroundColor: palette.themeLighter, color: palette.themePrimary,
-      borderTopColor: palette.themePrimary, borderRightColor: palette.themePrimary,
-      borderBottomColor: palette.themePrimary, borderLeftColor: palette.themePrimary,
-      borderTopWidth: "1px", borderRightWidth: "1px", borderBottomWidth: "1px", borderLeftWidth: "1px",
-      borderTopStyle: "solid", borderRightStyle: "solid", borderBottomStyle: "solid", borderLeftStyle: "solid",
-    },
-    ":disabled": { backgroundColor: palette.neutralLighter, color: palette.white },
-    "&:disabled .fui-Button__icon": { color: palette.white },
-    "&:disabled svg": { color: palette.white },
-  },
-  panelBody: { display: "flex", flexDirection: "column", gap: space.m },
-  /**
-   * `con_…_Filter_CountryAvailability`, under the toggle: `ico_…_Filter_Message` (18 px, X 15,
-   * Success / Warning) and the message 20 px right of it.
-   */
-  filterAvailability: { display: "flex", alignItems: "center", columnGap: "20px", minHeight: "32px", paddingLeft: "15px" },
-  /** `cmb_Supplier` & co.: `Width: Parent.Width - Self.X*2 - 80` — 314 px in the 450-px panel. */
-  typeField: { width: "314px", maxWidth: "100%" },
-  prefixRow: { display: "flex", alignItems: "center", gap: space.s },
-  /** The Add Generator fields: `Width: Parent.Width/2 + Self.X + 20` — 265 px in the 450-px panel. */
-  turbineField: { width: "265px", maxWidth: "100%" },
-  /** `lbl_…_GeneratorName_Prefix`: 180 wide, `Align.Right`, at X 20 — the input follows it. */
-  namePrefix: { flex: "0 0 auto", width: "180px", textAlign: "right", fontSize: "14px", color: "#323130" },
-  /** `txt_…_GeneratorName`: `Width: 80`. */
-  nameIndex: { flex: "0 0 80px", width: "80px" },
-  dropdown: { minWidth: "0px", width: "100%" },
-  /**
-   * `lbl_…_Generator_ErrorMessageProjectManager(_1)` (Y:11541-11569, Y:15132): a `Size: 8` (10.67 px) label in
-   * `gblAppColors.Error`, INSIDE the button container at the panel's foot, left of Save / Cancel, from the fields' X.
-   * First child of the footer: `canvas.css` pushes the first child right (`margin-left: auto`), hence the override.
-   */
-  footerHint: {
-    flexGrow: 1, flexShrink: 1, flexBasis: "auto", minWidth: 0, marginLeft: "0 !important",
-    alignSelf: "flex-end", textAlign: "left", color: palette.Error, fontSize: "10.67px", lineHeight: "14px",
-  },
-  footerPrimary: { height: "32px", minWidth: "96px", fontSize: "15px" },
-  footerCancel: {
-    height: "32px", minWidth: "96px", fontSize: "15px",
-    backgroundColor: palette.white, color: palette.themePrimary,
-    borderTopColor: palette.themePrimary, borderRightColor: palette.themePrimary,
-    borderBottomColor: palette.themePrimary, borderLeftColor: palette.themePrimary,
-  },
-});
-
-/* ──────────────────────────────────────────────────────────── local controls */
-
-/**
- * A `.canvas-field` text input: caption, red `*`, value, inline error. `ariaLabel` is the canvas
- * `AccessibleLabel` where it sets one (the control name), else the caption (rule 16).
- *
- * No red outline (no `data-invalid`): no control on the canvas screen sets a `ValidationState`, so
- * an invalid box never turns red; only its `lbl_…_ErrorMessage` shows (28 Oct 2026).
- */
-function InputField({
-  label, name, ariaLabel, value, onChange, required, disabled, error, maxLength, readOnly, className,
-  disabledLook,
-}: {
-  label: string; name: string; ariaLabel?: string; value: string; onChange?: (v: string) => void;
-  required?: boolean; disabled?: boolean; error?: string | null; maxLength?: number;
-  readOnly?: boolean; className?: string;
-  /** `true`: the canvas `DisplayMode.Disabled` box (white, outlined, grey text), not the filled `View` one. */
-  disabledLook?: boolean;
-}) {
-  return (
-    <label className={mergeClasses("canvas-field", className)} data-display={disabledLook ? "disabled" : undefined}>
-      <span data-required={required}>{label}</span>
-      <input
-        value={value}
-        aria-label={ariaLabel ?? label}
-        data-testid={name}
-        aria-invalid={error ? true : undefined}
-        disabled={disabled || readOnly}
-        readOnly={readOnly}
-        maxLength={maxLength}
-        onChange={(e) => onChange?.(e.target.value)}
-      />
-      {error ? <span className="canvas-field-error" role="alert">{error}</span> : null}
-    </label>
-  );
-}
-
-interface SelectOption { value: string; label: string }
-
-/** A `.canvas-field` combobox — a sibling caption, never a wrapping `<label>`; no red outline (see `InputField`). */
-function SelectField({
-  label, name, ariaLabel, value, options, onChange, required, disabled, error, placeholder, className,
-  disabledLook,
-}: {
-  label: string; name: string; ariaLabel?: string; value: string | null; options: readonly SelectOption[];
-  onChange: (v: string) => void; required?: boolean; disabled?: boolean;
-  error?: string | null; placeholder?: string; className?: string;
-  /**
-   * `true`: while disabled, the canvas `ComboBox@0.0.51` `DisplayMode.Disabled` box — white, a light outline, grey
-   * text (`canvas.css`, `.canvas-field[data-display="disabled"]`) — instead of the panels' filled grey.
-   */
-  disabledLook?: boolean;
-}) {
-  const s = useStyles();
-  const controlClass = useFieldControlClass();
-  const selected = options.find((o) => o.value === value);
-  return (
-    <div className={mergeClasses("canvas-field", className)} data-display={disabled && disabledLook ? "disabled" : undefined}>
-      <span data-required={required}>{label}</span>
-      <Dropdown
-        className={mergeClasses(s.dropdown, controlClass(disabled ? "disabled" : "edit"))}
-        appearance={FIELD_APPEARANCE}
-        aria-label={ariaLabel ?? label}
-        data-testid={name}
-        placeholder={placeholder}
-        disabled={disabled}
-        value={selected?.label ?? ""}
-        selectedOptions={value ? [value] : []}
-        onOptionSelect={(_, d) => { if (d.optionValue !== undefined) onChange(d.optionValue); }}
-      >
-        {options.map((o) => <Option key={o.value} value={o.value}>{o.label}</Option>)}
-      </Dropdown>
-      {error ? <span className="canvas-field-error" role="alert">{error}</span> : null}
-    </div>
-  );
-}
-
-/** A `.canvas-field` multi-select combobox (`SelectMultiple: true`) — the Inverter Type field (G9). */
-function MultiSelectField({
-  label, name, ariaLabel, values, options, onChange, required, disabled, error,
-}: {
-  label: string; name: string; ariaLabel?: string; values: readonly string[]; options: readonly SelectOption[];
-  onChange: (v: string[]) => void; required?: boolean; disabled?: boolean; error?: string | null;
-}) {
-  const s = useStyles();
-  const controlClass = useFieldControlClass();
-  const text = options.filter((o) => values.includes(o.value)).map((o) => o.label).join(", ");
-  return (
-    <div className="canvas-field">
-      <span data-required={required}>{label}</span>
-      <Dropdown
-        className={mergeClasses(s.dropdown, controlClass(disabled ? "disabled" : "edit"))}
-        appearance={FIELD_APPEARANCE}
-        multiselect
-        aria-label={ariaLabel ?? label}
-        data-testid={name}
-        disabled={disabled}
-        value={text}
-        selectedOptions={[...values]}
-        onOptionSelect={(_, d) => onChange(d.selectedOptions)}
-      >
-        {options.map((o) => <Option key={o.value} value={o.value}>{o.label}</Option>)}
-      </Dropdown>
-      {error ? <span className="canvas-field-error" role="alert">{error}</span> : null}
-    </div>
-  );
-}
-
-const plainOptions = (values: readonly (string | number)[]): SelectOption[] =>
-  values.map((v) => ({ value: String(v), label: String(v) }));
-
-/**
- * The hub-height combobox (`cmb_Supplier_2.Items` = `{Height: Item.Value}`, Y:14674): the canvas shows each height as a
- * number in the user's language ("169,5"). The option value stays the plain number, so the selection still maps.
- */
-const heightOptions = (values: readonly number[], lang: string): SelectOption[] =>
-  values.map((v) => ({ value: String(v), label: fmtHubHeight(v, lang) }));
-
-/** `Choices('Inverter Type')` / `Choices('Substructure Type')` as combobox options. */
-const choiceOptions = (labels: Readonly<Record<number, string>>): SelectOption[] =>
-  Object.entries(labels).map(([value, label]) => ({ value, label }));
-
-/** The panel footer: primary (Save / Request permission) and Cancel. */
-function PanelFooter({
-  primary, primaryName, onPrimary, disabled, onCancel, cancelName, primaryTooltip, cancelTooltip, reason, hint,
-}: {
-  primary: string; primaryName: string; onPrimary: () => void; disabled: boolean;
-  onCancel: () => void; cancelName: string; primaryTooltip?: string; cancelTooltip?: string;
-  /** Why the primary button is disabled when an excluded action is behind it (D27). */
-  reason?: string;
-  /** The red footer label left of the buttons (`lbl_…_ErrorMessageProjectManager`), when it shows. */
-  hint?: string;
-}) {
-  const s = useStyles();
-  return (
-    <>
-      {hint ? (
-        <Text className={s.footerHint} aria-live="polite" data-testid={`${primaryName}-hint`}>{hint}</Text>
-      ) : null}
-      <Button
-        className={s.footerPrimary} appearance="primary" icon={<CheckmarkRegular />}
-        aria-label={primary} data-testid={primaryName} disabled={disabled} onClick={onPrimary}
-        title={reason ?? primaryTooltip}
-      >
-        {primary}
-      </Button>
-      <Button
-        className={s.footerCancel} icon={<DismissRegular />}
-        aria-label={PANEL_BUTTONS.cancel} data-testid={cancelName} onClick={onCancel}
-        title={cancelTooltip}
-      >
-        {PANEL_BUTTONS.cancel}
-      </Button>
-    </>
-  );
-}
-
-/** One gallery card. */
-interface GalleryRow {
-  id: string;
-  title: ReactNode;
-  cells: ReactNode[];
-  selected: boolean;
-  onSelect: () => void;
-  /** Whether the card is expanded (`Not(ThisItem.IsFolded)`) — its details show. */
-  open: boolean;
-  /** The card body under the details — the WTG turbine grid, shown while expanded. */
-  expanded?: ReactNode;
-  /** Shown ABOVE the details while expanded — the WTG card's "Add Generator" bar (canvas). */
-  before?: ReactNode;
-  fold: ReactNode;
-}
-
-/** A value the canvas right-aligns: a plain number, optionally with a unit-free % sign. */
-const isNumericValue = (v: ReactNode): boolean =>
-  typeof v === "number" || (typeof v === "string" && /^-?[\d.,\s]+%?$/.test(v.trim()) && v.trim() !== "");
-
-/** The 4-column grid column of cell `i`: row by row, or column by column when there are two rows. */
-const detailColumn = (i: number, count: number, rowFlow: boolean): number =>
-  rowFlow || count <= 4 ? i % 4 : Math.floor(i / 2);
-
-/** A gallery: one card per row; an expanded card shows its detail captions and values. */
-function Gallery({
-  name, columns, rows, disabled, selectLabel, rowFlow = false, layout, shadow = false,
-}: {
-  /**
-   * The canvas auto-layout cards, where every cell is flush in its column and every value is
-   * `Align.Left` (numbers included): `"pv"` — 260-px columns of two (`pvGrid`); `"simple"` — BESS /
-   * Hydrogen / Substation, one row of quarter-width cells (`simpleGrid`). Omitted: the 4-column grid.
-   */
-  layout?: "pv" | "simple";
-  /** `null` is an empty slot — the canvas leaves a cell of the 4-column grid blank. */
-  name: string; columns: readonly (string | null)[]; rows: GalleryRow[]; disabled: boolean;
-  /** Fill the detail grid row by row (the WTG card's 2 × 4 layout) instead of column by column. */
-  rowFlow?: boolean;
-  /** The card container keeps the default `DropShadow.Light` (WTG and inverter cards; `cardShadow`). */
-  shadow?: boolean;
-  /** The card's selection dot `AccessibleLabel` (`img_…_CardHeader_RowSelectionDot`). */
-  selectLabel: string;
-}) {
-  const s = useStyles();
-  if (rows.length === 0) return null;
-  return (
-    <div className={s.gallery} data-testid={name} role="list" aria-label={name}>
-      {rows.map((r) => (
-        <div key={r.id} className={mergeClasses(s.card, shadow && s.cardShadow)} role="listitem" data-selected={r.selected || undefined}>
-          <div className={s.cardHeader}>
-            <Radio
-              className={s.cardDot}
-              checked={r.selected}
-              aria-label={selectLabel}
-              value={r.id}
-              data-testid={`${name}-select-${r.id}`}
-              disabled={disabled}
-              onChange={r.onSelect}
-              onClick={r.selected ? r.onSelect : undefined}
-            />
-            <div className={s.cardTitle}>{r.title}</div>
-            <div className={s.cardFold}>{r.fold}</div>
-          </div>
-          {r.open ? (
-            <div className={s.cardDetails}>
-              {r.before}
-              <div className={
-                layout === "pv" ? s.pvGrid
-                : layout === "simple" ? s.simpleGrid
-                : mergeClasses(s.detailGrid, columns.length > 4 && !rowFlow && s.detailGridTwoRows)
-              }>
-                {columns.map((c, i) => (
-                  c === null
-                    ? <div key={`${i}-empty`} aria-hidden="true" />
-                    : (
-                      <div key={`${i}-${c}`} className={mergeClasses(s.detailCell, (layout !== undefined || detailColumn(i, columns.length, rowFlow) === 0) && s.detailCellFirst)}>
-                        <span className={mergeClasses(s.detailLabel, layout === "pv" && s.detailLabelFull)}>{c}</span>
-                        <div className={mergeClasses(s.detailValue, layout === undefined && isNumericValue(r.cells[i]) && s.detailValueNumeric)}>
-                          {r.cells[i]}
-                        </div>
-                      </div>
-                    )
-                ))}
-              </div>
-              {r.expanded}
-            </div>
-          ) : null}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/* ─────────────────────────────────────────────────────────────── state shapes */
-
-type Panel =
-  | { kind: "type" }
-  | { kind: "turbine"; typeId: string; turbineId: string | null }
-  | { kind: "pv" }
-  | { kind: SimpleCapacityFamily }
-  | { kind: "inverter" }
-  | { kind: "substructure" }
-  | { kind: "replaceWtg" }
-  | { kind: "replacePv" }
-  | null;
-
-type DialogState =
-  | { kind: "deleteType"; type: GeneratorTypeRow }
-  | { kind: "deleteTurbine"; turbine: TurbineRow }
-  | { kind: "toggleStatus"; type: GeneratorTypeRow }
-  | { kind: "deleteSimple"; family: Exclude<PlantFamily, "wtg">; row: SimpleTypeRow }
-  | { kind: "blocked"; reason: CapacityGuardReason; name: string | null }
-  | { kind: "heightType"; name: string | null }
-  | { kind: "heightTurbine"; name: string | null }
-  /** `cmp_PopUp_Common_Generators_Information` (`locGeneratorInformationDialog`). */
-  | { kind: "info"; title: string; text: string }
-  | null;
-
-const emptyReplaceWtg = (inCountry = true): ReplaceWtgForm => ({
-  supplier: null, turbineType: null, hubHeight: null, revisedHubHeight: "", inCountry,
-});
-
-const emptyTypeForm = (): TypeFormState => ({
-  supplier: null, turbineType: null, hubHeight: null, revisedHubHeight: "",
-  numberOfGenerators: "", cost: "", dirty: new Set<string>(),
-});
-
-const emptyPvForm = (): PvTypeFormState => ({
-  moduleLabel: "", capacity: "", supplier: null, otherSupplier: "",
-  degradation1stYear: "", degradationRemainingYears: "", dirty: new Set<string>(),
-});
-
-/** `If(Int(x) = x, Text(x, "#"), Text(x, "0.0#"))` — the PV panel's prefill (Y:7450, Y:7777). */
-const pvPrefill = (v: number | null, lang?: string): string =>
-  v === null ? "" : forLanguage(Number.isInteger(v) ? String(v) : String(Math.round(v * 100) / 100), lang);
-
-/** The card fold icons (`ico_…_Up` while expanded, `ico_…_Down` while collapsed), per family. */
-const FOLD_ICON: Record<PlantFamily, { up: string; down: string }> = {
-  wtg: { up: "ico_Generators_DisplayProject_Body_Form_GeneratorType_Up", down: "ico_Generators_DisplayProject_Body_Form_GeneratorType_Down" },
-  pv: { up: "ico_Generators_DisplayProject_Body_Form_PvModule_Up", down: "ico_Generators_DisplayProject_Body_Form_PvModule_Down" },
-  inverter: { up: "ico_Generators_DisplayProject_Body_Form_Invertors_Up", down: "ico_Generators_DisplayProject_Body_Form_Invertors_Down" },
-  substructure: { up: "ico_Generators_DisplayProject_Body_Form_Substructure_Up", down: "ico_Generators_DisplayProject_Body_Form_Substructure_Down" },
-  storage: { up: "ico_Generators_DisplayProject_Body_Form_Storage_Up_1", down: "ico_Generators_DisplayProject_Body_Form_Storage_Down_1" },
-  hydrogen: { up: "ico_Generators_DisplayProject_Body_Form_Hydrogen_Up", down: "ico_Generators_DisplayProject_Body_Form_Hydrogen_Down" },
-  substation: { up: "ico_Generators_DisplayProject_Body_Form_Substation_Up_1", down: "ico_Generators_DisplayProject_Body_Form_Substation_Down_1" },
-};
-
-/** Each card's selection dot (`img_…_CardHeader_RowSelectionDot`), whose `AccessibleLabel` is its name. */
-const SELECT_DOT: Record<PlantFamily, string> = {
-  wtg: "img_Generators_DisplayProject_Body_Form_GeneratorType_CardHeader_RowSelectionDot",
-  pv: "img_Generators_DisplayProject_Body_Form_PvModule_CardHeader_RowSelectionDot",
-  inverter: "img_Generators_DisplayProject_Body_Form_Invertors_CardHeader_RowSelectionDot",
-  substructure: "img_Generators_DisplayProject_Body_Form_Substructure_CardHeader_RowSelectionDot",
-  storage: "img_Generators_DisplayProject_Body_Form_Storage_CardHeader_RowSelectionDot_1",
-  hydrogen: "img_Generators_DisplayProject_Body_Form_Hydrogen_CardHeader_RowSelectionDot",
-  substation: "img_Generators_DisplayProject_Body_Form_Substation_CardHeader_RowSelectionDot_1",
-};
-
-/** The cards' permission-request Cancel buttons (`pcf_btn_GeneralData_DisplayProject_Body_Buttons_…`). */
-const CANCEL_BUTTON: Partial<Record<PlantFamily, string>> = {
-  wtg: "pcf_btn_GeneralData_DisplayProject_Body_Buttons_Reset_1",
-  pv: "pcf_btn_GeneralData_DisplayProject_Body_Buttons_PVModule_Reset",
-  inverter: "pcf_btn_GeneralData_DisplayProject_Body_Buttons_Inverter_Reset",
-  substructure: "pcf_btn_GeneralData_DisplayProject_Body_Buttons_Substructure_Reset",
-};
-
-/** The BESS / Hydrogen / Substation panels: title, field control names, Save / Cancel. */
-const SIMPLE_PANEL: Record<SimpleCapacityFamily, {
-  title: string; labelCaption: string; capacityCaption: string; supplierCaption: string;
-  label: string; capacity: string; energy?: string; energyCaption?: string; supplier: string;
-  /** The supplier input's canvas `AccessibleLabel`; the Hydrogen one sets none (caption). */
-  supplierAria?: string;
-  save: string; cancel: string; savedText: string; saveError: (d: string) => string;
-}> = {
-  storage: {
-    title: STORAGE_PANEL_LABELS.title, labelCaption: STORAGE_PANEL_LABELS.label,
-    capacityCaption: STORAGE_PANEL_LABELS.powerCapacity, supplierCaption: STORAGE_PANEL_LABELS.supplier,
-    label: "txt_GeneratorData_RightPanel_Form_Storage_Fields_StorageLabel",
-    capacity: "txt_GeneratorData_RightPanel_Form_Storage_Fields_StorageCapacityMW_5",
-    energy: "txt_GeneratorData_RightPanel_Form_Storage_Fields_StorageCapacityMW_6",
-    energyCaption: STORAGE_PANEL_LABELS.energyCapacity,
-    supplier: "txt_GeneratorData_RightPanel_Form_Storage_Fields_StorageSupplier",
-    supplierAria: "txt_GeneratorData_RightPanel_Form_Storage_Fields_StorageSupplier",
-    save: "pcf_btn_GeneratorData_RightPanel_Form_Storage_Buttons_Save_2",
-    cancel: "pcf_btn_GeneratorData_RightPanel_Form_Storage_Buttons_Cancel_2",
-    savedText: WRITE_MSG.storageSaved, saveError: WRITE_ERROR.storageSave,
-  },
-  hydrogen: {
-    title: HYDROGEN_PANEL_LABELS.title, labelCaption: HYDROGEN_PANEL_LABELS.label,
-    capacityCaption: HYDROGEN_PANEL_LABELS.capacity, supplierCaption: HYDROGEN_PANEL_LABELS.supplier,
-    label: "txt_GeneratorData_RightPanel_Form_Hydrogen_Fields_HydrogenLabel",
-    capacity: "txt_GeneratorData_RightPanel_Form_Hydrogen_Fields_HydrogenCapacityMW_2",
-    supplier: "txt_GeneratorData_RightPanel_Form_Hydrogen_Fields_HydrogenSupplier",
-    save: "pcf_btn_GeneratorData_RightPanel_Form_Hydrogen_Buttons_Save_2",
-    cancel: "pcf_btn_GeneratorData_RightPanel_Form_Hydrogen_Buttons_Cancel_2",
-    savedText: WRITE_MSG.hydrogenSaved, saveError: WRITE_ERROR.hydrogenSave,
-  },
-  substation: {
-    title: SUBSTATION_PANEL_LABELS.title, labelCaption: SUBSTATION_PANEL_LABELS.label,
-    capacityCaption: SUBSTATION_PANEL_LABELS.capacity, supplierCaption: SUBSTATION_PANEL_LABELS.supplier,
-    label: "txt_GeneratorData_RightPanel_Form_Substation_Fields_SubstationLabel",
-    capacity: "txt_GeneratorData_RightPanel_Form_Substation_Fields_SubstationCapacityMW_2",
-    supplier: "txt_GeneratorData_RightPanel_Form_Substation_Fields_SubstationSupplier",
-    supplierAria: "txt_GeneratorData_RightPanel_Form_Substation_Fields_SubstationSupplier",
-    save: "pcf_btn_GeneratorData_RightPanel_Form_Substation_Buttons_Save_2",
-    cancel: "pcf_btn_GeneratorData_RightPanel_Form_Substation_Buttons_Cancel_2",
-    savedText: WRITE_MSG.substationSaved, saveError: WRITE_ERROR.substationSave,
-  },
-};
-
-const isActive = (status: number) => status === CHOICE_PLANT.status.active;
+  InverterPanel, PvPanel, ReplacePvPanel, ReplaceWtgPanel, SimplePanel, SubstructurePanel, TurbinePanel, TypePanel,
+  schedulePanelPreload,
+} from "./sections/panelLoader";
+import {
+  useInverterPanelModel, usePvPanelModel, useReplacePvModel, useReplaceWtgModel, useSimplePanelModel, useSubstructurePanelModel,
+  useTurbinePanelModel, useTypePanelModel,
+} from "./sections/panelModels";
+import { SIMPLE_PANEL, emptyPvForm, emptyReplaceWtg, emptyTypeForm, isActive, pvPrefill, selectedIdOf, type DialogState, type Panel } from "./sections/state";
+import { LOCK_TEXT, useStyles } from "./sections/styles";
+import { useExpandedIds } from "./sections/useExpandedIds";
+import { useStableCallback } from "./sections/useStableCallback";
+import { WtgSection } from "./sections/WtgSection";
 
 /** The rows a failed create left behind and what the rollback needs to remove them again (plan §9.3). */
 interface RollbackTarget {
@@ -913,6 +115,16 @@ function GeneratorsScreenBody() {
   // The user's language (`Language()` in the canvas): decimal separators in boxes, cards and messages follow it.
   const { projectId, locale: lang } = useSession();
 
+  const perf = generatorsPerf();
+
+  /* ── selection, panels and dialogs: declared before the reads, because the lazy reads are enabled by what is open (D141) ── */
+  const [selection, setSelection] = useState<SelectedRow | null>(null);
+  const [panel, setPanel] = useState<Panel>(null);
+  const [dialog, setDialog] = useState<DialogState>(null);
+  const needs = lazyNeeds({
+    panel: panel?.kind, dialog: dialog?.kind, dialogFamily: dialog?.kind === "deleteSimple" ? dialog.family : null,
+  }, perf.gateByList);
+
   /* ── data ── */
   const projectQ = useGeneratorsProject(projectId);
   const project = projectQ.data;
@@ -920,11 +132,15 @@ function GeneratorsScreenBody() {
   const planning = planningQ.data;
   const typesQ = useGeneratorTypes(projectId);
   const types = typesQ.data;
-  const modelsQ = useGeneratorModels(types.map((t) => t.generatorId).filter((v): v is string => Boolean(v)));
-  const catalogQ = useGeneratorCatalog(project?.fid);
-  const indexQ = useInflationIndex(project?.fid);
-  const deviceQ = useDeviceCosts(project?.countryId);
-  const turbinesQ = useProjectTurbines(projectId, types.map((t) => t.id));
+  // D143: memoized id lists, so the two reads below see the same arrays until the types change.
+  const typeIds = useMemo(() => types.map((t) => t.id), [types]);
+  const generatorIds = useMemo(() => types.map((t) => t.generatorId).filter((v): v is string => Boolean(v)), [types]);
+  const modelsQ = useGeneratorModels(generatorIds);
+  // D141 (`GENERATORS_PERF.gateByList`): the catalogue, the price index and the device costs load when a panel needs them.
+  const catalogQ = useGeneratorCatalog(project?.fid, needs.catalog);
+  const indexQ = useInflationIndex(project?.fid, needs.index);
+  const deviceQ = useDeviceCosts(project?.countryId, needs.device);
+  const turbinesQ = useProjectTurbines(projectId, typeIds);
   const pvCatalogQ = usePvModuleCatalog();
   const pvQ = usePvModuleTypes(projectId, pvCatalogQ.data);
   const inverterQ = useInverterTypes(projectId);
@@ -932,7 +148,7 @@ function GeneratorsScreenBody() {
   const storageQ = useSimpleTypes("storage", projectId);
   const hydrogenQ = useSimpleTypes("hydrogen", projectId);
   const substationQ = useSimpleTypes("substation", projectId);
-  const allWtgQ = useAllWtgLandLeaseCosts(projectId);
+  const allWtgQ = useAllWtgLandLeaseCosts(projectId, needs.allWtg);
   const entraObjectId = useEntraObjectId();
   const writes = useGeneratorWrites(projectId);
   const permissionFlows = useModulePermissionFlows();
@@ -962,6 +178,8 @@ function GeneratorsScreenBody() {
   /** The project shown now, for a rollback that finishes after the user moved on (review finding 3b). */
   const currentProjectId = useRef(projectId);
   useEffect(() => { currentProjectId.current = projectId; }, [projectId]);
+  // D143 (item 8b): fetch the panel chunks once the browser is idle, so the first panel opens without waiting for them.
+  useEffect(() => schedulePanelPreload(), []);
   /**
    * Per save: the first plan (it ends with the roll-up) has finished once `then` starts, and the approval flow
    * call has resolved once `request` returned (review findings 2 and 1). Reset at the start of every save.
@@ -998,13 +216,34 @@ function GeneratorsScreenBody() {
     return m;
   }, [turbinesQ.data]);
 
-  const queries = [
-    projectQ, planningQ, typesQ, modelsQ, catalogQ, indexQ, deviceQ, turbinesQ, pvCatalogQ, pvQ,
-    inverterQ, substructureQ, storageQ, hydrogenQ, substationQ, allWtgQ,
-  ];
-  const loading = queries.some((q) => q.isLoading);
+  /**
+   * D143 (`GENERATORS_PERF.optimisticToggle`, default OFF): set while the status toggle's optimistic rows are in the cache.
+   * "writing": the job is running; "reloading": its writes are over and the reload that brings the server's rows is running.
+   */
+  const [optimisticPhase, setOptimisticPhase] = useState<"writing" | "reloading" | null>(null);
+  // Not settled until the reload has ended: a "reloading" phase counts only while the hook says it is reloading.
+  const optimisticActive = optimisticPhase === "writing" || (optimisticPhase === "reloading" && writes.refreshing === true);
+
+  /*
+   * D141 (`GENERATORS_PERF.gateByList`): the LIST waits only for the reads its cards show. The catalogue, the price index,
+   * the device costs and the AllWTG costs are lazy (`loadGate.ts`); they keep the writes held back while a panel that needs
+   * one has no answer yet (`gate.lazyWaiting`, below), and a lazy read that has not started is neither loading nor failed.
+   * Switch off: all 16 gate the screen, as before.
+   */
+  const gate = loadGate({
+    gateByList: perf.gateByList,
+    list: [
+      projectQ, planningQ, typesQ, modelsQ, turbinesQ, pvCatalogQ, pvQ,
+      inverterQ, substructureQ, storageQ, hydrogenQ, substationQ,
+    ],
+    lazy: [
+      { read: catalogQ, needed: needs.catalog }, { read: indexQ, needed: needs.index },
+      { read: deviceQ, needed: needs.device }, { read: allWtgQ, needed: needs.allWtg },
+    ],
+  });
+  const loading = gate.loading;
   // F7: a failed query with NO data blanks the screen (the empty state); a failed refresh that still has data is a banner.
-  const loadErrorKind = loadErrorMode(queries);
+  const loadErrorKind = loadErrorMode(gate.reads);
   /**
    * F3: the reads a write builds its rows from have not settled — the first read of the index, the device costs or the
    * turbines, or the turbines / models are still the PREVIOUS type set's after a save changed it.
@@ -1013,10 +252,14 @@ function GeneratorsScreenBody() {
     { loading: indexQ.isLoading }, { loading: deviceQ.isLoading }, { loading: typesQ.isLoading },
     { loading: turbinesQ.isLoading, placeholder: turbinesQ.placeholder },
     { loading: modelsQ.isLoading, placeholder: modelsQ.placeholder },
+    // D141: a lazy read the open panel needs has not answered yet (always false with `gateByList` off).
+    { loading: gate.lazyWaiting },
+    // D143: the status toggle has shown a result before the save landed: the rows in the cache are not the server's yet, so
+    // no write is built from them until the reload has replaced them (always false with `optimisticToggle` off).
+    { loading: optimisticActive },
   ]);
 
-  /* ── selection and folding ── */
-  const [selection, setSelection] = useState<SelectedRow | null>(null);
+  /* ── folding ── */
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const selectedType = selectedIn(selection, "wtg", types);
   const selectedPv = selectedIn(selection, "pv", pvQ.data);
@@ -1031,17 +274,18 @@ function GeneratorsScreenBody() {
   const opexWtg = opexWtgQ.data;
   const opexPv = opexPvQ.data;
   // F1: the O&M read must be KNOWN before Delete / Deactivate / Delete PV may open (a test double without `hasData` counts as known).
-  const readKnown = (q: { hasData?: boolean; isLoading: boolean; error: unknown }) => q.hasData ?? (!q.isLoading && !q.error);
   const opexReads = {
     wtg: opexReadState({ needed: Boolean(selectedType), known: readKnown(opexWtgQ), failed: Boolean(opexWtgQ.error) }),
     pv: opexReadState({ needed: Boolean(selectedPv), known: readKnown(opexPvQ), failed: Boolean(opexPvQ.error) }),
   };
   const opexBanner = opexReadBanner(opexReads);
 
-  const onRowClick = (family: PlantFamily, id: string) => {
+  // D143: handlers handed to the memoized sections keep one identity (`useStableCallback`), so a section re-renders for its
+  // own data, not because the screen re-rendered.
+  const onRowClick = useStableCallback((family: PlantFamily, id: string) => {
     setSelection((p) => toggleSelection(p, family, id));
     if (rowClickFolds(family)) setExpanded((p) => toggleExpanded(p, id));
-  };
+  });
   /**
    * A row a save has just created opens unfolded: the canvas `Collect`s it into its gallery
    * collection without `IsFolded` (blank = not folded), so the new card shows its details.
@@ -1049,18 +293,24 @@ function GeneratorsScreenBody() {
   const expandCreated = (id: string | undefined) => {
     if (id) setExpanded((p) => (p.has(id) ? p : new Set(p).add(id)));
   };
-  const onFold = (family: PlantFamily, id: string) => {
+  const onFold = useStableCallback((family: PlantFamily, id: string) => {
     if (family === "wtg") {
       setSelection(wtgFoldSelection(!expanded.has(id), id));
       setExpanded((p) => toggleExpanded(p, id));
     } else {
       onRowClick(family, id);
     }
-  };
+  });
+  // The ids of each family's expanded cards, as a set whose identity changes only when ITS cards fold or unfold.
+  const wtgExpanded = useExpandedIds(expanded, types);
+  const pvExpanded = useExpandedIds(expanded, pvQ.data);
+  const inverterExpanded = useExpandedIds(expanded, inverterQ.data);
+  const substructureExpanded = useExpandedIds(expanded, substructureQ.data);
+  const storageExpanded = useExpandedIds(expanded, storageQ.data);
+  const hydrogenExpanded = useExpandedIds(expanded, hydrogenQ.data);
+  const substationExpanded = useExpandedIds(expanded, substationQ.data);
 
   /* ── panels, dialogs, forms ── */
-  const [panel, setPanel] = useState<Panel>(null);
-  const [dialog, setDialog] = useState<DialogState>(null);
   const [inCountry, setInCountry] = useState(true);
   const [typeForm, setTypeForm] = useState<TypeFormState>(emptyTypeForm);
   const [turbineForm, setTurbineForm] = useState<TurbineFormState>(() => turbineFormDefaults({ turbine: null, model: null, nextIndex: 1 }));
@@ -1069,49 +319,27 @@ function GeneratorsScreenBody() {
   const [simpleForm, setSimpleForm] = useState<SimpleFormState>(() => simpleFormDefaults("storage", null));
   const [pages, setPages] = useState<Record<string, number>>({});
 
-  const close = () => setPanel(null);
+  const close = useCallback(() => setPanel(null), [setPanel]);
   const closeDialog = () => setDialog(null);
   const markDirty = (dirty: Set<string>, field: string) => new Set(dirty).add(field);
   const planProject: PlanProject | null = project
     ? { id: project.id, shortName: project.shortName, owningBusinessUnitId: project.owningBusinessUnitId }
     : null;
 
+  /*
+   * D143: each panel's derived values (`sections/panelModels.ts`, the former inline blocks, unchanged) are computed inside
+   * `useMemo` keyed on what they read, so their identity holds until an input changes and the memoized panels skip the render.
+   */
+
   /* Rules 3–10 — the type panel's cascade, model, derived cost and height gate. */
-  const cascade = cascadeOptions(projected, {
-    inCountry, supplier: typeForm.supplier, turbineType: typeForm.turbineType,
+  const indexLoading = indexQ.isLoading || lazyPending(needs.index && perf.gateByList, indexQ);
+  const indexFailed = Boolean(indexQ.error);
+  const typeModel = useTypePanelModel({
+    projected, inCountry, form: typeForm, lang, accumulatedIndex: indexQ.data, index: { loading: indexLoading, failed: indexFailed },
+    project, planning, entraObjectId,
   });
-  const dummy = isDummySupplier(typeForm.supplier);
-  // `cmb_Supplier_2.DefaultSelectedItems = locSelectedTurbineForDummy` — the first height, for a Dummy supplier.
-  const effectiveHubHeight = dummy ? (cascade.hubHeights[0] ?? (typeForm.turbineType ? 0 : null)) : typeForm.hubHeight;
-  const resolvedModel = resolveModel(projected, {
-    supplier: typeForm.supplier, turbineType: typeForm.turbineType, hubHeight: effectiveHubHeight,
-  }) ?? null;
-  const count = numericOr(typeForm.numberOfGenerators, 0, lang);
-  const derivedCost = resolvedModel && count > 0
-    ? costPerWtg({ model: resolvedModel, count, accumulatedIndex: indexQ.data })
-    : 0;
-  const prospectiveHeight = resolvedModel
-    ? newTurbineHeights({
-        selectedHeight: effectiveHubHeight ?? 0,
-        typedHubHeight: numericOr(typeForm.revisedHubHeight, 0, lang),
-        catalogHubHeight: resolvedModel.hubHeight,
-        rotorDiameter: resolvedModel.rotorDiameter,
-      }).totalHeight
-    : 0;
-  const typeErrors = validateTypeForm({ ...typeForm, hubHeight: effectiveHubHeight }, {
-    isoCurrencyCode: project?.isoCurrencyCode, derivedCostPerWtg: derivedCost,
-  }, lang);
-  const typeHeightBlocked = resolvedModel !== null && heightBlocksSave({
-    planning, totalHeight: prospectiveHeight, project, entraObjectId,
-  });
-  const typeSaveable = resolvedModel !== null && canSaveType({ errors: typeErrors, heightBlocked: typeHeightBlocked });
-  // NEW (D89): why Save is disabled when no visible field says so — the canvas shows nothing here.
-  const typeSaveBlocked = typeSaveable ? null : typeSaveBlockedReason({
-    errors: typeErrors, heightBlocked: typeHeightBlocked, dummy, model: resolvedModel, count,
-    index: { value: indexQ.data, loading: indexQ.isLoading, failed: Boolean(indexQ.error) },
-    fid: project?.fid,
-  });
-  const touchType = <K extends keyof TypeFormState>(field: K, value: TypeFormState[K]) =>
+  const { effectiveHubHeight, resolvedModel, derivedCost, prospectiveHeight } = typeModel;
+  const touchType = useStableCallback(<K extends keyof TypeFormState>(field: K, value: TypeFormState[K]) =>
     setTypeForm((prev) => {
       const next = { ...prev, [field]: value, dirty: markDirty(prev.dirty, String(field)) };
       // `Reset(cmb_Supplier_1)` / `Reset(…HubHeight_1)` / `Reset(…NumberOfGenerator)` — the cascade clears downstream.
@@ -1119,54 +347,40 @@ function GeneratorsScreenBody() {
       if (field === "turbineType") { next.hubHeight = null; next.revisedHubHeight = ""; next.numberOfGenerators = ""; }
       if (field === "hubHeight") { next.revisedHubHeight = ""; next.numberOfGenerators = ""; }
       return next;
-    });
+    }));
+  const onInCountryChange = useStableCallback((checked: boolean) => { setInCountry(checked); setTypeForm(emptyTypeForm()); });
 
   /* Rule 11 — the turbine panel. */
   const panelType = panel?.kind === "turbine" ? types.find((t) => t.id === panel.typeId) ?? null : null;
   const panelTurbines = panelType ? turbinesByType.get(panelType.id) ?? [] : [];
   const panelTurbine = panel?.kind === "turbine" ? panelTurbines.find((t) => t.id === panel.turbineId) ?? null : null;
   const panelModel = modelOf(panelType);
-  // The duplicate-name check is project-wide (`colGeneratorsInProjectsTemporary`).
-  const projectIndices = turbinesQ.data.filter((t) => t.id !== panelTurbine?.id).map((t) => t.index);
-  const turbineNameError = validateTurbineName(turbineForm.nameIndex, {
-    existingIndices: projectIndices, currentIndex: panelTurbine?.index ?? null,
-  }, lang);
-  // The boxes open in the user's language, so the total, the Save check and the save read them in it (A5).
-  const turbineHeight = turbinePanelTotalHeight({
-    form: turbineForm, storedTotalHeight: panelTurbine?.totalHeight, rotorDiameter: panelModel?.rotorDiameter, lang,
+  const turbineModel = useTurbinePanelModel({
+    form: turbineForm, turbine: panelTurbine, model: panelModel, turbines: turbinesQ.data, lang, planning, project, entraObjectId,
   });
-  const turbineHeightBlocked = turbineHeightBlocksSave({
-    planning, storedTotalHeight: panelTurbine?.totalHeight, project, entraObjectId,
-  });
-  const turbineSaveable = canSaveTurbine({
-    form: turbineForm, existingIndices: projectIndices, currentIndex: panelTurbine?.index ?? null,
-    specificCapacity: panelModel?.specificCapacity ?? null, heightBlocked: turbineHeightBlocked, lang,
-  });
-  const touchTurbine = <K extends keyof TurbineFormState>(field: K, value: TurbineFormState[K]) =>
-    setTurbineForm((prev) => ({ ...prev, [field]: value, dirty: markDirty(prev.dirty, String(field)) }));
+  const { totalHeight: turbineHeight } = turbineModel;
+  const touchTurbine = useStableCallback(<K extends keyof TurbineFormState>(field: K, value: TurbineFormState[K]) =>
+    setTurbineForm((prev) => ({ ...prev, [field]: value, dirty: markDirty(prev.dirty, String(field)) })));
   /** `chk_…_All.OnCheck` / `.OnUncheck` (Y:10908-10918): the row is dirty while checked. */
-  const applyAllChange = (key: "capacity" | "plinth" | "hubHeight", checked: boolean) => {
+  const applyAllChange = useStableCallback((key: "capacity" | "plinth" | "hubHeight", checked: boolean) => {
     setApplyAll((p) => ({ ...p, [key]: checked }));
     setTurbineForm((prev) => {
       const dirty = new Set(prev.dirty);
       if (checked) dirty.add(`applyAll-${key}`); else dirty.delete(`applyAll-${key}`);
       return { ...prev, dirty };
     });
-  };
+  });
 
   /* The PV module type panel. */
-  const pvOptions = pvSupplierOptions(pvCatalogQ.data);
-  const pvModule = pvCatalogQ.data.find((m) => m.id === pvForm.supplier) ?? null;
-  const otherSupplierChosen = isOtherSupplierModule(pvModule);
-  const pvErrors = validatePvTypeForm(pvForm, { otherSupplierChosen }, lang);
-  const pvSaveable = canSavePvType(pvErrors, pvForm, { otherSupplierChosen });
-  const touchPv = <K extends keyof PvTypeFormState>(field: K, value: PvTypeFormState[K]) =>
+  const pvModel = usePvPanelModel({ form: pvForm, catalogue: pvCatalogQ.data, lang });
+  const { otherChosen: otherSupplierChosen } = pvModel;
+  const touchPv = useStableCallback(<K extends keyof PvTypeFormState>(field: K, value: PvTypeFormState[K]) =>
     setPvForm((prev) => {
       const next = { ...prev, [field]: value, dirty: markDirty(prev.dirty, String(field)) };
       // `cmb_…Supplier.OnChange`: `Reset(txt_…OtherSupplier)` — back to the row's stored value.
       if (field === "supplier") next.otherSupplier = selectedPv?.otherSupplier ?? "";
       return next;
-    });
+    }));
 
   /* The BESS / Hydrogen / Substation panels. */
   const simpleFamily: SimpleCapacityFamily | null =
@@ -1175,24 +389,18 @@ function GeneratorsScreenBody() {
     f === "storage" ? storageQ.data : f === "hydrogen" ? hydrogenQ.data : substationQ.data;
   const simpleSelectedOf = (f: SimpleCapacityFamily) =>
     f === "storage" ? selectedStorage : f === "hydrogen" ? selectedHydrogen : selectedSubstation;
-  const simpleErrors = simpleFamily ? validateSimpleForm(simpleFamily, simpleForm, lang) : null;
-  const simpleSaveable = simpleFamily ? canSaveSimple(simpleFamily, simpleForm, lang) : false;
-  const touchSimple = <K extends keyof SimpleFormState>(field: K, value: SimpleFormState[K]) =>
-    setSimpleForm((prev) => ({ ...prev, [field]: value, dirty: markDirty(prev.dirty, String(field)) }));
+  const simpleModel = useSimplePanelModel({ family: simpleFamily, form: simpleForm, lang });
+  const touchSimple = useStableCallback(<K extends keyof SimpleFormState>(field: K, value: SimpleFormState[K]) =>
+    setSimpleForm((prev) => ({ ...prev, [field]: value, dirty: markDirty(prev.dirty, String(field)) })));
 
   /* G9 — the Add / Edit Inverter panel, bound to the selected inverter row (or a new one). */
   const [inverterForm, setInverterForm] = useState<InverterFormState>(() => inverterFormDefaults(null));
   const inverterCatalogQ = usePlantSupplierCatalog("inverter", panel?.kind === "inverter");
-  const inverterOptions = plantSupplierOptions("inverter", inverterCatalogQ.data);
-  const inverterSupplier = inverterCatalogQ.data.find((o) => o.id === inverterForm.supplierId) ?? null;
-  const inverterOther = isPlantOtherSupplier("inverter", inverterSupplier);
-  const inverterOtherValue = effectiveOtherSupplier(inverterForm.otherSupplier, inverterOther);
-  const inverterErrors = validateInverterForm(inverterForm, { otherSupplierChosen: inverterOther }, lang);
-  const inverterRequests = plantRequestsPermission(inverterOtherValue);
-  const inverterSaveable = canSaveInverter(inverterForm, { otherSupplierChosen: inverterOther }, lang);
+  const inverterModel = useInverterPanelModel({ form: inverterForm, catalogue: inverterCatalogQ.data, lang });
+  const { other: inverterOther, otherValue: inverterOtherValue, requests: inverterRequests } = inverterModel;
   // `DisplayMode: If(IsBlank(<row>.Inverter), Edit, View)` and the title test the stored catalogue row.
   const inverterEditing = Boolean(selectedInverter?.catalogueId);
-  const touchInverter = <K extends keyof InverterFormState>(field: K, value: InverterFormState[K]) =>
+  const touchInverter = useStableCallback(<K extends keyof InverterFormState>(field: K, value: InverterFormState[K]) =>
     setInverterForm((prev) => {
       const next = { ...prev, [field]: value, dirty: markDirty(prev.dirty, String(field)) };
       if (field === "supplierId") {
@@ -1206,20 +414,15 @@ function GeneratorsScreenBody() {
       }
       if (field === "otherSupplier") next.dirty = new Set([...next.dirty, "supplier"]);
       return next;
-    });
+    }));
 
   /* G9 — the Add / Edit Substructure panel. */
   const [substructureForm, setSubstructureForm] = useState<SubstructureFormState>(() => substructureFormDefaults(null));
   const substructureCatalogQ = usePlantSupplierCatalog("substructure", panel?.kind === "substructure");
-  const substructureOptions = plantSupplierOptions("substructure", substructureCatalogQ.data);
-  const substructureSupplier = substructureCatalogQ.data.find((o) => o.id === substructureForm.supplierId) ?? null;
-  const substructureOther = isPlantOtherSupplier("substructure", substructureSupplier);
-  const substructureOtherValue = effectiveOtherSupplier(substructureForm.otherSupplier, substructureOther);
-  const substructureErrors = validateSubstructureForm(substructureForm, { otherSupplierChosen: substructureOther });
-  const substructureRequests = plantRequestsPermission(substructureOtherValue);
-  const substructureSaveable = canSaveSubstructure(substructureForm, { otherSupplierChosen: substructureOther });
+  const substructureModel = useSubstructurePanelModel({ form: substructureForm, catalogue: substructureCatalogQ.data });
+  const { other: substructureOther, otherValue: substructureOtherValue, requests: substructureRequests } = substructureModel;
   const substructureEditing = Boolean(selectedSubstructure?.catalogueId);
-  const touchSubstructure = <K extends keyof SubstructureFormState>(field: K, value: SubstructureFormState[K]) =>
+  const touchSubstructure = useStableCallback(<K extends keyof SubstructureFormState>(field: K, value: SubstructureFormState[K]) =>
     setSubstructureForm((prev) => {
       const next = { ...prev, [field]: value, dirty: markDirty(prev.dirty, String(field)) };
       if (field === "supplierId") {
@@ -1231,46 +434,28 @@ function GeneratorsScreenBody() {
       }
       if (field === "otherSupplier") next.dirty = new Set([...next.dirty, "supplier"]);
       return next;
-    });
+    }));
 
   /* G6 — Replace Generator Type (1.21.753): the "Replace to" cascade reuses the type panel's rules. */
   const [replaceWtg, setReplaceWtg] = useState<ReplaceWtgForm>(() => emptyReplaceWtg());
-  const replaceCascade = cascadeOptions(projected, {
-    inCountry: replaceWtg.inCountry, supplier: replaceWtg.supplier, turbineType: replaceWtg.turbineType,
+  const writing = writes.progress !== null;
+  const replaceWtgM = useReplaceWtgModel({
+    projected, form: replaceWtg, selectedCount: selectedType?.numberOfGenerators, accumulatedIndex: indexQ.data, lang, planning,
+    project, entraObjectId, inProgress: writing,
   });
-  const replaceDummy = isDummySupplier(replaceWtg.supplier);
-  const replaceHub = replaceDummy ? (replaceCascade.hubHeights[0] ?? (replaceWtg.turbineType ? 0 : null)) : replaceWtg.hubHeight;
-  const replaceModel = resolveModel(projected, {
-    supplier: replaceWtg.supplier, turbineType: replaceWtg.turbineType, hubHeight: replaceHub,
-  }) ?? null;
-  const replaceCount = Math.max(0, selectedType?.numberOfGenerators ?? 0);
-  const replaceCost = replaceModel && replaceCount > 0
-    ? costPerWtg({ model: replaceModel, count: replaceCount, accumulatedIndex: indexQ.data })
-    : 0;
-  const replaceHeight = replaceModel
-    ? newTurbineHeights({
-        selectedHeight: replaceHub ?? 0, typedHubHeight: numericOr(replaceWtg.revisedHubHeight, 0, lang),
-        catalogHubHeight: replaceModel.hubHeight, rotorDiameter: replaceModel.rotorDiameter,
-      }).totalHeight
-    : 0;
-  const replaceHeightBlocked = replaceModel !== null && heightBlocksSave({ planning, totalHeight: replaceHeight, project, entraObjectId });
-  // D97 — out of country is no longer excluded: the replace requests permission for the new type.
-  const replaceWtgOk = replaceModel !== null && replaceWtgSaveable({
-    form: { ...replaceWtg, hubHeight: replaceHub }, inProgress: writes.progress !== null, heightBlocked: replaceHeightBlocked, lang,
-  });
+  const {
+    hub: replaceHub, model: replaceModel, count: replaceCount, cost: replaceCost, heightBlocked: replaceHeightBlocked,
+  } = replaceWtgM;
 
   /* G6 — Replace PV Module Type: the "Replace to" form is the PV panel's form and validation. */
   const [replacePvForm, setReplacePvForm] = useState<PvTypeFormState>(emptyPvForm);
-  const replacePvModule = pvCatalogQ.data.find((m) => m.id === replacePvForm.supplier) ?? null;
-  const replacePvOther = isOtherSupplierModule(replacePvModule);
-  const replacePvErrors = validatePvTypeForm(replacePvForm, { otherSupplierChosen: replacePvOther }, lang);
-  const replacePvOk = writes.progress === null
-    && canSavePvType(replacePvErrors, replacePvForm, { otherSupplierChosen: replacePvOther });
-  const touchReplacePv = <K extends keyof PvTypeFormState>(field: K, value: PvTypeFormState[K]) =>
+  const replacePvM = useReplacePvModel({ form: replacePvForm, catalogue: pvCatalogQ.data, lang, inProgress: writing });
+  const { other: replacePvOther } = replacePvM;
+  const touchReplacePv = useStableCallback(<K extends keyof PvTypeFormState>(field: K, value: PvTypeFormState[K]) =>
     setReplacePvForm((prev) => ({
       ...prev, [field]: value, dirty: markDirty(prev.dirty, String(field)),
       ...(field === "supplier" ? { otherSupplier: "" } : {}),
-    }));
+    })));
 
   /* ── the command bar ── */
   // A New Project (no record yet) is locked too: `IsBlank(gblRecordSelectedProject.'Project ID')`.
@@ -1429,13 +614,22 @@ function GeneratorsScreenBody() {
     }
   };
 
-  const openTurbine = (type: GeneratorTypeRow, turbine: TurbineRow | null) => {
+  const openTurbine = useStableCallback((type: GeneratorTypeRow, turbine: TurbineRow | null) => {
     clearWrites();
     setSelection({ family: "wtg", id: type.id });
     setApplyAll({ capacity: false, plinth: false, hubHeight: false });
     setTurbineForm(turbineFormDefaults({ turbine, model: modelOf(type), nextIndex: nextTurbineIndex(turbinesQ.data), lang }));
     setPanel({ kind: "turbine", typeId: type.id, turbineId: turbine?.id ?? null });
-  };
+  });
+  /** The delete icon of a turbine row: the last-capacity / O&M guard runs before the confirmation opens. */
+  const onDeleteTurbine = useStableCallback((type: GeneratorTypeRow, turbine: TurbineRow) => {
+    clearWrites();
+    setSelection({ family: "wtg", id: type.id });
+    guardThen("wtg", turbine.effectiveCapacity, { active: isActive(type.status), name: turbine.name },
+      () => setDialog({ kind: "deleteTurbine", turbine }));
+  });
+  /** A WTG card's pager (the page shown per type). */
+  const onPage = useCallback((typeId: string, page: number) => setPages((prev) => ({ ...prev, [typeId]: page })), [setPages]);
 
   /* ── the writes ── */
   // A new write command forgets an earlier rollback notice and its leftover rows (rollback jobs call `writes.run` directly).
@@ -1446,14 +640,20 @@ function GeneratorsScreenBody() {
    */
   const jobInFlight = useRef(false);
   const writeBusy = () => jobInFlight.current || rollbackInFlight.current;
-  const run = async (job: Parameters<typeof writes.run>[0]) => {
+  /**
+   * A job plus the kind of save it is (`reload`, D141): the kind says which queries the save reloads afterwards
+   * (`reload.ts`). A job with no kind, and every job while `GENERATORS_PERF.targetedReload` is off, reloads everything.
+   */
+  type ScreenJob = Parameters<typeof writes.run>[0] & { reload?: ReloadKind };
+  const run = async (job: ScreenJob) => {
     if (writeBusy()) return null;
     jobInFlight.current = true;
     try {
       setRollbackNotice(null);
       setCreateFailure(null);
       setDeletePartial(null);
-      return await writes.run(job);
+      const { reload, ...plain } = job;
+      return await writes.run(reload ? withReload(plain, projectId, reload) : plain);
     } finally {
       jobInFlight.current = false;
     }
@@ -1465,7 +665,7 @@ function GeneratorsScreenBody() {
    * The text follows the job's own error, never replaces it; nothing is added when every attempted row went (for example
    * only the final roll-up failed), when NONE went (review F3 item 2), the plan never ran or it was refused. `typeName` names the one type row of a type delete.
    */
-  const runDelete = async (job: Parameters<typeof writes.run>[0], typeName: string | null = null) => {
+  const runDelete = async (job: ScreenJob, typeName: string | null = null) => {
     // F4: a delete refused by the one-job guard sent nothing, so it must not read the running job's deleted rows.
     if (writeBusy()) return null;
     const box: { ran: WritePlan | null } = { ran: null };
@@ -1601,6 +801,7 @@ function GeneratorsScreenBody() {
      * so the screen reloads once at the end instead of after each step.
      */
     const ids = await run({
+      reload: "addWtgType",
       progress,
       success: GENERATOR_TYPE_SAVED_BANNER,
       errorText: WRITE_ERROR.typeSave,
@@ -1659,7 +860,8 @@ function GeneratorsScreenBody() {
 
   const saveTurbine = async (fromPopup: boolean) => {
     if (!planProject || !panelType || writeBusy()) return;
-    const job = {
+    const job: ScreenJob = {
+      reload: "saveTurbine",
       progress: turbineSaveProgressText(planProject.shortName, turbineForm.nameIndex.trim(), fromPopup),
       success: WRITE_MSG.turbineSaved,
       errorText: WRITE_ERROR.turbineSave,
@@ -1686,6 +888,7 @@ function GeneratorsScreenBody() {
      * allocations, the roll-up, the device-type row) is the job's `then`, so the screen reloads once.
      */
     const ids = await run({
+      reload: "savePv",
       progress: pvSaveProgressText(label),
       success: PV_MSG.saved,
       errorText: pvSaveErrorText,
@@ -1728,7 +931,8 @@ function GeneratorsScreenBody() {
     if (!project || !planProject || writeBusy()) return;
     const header = project;
     const editing = selectedInverter;
-    const job = {
+    const job: ScreenJob = {
+      reload: "saveInverter",
       progress: inverterSaveProgressText(inverterForm.label, inverterOtherValue),
       success: WRITE_MSG.inverterSaved,
       errorText: WRITE_ERROR.inverterSave,
@@ -1760,7 +964,8 @@ function GeneratorsScreenBody() {
     if (!project || !planProject || writeBusy()) return;
     const header = project;
     const editing = selectedSubstructure;
-    const job = {
+    const job: ScreenJob = {
+      reload: "saveSubstructure",
       progress: substructureSaveProgressText(substructureForm.label, substructureOtherValue),
       success: WRITE_MSG.substructureSaved,
       errorText: WRITE_ERROR.substructureSave,
@@ -1817,6 +1022,7 @@ function GeneratorsScreenBody() {
     const box: { inputs?: ReplaceInputs; unmatched: number } = { unmatched: 0 };
     close();
     const ids = await run({
+      reload: "replaceWtg",
       progress,
       success: () => replaceSuccessText(box.unmatched),
       errorText: WRITE_ERROR.wtgReplace,
@@ -1864,6 +1070,7 @@ function GeneratorsScreenBody() {
     const box: { inputs?: ReplaceInputs } = {};
     close();
     const ids = await run({
+      reload: "replacePv",
       progress,
       success: REPLACE_MSG.pvReplaced,
       errorText: WRITE_ERROR.pvReplace,
@@ -1899,7 +1106,8 @@ function GeneratorsScreenBody() {
     const family = simpleFamily;
     const cfg = SIMPLE_PANEL[family];
     const row = simpleSelectedOf(family);
-    const job = {
+    const job: ScreenJob = {
+      reload: `saveSimple:${family}`,
       progress: simpleSaveProgressText(simpleForm.label),
       success: cfg.savedText,
       errorText: cfg.saveError,
@@ -1913,25 +1121,34 @@ function GeneratorsScreenBody() {
     if (!row) queueRollback("saveSimple", ids, false);
   };
 
-  const onTypeSave = () => {
+  const onTypeSave = useStableCallback(() => {
     // The approval popup opens when the planning flags the limit and the new height exceeds it.
     if (heightLimitExceeded(planning, prospectiveHeight)) {
       setDialog({ kind: "heightType", name: heightPopupTypeName(resolvedModel?.displayName) });
     } else {
       void saveType();
     }
-  };
-  const onTurbineSave = () => {
+  });
+  const onTurbineSave = useStableCallback(() => {
     if (heightLimitExceeded(planning, turbineHeight)) {
       setDialog({ kind: "heightTurbine", name: panelTurbine?.name ?? null });
     } else {
       void saveTurbine(false);
     }
-  };
+  });
+  // The other panels' Save / Replace buttons call their handler with no argument and ignore the promise.
+  const onSavePv = useStableCallback(() => { void savePv(); });
+  const onSaveSimple = useStableCallback(() => { void saveSimple(); });
+  const onSaveInverter = useStableCallback(() => { void saveInverter(); });
+  const onSaveSubstructure = useStableCallback(() => { void saveSubstructure(); });
+  const onReplaceWtg = useStableCallback(() => { void replaceGeneratorType(); });
+  const onReplacePv = useStableCallback(() => { void replacePvType(); });
 
   /** The confirm handlers, each the canvas `OnConfirm`. */
   const onConfirm = async () => {
     const d = dialog;
+    // D141: the confirmation builds its plan from a lazy read (price index, device costs) that has not landed: keep it open.
+    if (d && gate.lazyWaiting && confirmNeedsLazyRead(d.kind, d.kind === "deleteSimple" ? d.family : null)) return;
     closeDialog();
     if (!d || !planProject) return;
     switch (d.kind) {
@@ -1940,6 +1157,7 @@ function GeneratorsScreenBody() {
       case "deleteType": {
         const typeTurbines = turbinesByType.get(d.type.id) ?? [];
         const ok = await runDelete({
+          reload: "deleteWtgType",
           progress: WRITE_MSG.working, success: WRITE_MSG.typeDeleted, errorText: WRITE_ERROR.typeDelete,
           plan: async (): Promise<WritePlan> => {
             // D97 — `If(Not(IsBlank(FlowRunId)), Requestpermissioncancellation.Run(…))` (Y:15659), before any delete.
@@ -1958,6 +1176,7 @@ function GeneratorsScreenBody() {
         const type = types.find((t) => t.id === d.turbine.typeId);
         if (!type) return;
         await runDelete({
+          reload: "deleteTurbine",
           progress: WRITE_MSG.working, success: WRITE_MSG.turbineDeleted, errorText: WRITE_ERROR.turbineDelete,
           plan: async (): Promise<WritePlan> => {
             const alloc = await loadAllocations([d.turbine.id]);
@@ -1970,18 +1189,36 @@ function GeneratorsScreenBody() {
         });
         return;
       }
-      case "toggleStatus":
-        await run({
-          progress: WRITE_MSG.working, success: WRITE_MSG.statusChanged, errorText: WRITE_ERROR.status,
-          plan: planToggleStatus({
-            project: planProject, type: d.type, turbines: turbinesByType.get(d.type.id) ?? [], allTypes: types,
-          }),
+      case "toggleStatus": {
+        // The plan is built from the REAL rows, here and now, whatever the switch says (F3): the optimistic rows below are
+        // only shown, never read by a write.
+        const plan = planToggleStatus({
+          project: planProject, type: d.type, turbines: turbinesByType.get(d.type.id) ?? [], allTypes: types,
         });
+        const nextStatus = nextToggleStatus(d.type);
+        await run({
+          reload: "toggleStatus",
+          progress: WRITE_MSG.working, success: WRITE_MSG.statusChanged, errorText: WRITE_ERROR.status,
+          plan,
+          // D143, DIVERGENCE (`GENERATORS_PERF.optimisticToggle`, default OFF, proposed not approved): with the switch on the new
+          // status is shown at once and rolled back if the save fails (`optimisticToggle.ts`). Off: no hook, today's behaviour.
+          ...(perf.optimisticToggle ? {
+            optimistic: async (qc: QueryClient) => {
+              setOptimisticPhase("writing");
+              return applyOptimisticToggle(qc, { projectId: planProject.id, typeId: d.type.id, nextStatus });
+            },
+          } : {}),
+        });
+        // The writes are over (landed or failed): the reload that brings the server's rows is running, and the optimistic
+        // rows stay "not settled" until it ends (the effect above). A job that never started set nothing.
+        setOptimisticPhase((phase) => (phase === "writing" ? "reloading" : phase));
         return;
+      }
       case "deleteSimple": {
         const f = d.family;
         if (f === "pv") {
           const ok = await runDelete({
+            reload: "deletePv",
             progress: WRITE_MSG.working, success: PV_MSG.deleted, errorText: pvDeleteErrorText,
             // G2 — the unit, its land lease and the O&M costs go first, as the confirmation says.
             plan: async (): Promise<WritePlan> => {
@@ -1999,6 +1236,7 @@ function GeneratorsScreenBody() {
           if (ok) setSelection(defaultSelection(lists(), d.row.id));
         } else if (f === "inverter" || f === "substructure") {
           const ok = await runDelete({
+            reload: f === "inverter" ? "deleteInverter" : "deleteSubstructure",
             progress: WRITE_MSG.working,
             success: f === "inverter" ? WRITE_MSG.inverterDeleted : WRITE_MSG.substructureDeleted,
             errorText: f === "inverter" ? WRITE_ERROR.inverterDelete : WRITE_ERROR.substructureDelete,
@@ -2014,6 +1252,7 @@ function GeneratorsScreenBody() {
           if (ok) setSelection(null);
         } else {
           const ok = await runDelete({
+            reload: `deleteSimple:${f}`,
             progress: WRITE_MSG.working,
             success: f === "storage" ? WRITE_MSG.storageDeleted : f === "hydrogen" ? WRITE_MSG.hydrogenDeleted : WRITE_MSG.substationDeleted,
             errorText: f === "storage" ? WRITE_ERROR.storageDelete : f === "hydrogen" ? WRITE_ERROR.hydrogenDelete : WRITE_ERROR.substationDelete,
@@ -2035,9 +1274,10 @@ function GeneratorsScreenBody() {
    * refresh shows them. DIVERGENCE: the canvas then also `Patch`es Canceled onto `locSelectedGeneratorEntity` — the
    * SELECTED type, not the card's (SOURCE DEFECT) — and the PV / inverter / substructure cards only update the collection.
    */
-  const cancelRequest = (family: PermissionFamily, row: GeneratorTypeRow | SimpleTypeRow) => {
+  const cancelRequest = useStableCallback((family: PermissionFamily, row: GeneratorTypeRow | SimpleTypeRow) => {
     const name = permissionModuleName(family, row);
     void run({
+      reload: `cancelRequest:${family}`,
       progress: PERMISSION_MSG.canceling(name),
       success: PERMISSION_MSG.canceled(family, name),
       errorText: PERMISSION_MSG.cancelError,
@@ -2047,260 +1287,9 @@ function GeneratorsScreenBody() {
         return null;
       },
     });
-  };
-
-  /* ── galleries ── */
-  const iso = project?.isoCurrencyCode;
-  const PERM_TONE_CLASS = { success: s.permSuccess, error: s.permError, warning: s.permWarning, disabled: s.permDisabled };
-  /**
-   * The header's tags, left to right as the canvas places them from the right edge: `extra` (the Height
-   * Limitation tag), the request-permission chip and its Cancel button, then `trailing` (the status tag,
-   * rightmost: `con_Generator_GeneratorStatus.X = Parent.Width - 10 - Self.Width - 40`).
-   */
-  const titleOf = (family: PlantFamily, label: string, row: SimpleTypeRow | GeneratorTypeRow, extra?: ReactNode, trailing?: ReactNode) => {
-    const chip = showsPermissionChip(family) ? permissionStateLabel(row.requestPermissionState) : null;
-    const cancelName = CANCEL_BUTTON[family];
-    return (
-      <span className={s.title}>
-        <span className={s.titleText}>{label}</span>
-        {extra}
-        {chip ? (
-          <span className={mergeClasses(s.permChip, PERM_TONE_CLASS[permissionStateTone(row.requestPermissionState)])}>{chip}</span>
-        ) : null}
-        {cancelName && showsPermissionChip(family) && cancelRequestVisible(family, row) ? (
-          <Button
-            size="small" appearance="secondary" icon={<DismissRegular />}
-            aria-label={cancelName} data-testid={`${cancelName}-${row.id}`}
-            title={family === "wtg" ? CANCEL_REQUEST.wtgTooltip : CANCEL_REQUEST.tooltip}
-            disabled={writes.refreshing}
-            onClick={(e) => {
-              // The button sits in the card's title: the click must not also select / fold the card.
-              e.stopPropagation();
-              cancelRequest(family as PermissionFamily, row);
-            }}
-          >
-            {CANCEL_REQUEST.text}
-          </Button>
-        ) : null}
-        {trailing}
-      </span>
-    );
-  };
-  const foldButton = (family: PlantFamily, id: string) => {
-    const open = expanded.has(id);
-    const name = open ? FOLD_ICON[family].up : FOLD_ICON[family].down;
-    return (
-      <Button
-        appearance="transparent" size="small" className={s.foldButton}
-        icon={<ExpandChevron open={open} className={!editable ? s.foldIconDisabled : undefined} />}
-        aria-label={name} aria-expanded={open} data-testid={name}
-        disabled={!editable}
-        onClick={() => onFold(family, id)}
-      />
-    );
-  };
-
-  const wtgRows: GalleryRow[] = types.map((type) => {
-    const model = modelOf(type);
-    const label = model?.turbineType ?? type.generatorDisplayName ?? type.name ?? "";
-    const rows = turbinesByType.get(type.id) ?? [];
-    const isOpen = expanded.has(type.id);
-    // F9 / GR-5: the pager counts the LOADED turbines, not the stored `Number of Generators` (DIVERGENCE: D121 §8).
-    const pageTotal = pageCount(rows.length, GENERATORS_PAGE_SIZE);
-    const page = Math.min(pages[type.id] ?? 1, Math.max(pageTotal, 1));
-    const pageRows = rows.slice((page - 1) * GENERATORS_PAGE_SIZE, page * GENERATORS_PAGE_SIZE);
-    const addEnabled = canAddGenerator(rows.length, type.status);
-    const setPage = (p: number) => setPages((prev) => ({ ...prev, [type.id]: p }));
-    const v = wtgCardValues({ model, type, firstTurbine: rows[0] ?? null, planning, lang });
-    return {
-      id: type.id,
-      selected: selection?.family === "wtg" && selection.id === type.id,
-      onSelect: () => onRowClick("wtg", type.id),
-      fold: foldButton("wtg", type.id),
-      open: isOpen,
-      title: (
-        <Tooltip relationship="description" withArrow content={model?.displayName ?? ""}>
-          <span data-testid="txt_Generators_DisplayProject_Body_Form_GeneratorType">
-            {titleOf("wtg", label, type, (
-              rows.some((r) => overHeightLimit(planning, r.totalHeight))
-                ? <span className={mergeClasses(s.chip, s.heightTag, isActive(type.status) && s.heightTagActive)}>{WTG_CARD_LABELS.heightLimitationTag}</span>
-                : null
-            ), (
-              <span className={mergeClasses(s.chip, s.chipStatus, isActive(type.status) && s.chipActive)} data-testid="lbl_Generator_GeneratorStatus">{statusLabel(type.status)}</span>
-            ))}
-          </span>
-        </Tooltip>
-      ),
-      // The canvas card's 2 × 4 grid, row by row: Supplier · Total Height · Number of Generators ·
-      // (empty) / Hub Height · Rotor Diameter · Height Limitation · Generators Capacity.
-      cells: isOpen
-        ? [v.supplier, v.totalHeight, v.numberOfGenerators, null, v.hubHeight, v.rotorDiameter, v.heightLimitation, v.generatorsCapacity]
-        : ["", "", "", null, "", "", "", ""],
-      // `pcf_Generators_DisplayProject_Body_Form_GeneratorType_CardDetails_CommandBar` sits at the
-      // TOP-LEFT of the expanded card, above the details (canvas / live screen).
-      before: !isOpen ? undefined : (
-        <div className={s.cardCommandBar}>
-          <CommandBar
-            ariaLabel={WTG_CARD_LABELS.addGeneratorBarLabel}
-            commands={[{
-              key: "addGenerator", label: WTG_CARD_LABELS.addGenerator, icon: "Add",
-              enabled: actionsOpen && addEnabled,
-            }]}
-            onCommand={() => openTurbine(type, null)}
-          />
-        </div>
-      ),
-      expanded: !isOpen ? undefined : (
-        <div className={s.expanded}>
-          {!addEnabled ? (
-            <span className={s.title}>
-              <Text className={s.warning}>{WTG_CARD_LABELS.addGeneratorWarning}</Text>
-              <Tooltip relationship="description" content={WTG_CARD_LABELS.addGeneratorWarning}>
-                <Button
-                  appearance="transparent" size="small" icon={<InfoRegular />}
-                  aria-label="ibut_GeneralData_DisplayProject_Body_Checklist"
-                  data-testid={`ibut_GeneralData_DisplayProject_Body_Checklist-${type.id}`}
-                />
-              </Tooltip>
-            </span>
-          ) : null}
-          {pagerVisible(rows.length) ? (
-            <div className={s.pager}>
-              <span className={s.pagerTotalRows}>{generatorsTotalRowsText(rows.length)}</span>
-              {/* MDL2 `Previous` / `Back` / `Forward` → Fluent ArrowPrevious / ArrowLeft / ArrowRight, as on the Project list. */}
-              <Button
-                appearance="primary" className={s.pagerButton} icon={<ArrowPreviousRegular />} title={PAGER_TOOLTIPS.first}
-                aria-label="ico_Generators_DisplayProject_Body_Form_GeneratorType_CardDetails_GeneratorsList_Pagination_FirstPage"
-                data-testid={`ico_Generators_DisplayProject_Body_Form_GeneratorType_CardDetails_GeneratorsList_Pagination_FirstPage-${type.id}`}
-                disabled={page <= 1} onClick={() => setPage(1)}
-              />
-              <Button
-                appearance="primary" className={s.pagerButton} icon={<ArrowLeftRegular />} title={PAGER_TOOLTIPS.previous}
-                aria-label="ico_Generators_DisplayProject_Body_Form_GeneratorType_CardDetails_GeneratorsList_Pagination_PageLeft"
-                data-testid={`ico_Generators_DisplayProject_Body_Form_GeneratorType_CardDetails_GeneratorsList_Pagination_PageLeft-${type.id}`}
-                disabled={page <= 1} onClick={() => setPage(page - 1)}
-              />
-              <span className={s.pagerPage}>{paginationText(page, pageTotal)}</span>
-              <Button
-                appearance="primary" className={s.pagerButton} icon={<ArrowRightRegular />} title={PAGER_TOOLTIPS.next}
-                aria-label="ico_Generators_DisplayProject_Body_Form_GeneratorType_CardDetails_GeneratorsList_Pagination_PageRight"
-                data-testid={`ico_Generators_DisplayProject_Body_Form_GeneratorType_CardDetails_GeneratorsList_Pagination_PageRight-${type.id}`}
-                disabled={page >= pageTotal} onClick={() => setPage(page + 1)}
-              />
-            </div>
-          ) : null}
-          <div
-            className={s.turbineScroll}
-            // The canvas box: `min(rows, PageSize) * 35 + 50`.
-            style={{ maxHeight: `${Math.min(pageRows.length, GENERATORS_PAGE_SIZE) * 35 + 50}px` }}
-            data-testid={`generators-turbine-scroll-${type.id}`}
-          >
-          <Table
-            size="small" aria-label={WTG_CARD_LABELS.turbineGrid} className={s.turbineTable}
-            data-testid="pcf_Generators_DisplayProject_Body_Form_GeneratorType_CardDetails_GeneratorsList"
-          >
-            <TableHeader>
-              <TableRow className={s.turbineHeadRow}>
-                {/* As the canvas (28 Oct 2026): the name and the icon columns have no header
-                    (`ColDisplayName: ""`); the PO's "Generator Name" / "Actions" captions are withdrawn. */}
-                <TableHeaderCell className={mergeClasses(s.turbineHead, s.turbineColName)}>{WTG_CARD_LABELS.turbineNameColumn}</TableHeaderCell>
-                <TableHeaderCell className={mergeClasses(s.turbineHead, s.turbineColHeight)}>{TURBINE_TABLE_LABELS.totalHeight}</TableHeaderCell>
-                <TableHeaderCell className={mergeClasses(s.turbineHead, s.turbineColCapacity)}>{TURBINE_TABLE_LABELS.effectiveCapacity}</TableHeaderCell>
-                <TableHeaderCell className={s.turbineColIcon} aria-label={WTG_CARD_LABELS.editIconColumn} />
-                <TableHeaderCell className={s.turbineColIcon} aria-label={WTG_CARD_LABELS.deleteIconColumn} />
-                <TableHeaderCell className={s.turbineColIcon} aria-label={WTG_CARD_LABELS.infoIconColumn} />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {pageRows.map((t) => (
-                <TableRow key={t.id} className={s.turbineRow}>
-                  <TableCell>{t.name ?? ""}</TableCell>
-                  <TableCell>{fmtHeight(t.totalHeight, lang)}</TableCell>
-                  <TableCell>{fmtCapacity(t.effectiveCapacity, lang)}</TableCell>
-                  <TableCell>
-                    <Button
-                      appearance="subtle" size="small" icon={<EditRegular />}
-                      aria-label={WTG_CARD_LABELS.editIconColumn}
-                      data-testid={`generators-turbine-edit-${t.id}`}
-                      disabled={!actionsOpen || !isActive(type.status)}
-                      onClick={() => openTurbine(type, t)}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      appearance="subtle" size="small" icon={<DeleteRegular />}
-                      aria-label={WTG_CARD_LABELS.deleteIconColumn}
-                      data-testid={`generators-turbine-delete-${t.id}`}
-                      disabled={!actionsOpen || !isActive(type.status)}
-                      onClick={() => {
-                        clearWrites();
-                        setSelection({ family: "wtg", id: type.id });
-                        guardThen("wtg", t.effectiveCapacity, { active: isActive(type.status), name: t.name },
-                          () => setDialog({ kind: "deleteTurbine", turbine: t }));
-                      }}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    {/* `InformationIcon` column: `icon:Info` when Total Height > the planning height limitation
-                        (Y:2163-2171), `ColHideWhenBlank` otherwise; after the Delete column (Y:2382). */}
-                    {overHeightLimit(planning, t.totalHeight)
-                      ? <InfoRegular aria-hidden="true" className={s.turbineInfo} data-testid={`generators-turbine-info-${t.id}`} />
-                      : null}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          </div>
-        </div>
-      ),
-    };
   });
 
-  const familyRows = (
-    family: Exclude<PlantFamily, "wtg">, rows: readonly SimpleTypeRow[],
-    title: (r: SimpleTypeRow) => string, cells: (r: SimpleTypeRow) => ReactNode[], width: number,
-  ): GalleryRow[] => rows.map((r) => ({
-    id: r.id,
-    selected: selection?.family === family && selection.id === r.id,
-    onSelect: () => onRowClick(family, r.id),
-    fold: foldButton(family, r.id),
-    open: expanded.has(r.id),
-    title: titleOf(family, title(r), r),
-    cells: expanded.has(r.id) ? cells(r) : Array.from({ length: width }, () => ""),
-  }));
-
-  const pvRows = familyRows("pv", pvQ.data, (r) => r.moduleLabel ?? "", (r) => {
-    const v = pvCardValues(r, lang);
-    return [v.supplier, v.capacity, v.degradation1stYear, v.degradationRemainingYears];
-  }, 4);
-  const inverterRows = familyRows("inverter", inverterQ.data, (r) => r.name ?? "", (r) => {
-    const v = inverterCardValues(r, lang);
-    return [v.inverterType, v.supplier, v.costPerInverter, v.numberOfInverters, v.typeCost, v.nominalPower, v.warranty];
-  }, 7);
-  const substructureRows = familyRows("substructure", substructureQ.data, (r) => r.name ?? "", (r) => {
-    const v = substructureCardValues(r, lang);
-    return [v.supplier, v.types, (
-      <span key="cost" className={s.title}>
-        {v.cost}
-        {substructureCostNoteVisible(project?.plantPvCapacity) ? (
-          <>
-            <Text className={s.note}>{SUBSTRUCTURE_COST_NOTE}</Text>
-            <Tooltip relationship="description" content={SUBSTRUCTURE_COST_INFO}>
-              <Button
-                appearance="transparent" size="small" icon={<InfoRegular />}
-                aria-label="info_Generators_DisplayProject_Body_Form_Substructure_CardDetails_SubstructureCost"
-                data-testid={`info_Generators_DisplayProject_Body_Form_Substructure_CardDetails_SubstructureCost-${r.id}`}
-              />
-            </Tooltip>
-          </>
-        ) : null}
-      </span>
-    )];
-  }, 3);
-  const storageRows = familyRows("storage", storageQ.data, (r) => r.name ?? "", (r) => simpleCardValues("storage", r, lang), 3);
-  const hydrogenRows = familyRows("hydrogen", hydrogenQ.data, (r) => r.name ?? "", (r) => simpleCardValues("hydrogen", r, lang), 2);
-  const substationRows = familyRows("substation", substationQ.data, (r) => r.name ?? "", (r) => simpleCardValues("substation", r, lang), 2);
+  const iso = project?.isoCurrencyCode;
 
   /* ── the confirmation popups ── */
   const confirmText = (() => {
@@ -2347,8 +1336,6 @@ function GeneratorsScreenBody() {
 
   const bodyVisible = isBodyVisible(project);
   const lockBullets = !locked ? [] : projectId ? pageLock(project) : ["• General", "• Milestones"];
-  const typeDirty = (f: string) => typeForm.dirty.has(f);
-  const simple = simpleFamily ? SIMPLE_PANEL[simpleFamily] : null;
 
   return (
     <div className={s.page} data-testid="Project Generators Screen">
@@ -2410,657 +1397,134 @@ function GeneratorsScreenBody() {
 
       {bodyVisible ? (
         <div className={s.scrollBody} data-testid="con_Generators_DisplayProject_Body_Form_FirstColumn">
-          <Gallery
-            name="gal_Generators_DisplayProject_Body_Form_GeneratorTypes" selectLabel={SELECT_DOT.wtg} shadow
-            disabled={!editable} rows={wtgRows} rowFlow
-            columns={[
-              TYPE_DETAIL_FIELD_LABELS.supplier, TYPE_DETAIL_FIELD_LABELS.totalHeight,
-              TYPE_DETAIL_FIELD_LABELS.numberOfGenerators, null,
-              TYPE_DETAIL_FIELD_LABELS.hubHeight, TYPE_DETAIL_FIELD_LABELS.rotorDiameter,
-              TYPE_DETAIL_FIELD_LABELS.heightLimitation, TYPE_DETAIL_FIELD_LABELS.generatorsCapacity,
-            ]}
+          {/* D143: one memoized section per family, each given only its own rows, selection and folding. */}
+          <WtgSection
+            types={types} turbinesByType={turbinesByType} models={models} planning={planning} lang={lang}
+            editable={editable} actionsOpen={actionsOpen} refreshing={writes.refreshing}
+            selectedId={selectedIdOf(selection, "wtg")} expandedIds={wtgExpanded} pages={pages} onPage={onPage}
+            onRowClick={onRowClick} onFold={onFold} onCancelRequest={cancelRequest}
+            onOpenTurbine={openTurbine} onDeleteTurbine={onDeleteTurbine}
           />
-          <Gallery
-            name="gal_Generators_DisplayProject_Body_Form_PvModule" selectLabel={SELECT_DOT.pv}
-            disabled={!editable} rows={pvRows} layout="pv"
-            columns={[
-              PV_FIELD_LABELS.supplier, PV_FIELD_LABELS.capacity,
-              PV_FIELD_LABELS.degradation1stYear, PV_FIELD_LABELS.degradationRemainingYears,
-            ]}
+          <PvSection
+            rows={pvQ.data} lang={lang} editable={editable} refreshing={writes.refreshing}
+            selectedId={selectedIdOf(selection, "pv")} expandedIds={pvExpanded}
+            onRowClick={onRowClick} onFold={onFold} onCancelRequest={cancelRequest}
           />
-          <Gallery
-            name="gal_Generators_DisplayProject_Body_Form_Invertors" selectLabel={SELECT_DOT.inverter} shadow
-            disabled={!editable} rows={inverterRows}
-            columns={[
-              INVERTER_CARD_LABELS.inverterType, INVERTER_CARD_LABELS.supplier,
-              currencyCaption(INVERTER_CARD_LABELS.costPerInverter, iso),
-              INVERTER_CARD_LABELS.numberOfInverters,
-              currencyCaption(INVERTER_CARD_LABELS.totalInverterTypeCost, iso),
-              INVERTER_CARD_LABELS.nominalPower, INVERTER_CARD_LABELS.warranty,
-            ]}
+          <InverterSection
+            rows={inverterQ.data} lang={lang} editable={editable} refreshing={writes.refreshing} iso={iso}
+            selectedId={selectedIdOf(selection, "inverter")} expandedIds={inverterExpanded}
+            onRowClick={onRowClick} onFold={onFold} onCancelRequest={cancelRequest}
           />
-          <Gallery
-            name="gal_Generators_DisplayProject_Body_Form_Substructure" selectLabel={SELECT_DOT.substructure}
-            disabled={!editable} rows={substructureRows}
-            columns={[
-              SUBSTRUCTURE_CARD_LABELS.supplier, SUBSTRUCTURE_CARD_LABELS.substructureType,
-              currencyCaption(SUBSTRUCTURE_CARD_LABELS.substructureCost, iso),
-            ]}
+          <SubstructureSection
+            rows={substructureQ.data} lang={lang} editable={editable} refreshing={writes.refreshing} iso={iso}
+            plantPvCapacity={project?.plantPvCapacity}
+            selectedId={selectedIdOf(selection, "substructure")} expandedIds={substructureExpanded}
+            onRowClick={onRowClick} onFold={onFold} onCancelRequest={cancelRequest}
           />
-          <Gallery
-            name="gal_Generators_DisplayProject_Body_Form_Storage_1" selectLabel={SELECT_DOT.storage}
-            disabled={!editable} rows={storageRows} layout="simple"
-            columns={[STORAGE_CARD_LABELS.powerCapacity, STORAGE_CARD_LABELS.energyCapacity, STORAGE_CARD_LABELS.supplier]}
+          <StorageSection
+            rows={storageQ.data} lang={lang} editable={editable} refreshing={writes.refreshing}
+            selectedId={selectedIdOf(selection, "storage")} expandedIds={storageExpanded}
+            onRowClick={onRowClick} onFold={onFold} onCancelRequest={cancelRequest}
           />
-          <Gallery
-            name="gal_Generators_DisplayProject_Body_Form_Hydrogen" selectLabel={SELECT_DOT.hydrogen}
-            disabled={!editable} rows={hydrogenRows} layout="simple"
-            columns={[HYDROGEN_CARD_LABELS.capacity, HYDROGEN_CARD_LABELS.supplier]}
+          <HydrogenSection
+            rows={hydrogenQ.data} lang={lang} editable={editable} refreshing={writes.refreshing}
+            selectedId={selectedIdOf(selection, "hydrogen")} expandedIds={hydrogenExpanded}
+            onRowClick={onRowClick} onFold={onFold} onCancelRequest={cancelRequest}
           />
-          <Gallery
-            name="gal_Generators_DisplayProject_Body_Form_Substation_2" selectLabel={SELECT_DOT.substation}
-            disabled={!editable} rows={substationRows} layout="simple"
-            columns={[SUBSTATION_CARD_LABELS.capacity, SUBSTATION_CARD_LABELS.supplier]}
+          <SubstationSection
+            rows={substationQ.data} lang={lang} editable={editable} refreshing={writes.refreshing}
+            selectedId={selectedIdOf(selection, "substation")} expandedIds={substationExpanded}
+            onRowClick={onRowClick} onFold={onFold} onCancelRequest={cancelRequest}
           />
         </div>
       ) : null}
 
+      {/*
+        D143 (item 8b): the panels are separate chunks, loaded on first use. `PanelHost` mounts one from the first time it opens
+        and keeps it mounted after, so its closing animation and its state are what the inline panel's were.
+      */}
       {/* ── Add Generator Type ── */}
-      <FormPanel
-        open={panel?.kind === "type"} title={TYPE_PANEL_LABELS.title} width="narrow" onDismiss={close}
-        footer={
-          <PanelFooter
-            primary={typeSaveLabel(typeForm.supplier, inCountry)}
-            primaryName="pcf_btn_GeneratorData_RightPanel_Form_Buttons_Save"
-            cancelName="pcf_btn_GeneratorData_RightPanel_Form_Buttons_Cancel"
-            primaryTooltip={TYPE_PANEL_TOOLTIPS.save} cancelTooltip={TYPE_PANEL_TOOLTIPS.cancel}
-            disabled={!typeSaveable || settling}
-            hint={typeHeightBlocked ? HEIGHT_LIMIT_PM_MESSAGE : undefined}
-            onCancel={close}
-            onPrimary={onTypeSave}
-          />
-        }
-      >
-        <div className={s.panelBody}>
-          {/* `con_…_Filter_Country`: the toggle first, then the availability row under it (Y 50). */}
-          <Switch
-            checked={inCountry}
-            label={TYPE_PANEL_LABELS.countryFilter} aria-label="tgl_btn_GeneratorData_RightPanel_Form_Filter_Country"
-            data-testid="tgl_btn_GeneratorData_RightPanel_Form_Filter_Country"
-            onChange={(_, d) => { setInCountry(d.checked); setTypeForm(emptyTypeForm()); }}
-          />
-          <div className={s.filterAvailability}>
-            <InfoRegular
-              aria-hidden="true" fontSize={18} data-testid="ico_GeneratorData_RightPanel_Form_Filter_Message"
-              color={inCountry ? palette.Success : palette.Warning}
-            />
-            <Text data-testid="lbl_GeneratorData_RightPanel_Form_Filter_Message">
-              {typeFilterMessage(inCountry, project?.countryName)}
-            </Text>
-          </div>
-          <SelectField
-            label={TYPE_PANEL_LABELS.supplier} name="cmb_Supplier" ariaLabel="cmb_Supplier" required
-            className={s.typeField} placeholder={TYPE_PANEL_LABELS.findItems}
-            value={typeForm.supplier} options={plainOptions(cascade.suppliers)}
-            error={typeFieldBlankMessage(typeDirty("supplier"), typeForm.supplier === null)}
-            onChange={(v) => touchType("supplier", v)}
-          />
-          <SelectField
-            label={TYPE_PANEL_LABELS.turbineType} name="cmb_Supplier_1" ariaLabel="cmb_Supplier_1" required
-            className={s.typeField} placeholder={TYPE_PANEL_LABELS.findItems} disabledLook
-            disabled={!typeForm.supplier}
-            value={typeForm.turbineType} options={plainOptions(cascade.turbineTypes)}
-            error={typeFieldBlankMessage(typeDirty("turbineType"), typeForm.turbineType === null)}
-            onChange={(v) => touchType("turbineType", v)}
-          />
-          {/* Rule 5 — a Dummy supplier types the hub height into `txt_…HubHeight_1` instead. */}
-          {!dummy ? (
-            <SelectField
-              label={TYPE_PANEL_LABELS.hubHeight} name="cmb_Supplier_2" ariaLabel="cmb_Supplier_2" required
-              className={s.typeField} placeholder={TYPE_PANEL_LABELS.findItems} disabledLook
-              disabled={!typeForm.turbineType}
-              value={typeForm.hubHeight === null ? null : String(typeForm.hubHeight)}
-              options={heightOptions(cascade.hubHeights, lang)}
-              error={typeFieldBlankMessage(typeDirty("hubHeight"), typeForm.hubHeight === null)}
-              onChange={(v) => touchType("hubHeight", Number(v))}
-            />
-          ) : (
-            <InputField
-              label={TYPE_PANEL_LABELS.hubHeight} name="txt_GeneratorData_RightPanel_Form_Fields_HubHeight_1"
-              ariaLabel="txt_GeneratorData_RightPanel_Form_Fields_HubHeight_1" required className={s.typeField}
-              maxLength={256} value={typeForm.revisedHubHeight}
-              error={typeForm.revisedHubHeight.trim() !== "" ? validateEffectiveHubHeight(typeForm.revisedHubHeight, lang) : null}
-              onChange={(v) => touchType("revisedHubHeight", v)}
-            />
-          )}
-          <InputField
-            label={TYPE_PANEL_LABELS.numberOfGenerators} name="txt_GeneratorData_RightPanel_Form_Fields_NumberOfGenerator"
-            ariaLabel="txt_GeneratorData_RightPanel_Form_Fields_NumberOfGenerator" required maxLength={6}
-            className={s.typeField}
-            // `DisplayMode.Disabled` until a hub height is chosen: the white outlined box, as the canvas.
-            disabled={effectiveHubHeight === null} disabledLook value={typeForm.numberOfGenerators}
-            error={numberOfGeneratorsMessage(typeForm.numberOfGenerators, lang)}
-            onChange={(v) => touchType("numberOfGenerators", v)}
-          />
-          {/* The height-limitation message is the footer `hint` (canvas: inside the button container). */}
-          {/* NEW (D89): the hidden reason Save is disabled (`typeSaveBlockedReason`); no canvas control. */}
-          {typeSaveBlocked ? (
-            <MessageBar intent="warning" className={s.typeField} data-testid="msg_GeneratorData_RightPanel_Form_SaveBlocked">
-              <MessageBarBody>{typeSaveBlocked}</MessageBarBody>
-            </MessageBar>
-          ) : null}
-        </div>
-      </FormPanel>
+      <PanelHost open={panel?.kind === "type"}>
+        <TypePanel
+          open={panel?.kind === "type"} lang={lang} countryName={project?.countryName} inCountry={inCountry} form={typeForm}
+          cascade={typeModel.cascade} dummy={typeModel.dummy} effectiveHubHeight={effectiveHubHeight}
+          saveable={typeModel.saveable} saveBlocked={typeModel.saveBlocked} heightBlocked={typeModel.heightBlocked} settling={settling}
+          onInCountryChange={onInCountryChange} onTouch={touchType} onSave={onTypeSave} onClose={close}
+        />
+      </PanelHost>
 
       {/* ── Add / Edit Generator (one turbine) ── */}
-      <FormPanel
-        open={panel?.kind === "turbine"} title={turbinePanelTitle(panelTurbine?.name)} width="narrow"
-        onDismiss={close}
-        footer={
-          <PanelFooter
-            primary={PANEL_BUTTONS.save}
-            primaryName="pcf_btn_GeneratorData_RightPanel_Form_Generator_Buttons_Save"
-            // SOURCE DEFECT: the canvas Save hint is "Filter projects details list view."; it says "Save".
-            primaryTooltip={HINTS.save}
-            cancelName="pcf_btn_GeneratorData_RightPanel_Form_Generator_Buttons_Cancel"
-            disabled={!turbineSaveable || settling}
-            hint={turbineHeightBlocked ? HEIGHT_LIMIT_PM_MESSAGE : undefined}
-            onCancel={close}
-            onPrimary={onTurbineSave}
-          />
-        }
-      >
-        <div className={s.panelBody}>
-          <InputField
-            label={TURBINE_PANEL_LABELS.generatorType} name="txt_GeneratorData_RightPanel_Form_Fields_GeneratorType"
-            readOnly value={panelModel?.turbineType ?? ""} className={s.turbineField}
-          />
-          {/* `lbl_…_GeneratorName` on top; under it the 180-px right-aligned prefix, then the 80-px index input. */}
-          <div className="canvas-field">
-            <span data-required="true">{TURBINE_PANEL_LABELS.generatorName}</span>
-            <div className={s.prefixRow}>
-              <Text className={s.namePrefix} data-testid="lbl_GeneratorData_RightPanel_Form_Fields_GeneratorName_Prefix">
-                {turbinePanelPrefix(panelTurbine, project?.shortName)}
-              </Text>
-              <label className={mergeClasses("canvas-field", s.nameIndex)}>
-                <input
-                  value={turbineForm.nameIndex}
-                  aria-label={TURBINE_PANEL_LABELS.generatorName}
-                  data-testid="txt_GeneratorData_RightPanel_Form_Fields_GeneratorName"
-                  aria-invalid={turbineNameError ? true : undefined}
-                  onChange={(e) => touchTurbine("nameIndex", e.target.value)}
-                />
-              </label>
-            </div>
-            {turbineNameError ? <span className="canvas-field-error" role="alert">{turbineNameError}</span> : null}
-          </div>
-          <InputField
-            label={TURBINE_PANEL_LABELS.effectiveCapacity} name="txt_GeneratorData_RightPanel_Form_Fields_Effective_Capacity"
-            required maxLength={256} value={turbineForm.effectiveCapacity} className={s.turbineField}
-            error={turbineForm.effectiveCapacity.trim() === "" ? null : validateEffectiveCapacity(
-              turbineForm.effectiveCapacity, panelModel?.specificCapacity ?? null, lang)}
-            onChange={(v) => touchTurbine("effectiveCapacity", v)}
-          />
-          <Checkbox
-            label={TURBINE_PANEL_LABELS.applyAllCapacities} aria-label={TURBINE_PANEL_LABELS.applyAllCapacities}
-            data-testid="chk_GeneratorData_RightPanel_Form_Fields_Effective_Capacity_All"
-            checked={applyAll.capacity}
-            onChange={(_, d) => applyAllChange("capacity", d.checked === true)}
-          />
-          {applyAll.capacity ? (
-            <Text className={mergeClasses(s.warning, s.applyAllWarning)}>
-              <InfoRegular aria-hidden="true" fontSize={14} />{TURBINE_PANEL_LABELS.applyAllWarning}
-            </Text>
-          ) : null}
-          <InputField
-            label={TURBINE_PANEL_LABELS.foundationPlinth} name="txt_GeneratorData_RightPanel_Form_Fields_Foundation_Plinth"
-            maxLength={256} value={turbineForm.foundationPlinth} className={s.turbineField}
-            error={validateFoundationPlinth(turbineForm.foundationPlinth.trim(), lang)}
-            onChange={(v) => touchTurbine("foundationPlinth", v)}
-          />
-          <Checkbox
-            label={TURBINE_PANEL_LABELS.applyAllWtgs} aria-label={TURBINE_PANEL_LABELS.applyAllWtgs}
-            data-testid="chk_GeneratorData_RightPanel_Form_Fields_Foundation_Plinth_All"
-            checked={applyAll.plinth}
-            onChange={(_, d) => applyAllChange("plinth", d.checked === true)}
-          />
-          {applyAll.plinth ? (
-            <Text className={mergeClasses(s.warning, s.applyAllWarning)}>
-              <InfoRegular aria-hidden="true" fontSize={14} />{TURBINE_PANEL_LABELS.applyAllWarning}
-            </Text>
-          ) : null}
-          <InputField
-            // `lbl_…_Effective_HubHeight_Required.Visible: false` — no `*`, though the value is still checked.
-            label={TURBINE_PANEL_LABELS.hubHeightExclPlinth} name="txt_GeneratorData_RightPanel_Form_Fields_Effective_HubHeight"
-            maxLength={256} value={turbineForm.effectiveHubHeight} className={s.turbineField}
-            error={turbineForm.effectiveHubHeight.trim() === "" ? null : validateEffectiveHubHeight(turbineForm.effectiveHubHeight, lang)}
-            onChange={(v) => touchTurbine("effectiveHubHeight", v)}
-          />
-          <Checkbox
-            label={TURBINE_PANEL_LABELS.applyAllWtgs} aria-label={TURBINE_PANEL_LABELS.applyAllWtgs}
-            data-testid="chk_GeneratorData_RightPanel_Form_Fields_Effective_HubHeight_All"
-            checked={applyAll.hubHeight}
-            onChange={(_, d) => applyAllChange("hubHeight", d.checked === true)}
-          />
-          {applyAll.hubHeight ? (
-            <Text className={mergeClasses(s.warning, s.applyAllWarning)}>
-              <InfoRegular aria-hidden="true" fontSize={14} />{TURBINE_PANEL_LABELS.applyAllWarning}
-            </Text>
-          ) : null}
-          <InputField
-            label={TURBINE_PANEL_LABELS.totalHeight} name="txt_GeneratorData_RightPanel_Form_Fields_Total_Height"
-            readOnly disabledLook className={s.turbineField}
-            value={fmtTurbineTotalHeightBox(turbineHeight, lang)}
-          />
-        </div>
-      </FormPanel>
+      <PanelHost open={panel?.kind === "turbine"}>
+        <TurbinePanel
+          open={panel?.kind === "turbine"} lang={lang} shortName={project?.shortName} turbine={panelTurbine}
+          generatorType={panelModel?.turbineType ?? ""} specificCapacity={panelModel?.specificCapacity ?? null}
+          form={turbineForm} nameError={turbineModel.nameError} applyAll={applyAll} totalHeight={turbineHeight}
+          saveable={turbineModel.saveable} heightBlocked={turbineModel.heightBlocked} settling={settling}
+          onTouch={touchTurbine} onApplyAllChange={applyAllChange} onSave={onTurbineSave} onClose={close}
+        />
+      </PanelHost>
 
       {/* ── Add / Edit PV Module Type ── */}
-      <FormPanel
-        open={panel?.kind === "pv"} title={selectedPv ? PV_PANEL_TITLES.edit : PV_PANEL_TITLES.add}
-        width="narrow" onDismiss={close}
-        footer={
-          <PanelFooter
-            primary={PANEL_BUTTONS.save}
-            primaryName="pcf_btn_GeneratorData_RightPanel_Form_PvModuleType_Buttons_Save"
-            cancelName="pcf_btn_GeneratorData_RightPanel_Form_PvModuleType_Buttons_Cancel"
-            disabled={!pvSaveable || settling} onCancel={close} onPrimary={() => void savePv()}
-          />
-        }
-      >
-        <div className={s.panelBody}>
-          <InputField
-            label={PV_FIELD_LABELS.moduleLabel} name="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_Label"
-            ariaLabel="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_Label"
-            required maxLength={PV_MODULE_LABEL_MAX_LENGTH} value={pvForm.moduleLabel}
-            error={pvErrors.moduleLabel} onChange={(v) => touchPv("moduleLabel", v)}
-          />
-          <InputField
-            label={PV_FIELD_LABELS.capacity} name="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_PVCapacityMW"
-            ariaLabel="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_PVCapacityMW"
-            required maxLength={PV_CAPACITY_MAX_LENGTH} value={pvForm.capacity}
-            error={pvErrors.capacity} onChange={(v) => touchPv("capacity", v)}
-          />
-          <SelectField
-            label={PV_FIELD_LABELS.supplier} name="cmb_GeneratorData_RightPanel_Form_PvModuleType_Fields_Supplier"
-            ariaLabel="cmb_GeneratorData_RightPanel_Form_PvModuleType_Fields_Supplier"
-            required placeholder={PV_SUPPLIER_PLACEHOLDER}
-            value={pvForm.supplier}
-            options={pvOptions.map((o) => ({ value: o.id, label: o.displayName ?? "" }))}
-            onChange={(v) => touchPv("supplier", v)}
-          />
-          {otherSupplierChosen ? (
-            <InputField
-              label={PV_OTHER_SUPPLIER_LABEL} name="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_OtherSupplier"
-              required maxLength={PV_MODULE_LABEL_MAX_LENGTH} value={pvForm.otherSupplier ?? ""}
-              error={pvErrors.otherSupplier} onChange={(v) => touchPv("otherSupplier", v)}
-            />
-          ) : null}
-          <InputField
-            label={PV_FIELD_LABELS.degradation1stYear} name="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_DegradationFirstYear"
-            ariaLabel="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_DegradationFirstYear"
-            maxLength={PV_DEGRADATION_MAX_LENGTH} value={pvForm.degradation1stYear}
-            error={pvErrors.degradation1stYear} onChange={(v) => touchPv("degradation1stYear", v)}
-          />
-          <InputField
-            label={PV_FIELD_LABELS.degradationRemainingYears} name="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_DegradationRemainingYears"
-            ariaLabel="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_DegradationRemainingYears"
-            maxLength={PV_DEGRADATION_MAX_LENGTH} value={pvForm.degradationRemainingYears}
-            error={pvErrors.degradationRemainingYears} onChange={(v) => touchPv("degradationRemainingYears", v)}
-          />
-        </div>
-      </FormPanel>
+      <PanelHost open={panel?.kind === "pv"}>
+        <PvPanel
+          open={panel?.kind === "pv"} editing={selectedPv !== null} form={pvForm} errors={pvModel.errors} options={pvModel.options}
+          otherChosen={pvModel.otherChosen} saveable={pvModel.saveable} settling={settling}
+          onTouch={touchPv} onSave={onSavePv} onClose={close}
+        />
+      </PanelHost>
 
       {/* ── Add BESS · Add Hydrogen · Add Substation (bound to the selected row) ── */}
-      <FormPanel
-        open={simple !== null} title={simple?.title ?? ""} width="narrow" onDismiss={close}
-        footer={simple ? (
-          <PanelFooter
-            primary={PANEL_BUTTONS.save} primaryName={simple.save} cancelName={simple.cancel}
-            disabled={!simpleSaveable} onCancel={close} onPrimary={() => void saveSimple()}
-          />
-        ) : null}
-      >
-        {simple && simpleFamily ? (
-          <div className={s.panelBody}>
-            <InputField
-              label={simple.labelCaption} name={simple.label} ariaLabel={simple.label} required
-              maxLength={SIMPLE_TEXT_MAX_LENGTH} value={simpleForm.label} error={simpleErrors?.label} onChange={(v) => touchSimple("label", v)}
-            />
-            <InputField
-              label={simple.capacityCaption} name={simple.capacity} ariaLabel={simple.capacity} required
-              maxLength={SIMPLE_CAPACITY_MAX_LENGTH[simpleFamily]} value={simpleForm.capacity}
-              error={simpleErrors?.capacity} onChange={(v) => touchSimple("capacity", v)}
-            />
-            {simple.energy && simple.energyCaption ? (
-              <InputField
-                label={simple.energyCaption} name={simple.energy} ariaLabel={simple.energy} required
-                maxLength={SIMPLE_CAPACITY_MAX_LENGTH.storage} value={simpleForm.energyCapacity}
-                error={simpleErrors?.energyCapacity} onChange={(v) => touchSimple("energyCapacity", v)}
-              />
-            ) : null}
-            <InputField
-              label={simple.supplierCaption} name={simple.supplier} ariaLabel={simple.supplierAria} required
-              maxLength={SIMPLE_TEXT_MAX_LENGTH} value={simpleForm.supplier} error={simpleErrors?.supplier} onChange={(v) => touchSimple("supplier", v)}
-            />
-          </div>
-        ) : null}
-      </FormPanel>
+      <PanelHost open={simpleFamily !== null}>
+        <SimplePanel
+          family={simpleFamily} form={simpleForm} errors={simpleModel.errors} saveable={simpleModel.saveable}
+          onTouch={touchSimple} onSave={onSaveSimple} onClose={close}
+        />
+      </PanelHost>
 
       {/* ── G9: Add / Edit Inverter (`con_GeneratorData_RightPanel_Form_Inverter`, hidden in the canvas) ── */}
-      <FormPanel
-        open={panel?.kind === "inverter"} title={inverterPanelTitle(inverterEditing)} width="narrow" onDismiss={close}
-        footer={
-          <PanelFooter
-            primary={plantPanelSaveLabel(inverterOtherValue)}
-            primaryName="pcf_btn_GeneratorData_RightPanel_Form_Inverter_Buttons_Save"
-            primaryTooltip={HINTS.save}
-            cancelName="pcf_btn_GeneratorData_RightPanel_Form_Inverter_Buttons_Cancel"
-            disabled={!inverterSaveable} onCancel={close} onPrimary={() => void saveInverter()}
-          />
-        }
-      >
-        <div className={s.panelBody}>
-          {inverterCatalogQ.error ? (
-            <MessageBar intent="error"><MessageBarBody>{GENERATORS_SCREEN_TEXT.loadFailedTitle}</MessageBarBody></MessageBar>
-          ) : null}
-          <InputField
-            label={INVERTER_PANEL_LABELS.label} name="txt_GeneratorData_RightPanel_Form_Inverter_Fields_Label"
-            required maxLength={512} value={inverterForm.label} error={inverterErrors.label}
-            onChange={(v) => touchInverter("label", v)}
-          />
-          <SelectField
-            label={INVERTER_PANEL_LABELS.supplier} name="cmb_GeneratorData_RightPanel_Form_Inverter_Fields_Supplier"
-            required disabled={inverterEditing} value={inverterForm.supplierId}
-            options={inverterOptions.map((o) => ({ value: o.id, label: plantSupplierDisplayName("inverter", o) }))}
-            error={inverterErrors.supplier} onChange={(v) => touchInverter("supplierId", v)}
-          />
-          {inverterOther ? (
-            <InputField
-              label={INVERTER_PANEL_LABELS.otherSupplier} name="txt_GeneratorData_RightPanel_Form_Inverter_Fields_OtherSupplier"
-              required maxLength={512} value={inverterForm.otherSupplier} error={inverterErrors.otherSupplier}
-              onChange={(v) => touchInverter("otherSupplier", v)}
-            />
-          ) : null}
-          <MultiSelectField
-            label={INVERTER_PANEL_LABELS.inverterType} name="cmb_GeneratorData_RightPanel_Form_Inverter_Fields_InverterType"
-            required values={inverterForm.inverterTypes.map(String)} options={choiceOptions(INVERTER_TYPE_LABELS)}
-            error={inverterErrors.inverterTypes} onChange={(v) => touchInverter("inverterTypes", v.map(Number))}
-          />
-          <InputField
-            label={INVERTER_PANEL_LABELS.warranty} name="txt_GeneratorData_RightPanel_Form_Inverter_Fields_Warranty"
-            required maxLength={6} value={inverterForm.warranty} error={inverterErrors.warranty}
-            onChange={(v) => touchInverter("warranty", v)}
-          />
-          <InputField
-            label={INVERTER_PANEL_LABELS.numberOfInverters} name="txt_GeneratorData_RightPanel_Form_Inverter_Fields_NumberOfInverters"
-            required maxLength={7} value={inverterForm.numberOfInverters} error={inverterErrors.numberOfInverters}
-            onChange={(v) => touchInverter("numberOfInverters", v)}
-          />
-          <InputField
-            label={INVERTER_PANEL_LABELS.nominalPower} name="txt_GeneratorData_RightPanel_Form_Inverter_Fields_NominalPower"
-            required value={inverterForm.nominalPower} error={inverterErrors.nominalPower}
-            onChange={(v) => touchInverter("nominalPower", v)}
-          />
-        </div>
-      </FormPanel>
+      <PanelHost open={panel?.kind === "inverter"}>
+        <InverterPanel
+          open={panel?.kind === "inverter"} editing={inverterEditing} form={inverterForm} errors={inverterModel.errors}
+          options={inverterModel.options} otherChosen={inverterOther} otherValue={inverterOtherValue}
+          catalogError={inverterCatalogQ.error} saveable={inverterModel.saveable}
+          onTouch={touchInverter} onSave={onSaveInverter} onClose={close}
+        />
+      </PanelHost>
 
       {/* ── G9: Add / Edit Substructure (`con_GeneratorData_RightPanel_Form_Substructure`, hidden in the canvas) ── */}
-      <FormPanel
-        open={panel?.kind === "substructure"} title={substructurePanelTitle(substructureEditing)} width="narrow" onDismiss={close}
-        footer={
-          <PanelFooter
-            primary={plantPanelSaveLabel(substructureOtherValue)}
-            primaryName="pcf_btn_GeneratorData_RightPanel_Form_Substructure_Buttons_Save"
-            primaryTooltip={HINTS.save}
-            cancelName="pcf_btn_GeneratorData_RightPanel_Form_Substructure_Buttons_Cancel"
-            disabled={!substructureSaveable} onCancel={close} onPrimary={() => void saveSubstructure()}
-          />
-        }
-      >
-        <div className={s.panelBody}>
-          {substructureCatalogQ.error ? (
-            <MessageBar intent="error"><MessageBarBody>{GENERATORS_SCREEN_TEXT.loadFailedTitle}</MessageBarBody></MessageBar>
-          ) : null}
-          <InputField
-            label={SUBSTRUCTURE_PANEL_LABELS.label} name="txt_GeneratorData_RightPanel_Form_Substructure_Fields_Label"
-            required maxLength={512} value={substructureForm.label} error={substructureErrors.label}
-            onChange={(v) => touchSubstructure("label", v)}
-          />
-          <SelectField
-            label={SUBSTRUCTURE_PANEL_LABELS.supplier} name="cmb_GeneratorData_RightPanel_Form_Substructure_Fields_Supplier"
-            required disabled={substructureEditing} value={substructureForm.supplierId}
-            options={substructureOptions.map((o) => ({ value: o.id, label: plantSupplierDisplayName("substructure", o) }))}
-            error={substructureErrors.supplier} onChange={(v) => touchSubstructure("supplierId", v)}
-          />
-          {substructureOther ? (
-            <InputField
-              label={SUBSTRUCTURE_PANEL_LABELS.otherSupplier} name="txt_GeneratorData_RightPanel_Form_Substructure_Fields_OtherSupplier"
-              required maxLength={512} value={substructureForm.otherSupplier} error={substructureErrors.otherSupplier}
-              onChange={(v) => touchSubstructure("otherSupplier", v)}
-            />
-          ) : null}
-          <SelectField
-            label={SUBSTRUCTURE_PANEL_LABELS.substructureType} name="cmb_GeneratorData_RightPanel_Form_Substructure_Fields_SubstructureType"
-            required value={substructureForm.substructureType === null ? null : String(substructureForm.substructureType)}
-            options={choiceOptions(SUBSTRUCTURE_TYPE_LABELS)} error={substructureErrors.substructureType}
-            onChange={(v) => touchSubstructure("substructureType", Number(v))}
-          />
-        </div>
-      </FormPanel>
+      <PanelHost open={panel?.kind === "substructure"}>
+        <SubstructurePanel
+          open={panel?.kind === "substructure"} editing={substructureEditing} form={substructureForm}
+          errors={substructureModel.errors} options={substructureModel.options} otherChosen={substructureOther}
+          otherValue={substructureOtherValue} catalogError={substructureCatalogQ.error} saveable={substructureModel.saveable}
+          onTouch={touchSubstructure} onSave={onSaveSubstructure} onClose={close}
+        />
+      </PanelHost>
 
       {/*
         ── G6: Replace Generator (solution 1.21.753). Control names and AccessibleLabels from the 1.21.753
         corpora (skeleton `reference/canvas-accessible-labels.json`), captions from `canvas-labels.json` /
         `REPLACE_LABELS` — the 1.21.709 extract on disk has no such panel. ──
       */}
-      <FormPanel
-        open={panel?.kind === "replaceWtg"}
-        title={replaceGeneratorTitle(selectedTypeModel?.turbineType ?? selectedType?.generatorDisplayName)}
-        width={830} onDismiss={close}
-        footer={
-          <PanelFooter
-            primary={REPLACE_LABELS.replace}
-            primaryName="pcf_btn_GeneratorData_RightPanel_Form_Buttons_Save_1"
-            cancelName="pcf_btn_GeneratorData_RightPanel_Form_Buttons_Cancel_1"
-            primaryTooltip={REPLACE_LABELS.replaceTooltip} cancelTooltip={TYPE_PANEL_TOOLTIPS.cancel}
-            disabled={!replaceWtgOk || settling}
-            hint={replaceHeightBlocked ? HEIGHT_LIMIT_PM_MESSAGE : undefined}
-            onCancel={close} onPrimary={() => void replaceGeneratorType()}
-          />
-        }
-      >
-        <div className={s.replaceGrid}>
-          <div className={s.replaceColumn}>
-            <Text className={s.replaceHeading}>{REPLACE_LABELS.replaceFrom}</Text>
-            {/* The "from" side is the disabled canvas controls: comboboxes keep their chevron. */}
-            <SelectField
-              label={REPLACE_LABELS.supplier} name="cmb_Supplier_6" ariaLabel="cmb_Supplier" required disabled
-              disabledLook
-              value={selectedTypeModel?.supplier ? "from" : null}
-              options={selectedTypeModel?.supplier ? [{ value: "from", label: selectedTypeModel.supplier }] : []}
-              onChange={() => {}}
-            />
-            <SelectField
-              label={REPLACE_LABELS.turbineType} name="cmb_Supplier_7" ariaLabel="cmb_Supplier_1" required disabled
-              disabledLook
-              value={selectedTypeModel?.turbineType ? "from" : null}
-              options={selectedTypeModel?.turbineType ? [{ value: "from", label: selectedTypeModel.turbineType }] : []}
-              onChange={() => {}}
-            />
-            {/* `cmb_Supplier_8` is a disabled combobox like the two above (chevron), showing the hub
-                height as stored — "169", not "169.00" (canvas screenshot, 3 Nov 2026). A Dummy type has no
-                catalog height (0): the canvas shows a text box with the height typed for it — the first
-                turbine's hub height, as on the card (`wtgCardHubHeight`; canvas pair, 17 Nov 2026). */}
-            {isDummySupplier(selectedTypeModel?.supplier) ? (
-              <InputField
-                label={REPLACE_LABELS.hubHeight} name="cmb_Supplier_8" ariaLabel="cmb_Supplier_2" required
-                readOnly disabledLook
-                value={(() => {
-                  const h = (selectedType ? turbinesByType.get(selectedType.id)?.[0]?.hubHeightExclPlinth : null) ?? null;
-                  return h === null ? "" : fmtHubHeight(h, lang);
-                })()}
-              />
-            ) : (
-              <SelectField
-                label={REPLACE_LABELS.hubHeight} name="cmb_Supplier_8" ariaLabel="cmb_Supplier_2" required disabled
-                disabledLook
-                value={selectedTypeModel?.hubHeight != null ? "from" : null}
-                options={selectedTypeModel?.hubHeight != null ? [{ value: "from", label: fmtHubHeight(selectedTypeModel.hubHeight, lang) }] : []}
-                onChange={() => {}}
-              />
-            )}
-            <InputField
-              label={REPLACE_LABELS.numberOfGenerators} name="txt_GeneratorData_RightPanel_Form_Fields_NumberOfGenerator_2"
-              ariaLabel="txt_GeneratorData_RightPanel_Form_Fields_NumberOfGenerator" required
-              readOnly disabledLook value={String(replaceCount)}
-            />
-          </div>
-          <div className={s.replaceColumn}>
-            <Text className={s.replaceHeading}>{REPLACE_LABELS.replaceTo}</Text>
-            {/* canvas-identity-ignore: 1.21.753-only control */}
-            <div className={s.countryFilter}>
-              <Switch
-                className={s.countryFilterSwitch}
-                checked={replaceWtg.inCountry}
-                aria-label="tgl_btn_GeneratorData_RightPanel_Form_Filter_Country"
-                data-testid="tgl_btn_GeneratorData_RightPanel_Form_Filter_Country_1"
-                onChange={(_, d) => setReplaceWtg(emptyReplaceWtg(d.checked))}
-              />
-              <span className={s.countryFilterText}>{REPLACE_LABELS.countryFilter}</span>
-              <div className={s.countryFilterInfo}>
-                <InfoRegular aria-hidden="true" fontSize={18} color={replaceWtg.inCountry ? palette.Success : palette.Warning} />
-                <span>{typeFilterMessage(replaceWtg.inCountry, project?.countryName)}</span>
-              </div>
-            </div>
-            <SelectField
-              label={REPLACE_LABELS.supplier} name="cmb_Supplier_3" ariaLabel="cmb_Supplier" required
-              placeholder={TYPE_PANEL_LABELS.findItems}
-              value={replaceWtg.supplier} options={plainOptions(replaceCascade.suppliers)}
-              onChange={(v) => setReplaceWtg({ ...emptyReplaceWtg(replaceWtg.inCountry), supplier: v })}
-            />
-            <SelectField
-              label={REPLACE_LABELS.turbineType} name="cmb_Supplier_4" ariaLabel="cmb_Supplier_1" required
-              placeholder={TYPE_PANEL_LABELS.findItems} disabledLook
-              disabled={!replaceWtg.supplier} value={replaceWtg.turbineType} options={plainOptions(replaceCascade.turbineTypes)}
-              onChange={(v) => setReplaceWtg({ ...replaceWtg, turbineType: v, hubHeight: null, revisedHubHeight: "" })}
-            />
-            {!replaceDummy ? (
-              <SelectField
-                label={REPLACE_LABELS.hubHeight} name="cmb_Supplier_5" ariaLabel="cmb_Supplier_2" required
-                placeholder={TYPE_PANEL_LABELS.findItems} disabledLook
-                disabled={!replaceWtg.turbineType}
-                value={replaceWtg.hubHeight === null ? null : String(replaceWtg.hubHeight)}
-                options={heightOptions(replaceCascade.hubHeights, lang)}
-                onChange={(v) => setReplaceWtg({ ...replaceWtg, hubHeight: Number(v), revisedHubHeight: "" })}
-              />
-            ) : (
-              <InputField
-                label={REPLACE_LABELS.hubHeight} name="txt_GeneratorData_RightPanel_Form_Fields_HubHeight_2"
-                ariaLabel="txt_GeneratorData_RightPanel_Form_Fields_HubHeight_1" required maxLength={256}
-                value={replaceWtg.revisedHubHeight}
-                error={replaceWtg.revisedHubHeight.trim() !== "" ? validateEffectiveHubHeight(replaceWtg.revisedHubHeight, lang) : null}
-                onChange={(v) => setReplaceWtg({ ...replaceWtg, revisedHubHeight: v })}
-              />
-            )}
-            <InputField
-              label={REPLACE_LABELS.numberOfGenerators} name="txt_GeneratorData_RightPanel_Form_Fields_NumberOfGenerator_1"
-              ariaLabel="txt_GeneratorData_RightPanel_Form_Fields_NumberOfGenerator" required
-              readOnly disabledLook value={String(replaceCount)}
-            />
-          </div>
-        </div>
-      </FormPanel>
+      <PanelHost open={panel?.kind === "replaceWtg"}>
+        <ReplaceWtgPanel
+          open={panel?.kind === "replaceWtg"} lang={lang} countryName={project?.countryName}
+          fromTypeName={selectedTypeModel?.turbineType ?? selectedType?.generatorDisplayName} fromModel={selectedTypeModel}
+          typedHubHeight={(selectedType ? turbinesByType.get(selectedType.id)?.[0]?.hubHeightExclPlinth : null) ?? null}
+          count={replaceCount} form={replaceWtg} cascade={replaceWtgM.cascade} dummy={replaceWtgM.dummy}
+          saveable={replaceWtgM.saveable} heightBlocked={replaceHeightBlocked} settling={settling}
+          onForm={setReplaceWtg} onReplace={onReplaceWtg} onClose={close}
+        />
+      </PanelHost>
 
       {/* ── G6: Replace PV Module Type (solution 1.21.753; names and labels as for Replace Generator) ── */}
-      <FormPanel
-        open={panel?.kind === "replacePv"} title={replacePvTitle(selectedPv?.moduleLabel)} width={700} onDismiss={close}
-        footer={
-          <PanelFooter
-            primary={REPLACE_LABELS.replace}
-            primaryName="pcf_btn_GeneratorData_RightPanel_Form_PvModuleType_Buttons_Save_2"
-            cancelName="pcf_btn_GeneratorData_RightPanel_Form_PvModuleType_Buttons_Cancel_1"
-            disabled={!replacePvOk || settling}
-            onCancel={close} onPrimary={() => void replacePvType()}
-          />
-        }
-      >
-        <div className={mergeClasses(s.replaceGrid, s.replaceGridPv)}>
-          <div className={s.replaceColumn}>
-            <Text className={s.replaceHeading}>{REPLACE_LABELS.replaceFrom}</Text>
-            <InputField
-              label={PV_FIELD_LABELS.moduleLabel} name="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_Label_1"
-              ariaLabel="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_Label" required
-              readOnly disabledLook value={selectedPv?.moduleLabel ?? ""}
-            />
-            <InputField
-              label={PV_FIELD_LABELS.capacity} name="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_PVCapacityMW_1"
-              ariaLabel="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_PVCapacityMW" required readOnly disabledLook
-              value={selectedPv ? pvPrefill(selectedPv.capacity, lang) : ""}
-            />
-            <SelectField
-              label={PV_FIELD_LABELS.supplier} name="cmb_GeneratorData_RightPanel_Form_PvModuleType_Fields_Supplier_1"
-              ariaLabel="cmb_GeneratorData_RightPanel_Form_PvModuleType_Fields_Supplier" required disabled
-              disabledLook
-              value={selectedPv ? "from" : null}
-              options={selectedPv ? [{ value: "from", label: pvCardValues(selectedPv, lang).supplier }] : []}
-              onChange={() => {}}
-            />
-            <InputField
-              label={PV_FIELD_LABELS.degradation1stYear} name="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_DegradationFirstYear_1"
-              ariaLabel="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_DegradationFirstYear" readOnly disabledLook
-              value={selectedPv ? pvDegradationPrefill(selectedPv.degradation1stYear, lang) : ""}
-            />
-            <InputField
-              label={PV_FIELD_LABELS.degradationRemainingYears} name="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_DegradationRemainingYears_1"
-              ariaLabel="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_DegradationRemainingYears" readOnly disabledLook
-              value={selectedPv ? pvPrefill(selectedPv.degradationRemainingYears, lang) : ""}
-            />
-          </div>
-          <div className={s.replaceColumn}>
-            <Text className={s.replaceHeading}>{REPLACE_LABELS.replaceTo}</Text>
-            <InputField
-              label={PV_FIELD_LABELS.moduleLabel} name="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_Label_2"
-              ariaLabel="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_Label"
-              required maxLength={PV_MODULE_LABEL_MAX_LENGTH} value={replacePvForm.moduleLabel}
-              error={replacePvErrors.moduleLabel} onChange={(v) => touchReplacePv("moduleLabel", v)}
-            />
-            <InputField
-              label={PV_FIELD_LABELS.capacity} name="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_PVCapacityMW_2"
-              ariaLabel="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_PVCapacityMW"
-              required maxLength={PV_CAPACITY_MAX_LENGTH} value={replacePvForm.capacity}
-              error={replacePvErrors.capacity} onChange={(v) => touchReplacePv("capacity", v)}
-            />
-            <SelectField
-              label={PV_FIELD_LABELS.supplier} name="cmb_GeneratorData_RightPanel_Form_PvModuleType_Fields_Supplier_2"
-              ariaLabel="cmb_GeneratorData_RightPanel_Form_PvModuleType_Fields_Supplier"
-              required placeholder={PV_SUPPLIER_PLACEHOLDER} value={replacePvForm.supplier}
-              options={pvOptions.map((o) => ({ value: o.id, label: o.displayName ?? "" }))}
-              onChange={(v) => touchReplacePv("supplier", v)}
-            />
-            {replacePvOther ? (
-              // The 1.21.753 corpora name the caption (`lbl_…_OtherSupplier_2`) but not the input: a stable id.
-              <InputField
-                label={PV_OTHER_SUPPLIER_LABEL} name="generators-replace-pv-other-supplier"
-                required maxLength={PV_MODULE_LABEL_MAX_LENGTH} value={replacePvForm.otherSupplier ?? ""}
-                error={replacePvErrors.otherSupplier} onChange={(v) => touchReplacePv("otherSupplier", v)}
-              />
-            ) : null}
-            <InputField
-              label={PV_FIELD_LABELS.degradation1stYear} name="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_DegradationFirstYear_2"
-              ariaLabel="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_DegradationFirstYear"
-              maxLength={PV_DEGRADATION_MAX_LENGTH} value={replacePvForm.degradation1stYear}
-              error={replacePvErrors.degradation1stYear} onChange={(v) => touchReplacePv("degradation1stYear", v)}
-            />
-            <InputField
-              label={PV_FIELD_LABELS.degradationRemainingYears} name="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_DegradationRemainingYears_2"
-              ariaLabel="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_DegradationRemainingYears"
-              maxLength={PV_DEGRADATION_MAX_LENGTH} value={replacePvForm.degradationRemainingYears}
-              error={replacePvErrors.degradationRemainingYears} onChange={(v) => touchReplacePv("degradationRemainingYears", v)}
-            />
-          </div>
-        </div>
-      </FormPanel>
+      <PanelHost open={panel?.kind === "replacePv"}>
+        <ReplacePvPanel
+          open={panel?.kind === "replacePv"} lang={lang} selectedPv={selectedPv} form={replacePvForm} errors={replacePvM.errors}
+          options={pvModel.options} otherChosen={replacePvOther} saveable={replacePvM.ok} settling={settling}
+          onTouch={touchReplacePv} onReplace={onReplacePv} onClose={close}
+        />
+      </PanelHost>
 
       {/* ── confirmations ── */}
       <ConfirmDialog

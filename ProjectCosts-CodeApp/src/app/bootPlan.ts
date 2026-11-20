@@ -14,6 +14,8 @@ export type BootTarget =
   | { kind: "projects"; search: string }
   /** `/project/general?projectId=…` — Project General Data of an existing project. */
   | { kind: "general-data"; projectId: string }
+  /** `/project/generators?projectId=…` — the Generators screen of an existing project (D141). */
+  | { kind: "generators"; projectId: string }
   | { kind: "none" };
 
 export interface BootInput {
@@ -61,6 +63,12 @@ export function bootTarget(input: BootInput): BootTarget {
     // A PM route reads the project from the ROUTE only (`SessionContext`); none is the New Project form.
     const link = readProjectLink({}, undefined, search);
     return link.status === "valid" ? { kind: "general-data", projectId: link.projectId } : { kind: "none" };
+  }
+
+  if (path === "/project/generators") {
+    // Same rule as General Data: the project comes from the route only; none is the locked New Project mode (no reads).
+    const link = readProjectLink({}, undefined, search);
+    return link.status === "valid" ? { kind: "generators", projectId: link.projectId } : { kind: "none" };
   }
 
   return { kind: "none" };

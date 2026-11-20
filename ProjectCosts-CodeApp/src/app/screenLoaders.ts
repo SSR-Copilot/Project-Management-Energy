@@ -7,3 +7,5 @@
  */
 export const loadProjectOverviewScreen = () => import("@/features/pm/project-main/Screen");
 export const loadGeneralDataScreen = () => import("@/features/pm/general-data/Screen");
+/** The Generators screen: `bootPrefetch.ts` and `generatorsWarmup.ts` start its chunk before the route needs it (D141). */
+export const loadGeneratorsScreen = () => import("@/features/pm/generators/Screen");

@@ -26,21 +26,29 @@
  * Both flows write the type row's request fields themselves; the app refreshes, it does not patch them.
  * Before D97 these controls were visible and disabled (D27: the flows send mails / Teams cards).
  */
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo } from "react";
 import { ES, ES_PLANT } from "@/data/dataverseNames";
 import { qk } from "@/data/keys";
+import { generatorCatalogueCache } from "@/data/generatorCatalogueCache";
+import { generatorsPerf } from "@/data/generatorsPerfFlags";
 import type { ScreenData } from "@/data/notConnected";
 import { usePlanWrite } from "@/data/usePlanWrite";
 import { useSession } from "@/app/SessionContext";
 import { loadPriceInflation } from "@/data/milestones";
 import { cancelModulePermission, requestModulePermission, type FlowApprovalResult } from "@/data/flows";
 import {
-  listAllWtgLandLeaseCosts, listGeneratorTypes, listGeneratorsByIds, listInverterTypes, listOrderableGenerators,
-  listProjectTurbines, listPvModules, listPvTypes, listSimpleTypes, listSubstructureTypes, loadDeviceCosts,
-  findPvUnit, listDeviceTypes, listOpexCostIdsForBridges, loadGeneratorsProject, loadOpexDependency, loadProjectPlanning,
+  listAllWtgLandLeaseCosts, listGeneratorsByIds, listOrderableGenerators,
+  listProjectTurbines, loadDeviceCosts,
+  findPvUnit, listDeviceTypes, listOpexCostIdsForBridges, loadOpexDependency,
   listPlantSupplierCatalogue, loadTurbineAllocations, loadTypeName,
   type DeviceCosts, type GeneratorsProjectRow,
 } from "@/data/generators";
+import {
+  generatorTypesQueryOptions, generatorsProjectQueryOptions, inverterTypesQueryOptions, projectPlanningQueryOptions,
+  pvModuleCatalogQueryOptions, pvTypesQueryOptions, REFERENCE_STALE, simpleTypesQueryOptions, substructureTypesQueryOptions,
+  turbinesByProjectQueryOptions,
+} from "./queries";
 import {
   accumulatedIndex, cancellationPayloadFor, needsPermissionCancellation, PERMISSION_MSG, toReplaceAllocations,
   type CatalogModel, type GeneratorTypeRow, type LandLeaseCostRow, type ModulePermissionPayload, type PermissionFamily,
@@ -75,7 +83,6 @@ export const TABLES: readonly string[] = [
   ES_PLANT.opexProjectCosts,
 ];
 
-const REFERENCE_STALE = 30 * 60 * 1000;
 /**
  * `ScreenData` plus what the Screen needs to tell "no answer yet" from "an empty answer" (generators fixes F1, F3, F7):
  * - `hasData`: the query has data (possibly of a previous refresh), so a failed refetch need not blank the screen;
@@ -93,38 +100,65 @@ const NONE: never[] = [];
 
 /** `gblRecordSelectedProject` (+ its country) — re-read on every visit, as `OnVisible` does. */
 export function useGeneratorsProject(projectId: string | undefined): ReadResult<GeneratorsProjectRow | null> {
-  const q = useQuery({
-    queryKey: qk.generators(projectId ?? "", "project"),
-    queryFn: () => loadGeneratorsProject(projectId!),
-    enabled: Boolean(projectId),
-  });
+  // Key and function: `./queries.ts`, shared with the prefetch (D141).
+  const q = useQuery({ ...generatorsProjectQueryOptions(projectId ?? ""), enabled: Boolean(projectId) });
   return out(q, null);
 }
 
 /** `locProjectPlanning` — the height limitation. */
 export function useProjectPlanning(projectId: string | undefined): ReadResult<ProjectPlanning | null> {
-  const q = useQuery({
-    queryKey: qk.generators(projectId ?? "", "planning"),
-    queryFn: () => loadProjectPlanning(projectId!),
-    enabled: Boolean(projectId),
-  });
+  const q = useQuery({ ...projectPlanningQueryOptions(projectId ?? ""), enabled: Boolean(projectId) });
   return out(q, null);
 }
 
-/** The orderable catalogue for the type panel (phase-out after FID). */
-export function useGeneratorCatalog(fid: string | null | undefined): ReadResult<CatalogModel[]> {
+/**
+ * The orderable catalogue for the type panel (phase-out after FID). `enabled` (default true): the screen reads it only while a
+ * panel that uses it is open (`loadGate.ts`, D141).
+ *
+ * D142 (`GENERATORS_PERF.persistCatalogue`, default OFF): the rows are kept in IndexedDB across sessions
+ * (`data/generatorCatalogueCache.ts`: version key, 12 h maximum age, never anything personal). With the switch ON, a stored copy
+ * is put into the query cache at once (stale-while-revalidate) while the normal read runs and REPLACES it; every successful
+ * read refreshes the stored copy. Until that read has answered, the seeded rows count as "not known yet" (`hasData` false,
+ * `isLoading` while the read runs), so the screen holds the writes back exactly as it does for a read that has not landed: a price from a
+ * stale catalogue is shown, never saved. Any storage failure behaves as an empty cache (`persistedReference.ts`). OFF: the
+ * code below the `persist` checks does not run, and the hook is what it was.
+ */
+export function useGeneratorCatalog(fid: string | null | undefined, enabled = true): ReadResult<CatalogModel[]> {
+  const persist = generatorsPerf().persistCatalogue;
+  const qc = useQueryClient();
+  const key = qk.generatorCatalog(fid ?? "");
+  const active = Boolean(fid) && enabled;
   const q = useQuery({
-    queryKey: qk.generatorCatalog(fid ?? ""),
-    queryFn: () => listOrderableGenerators(fid ?? null),
-    enabled: Boolean(fid),
+    queryKey: key,
+    queryFn: async () => {
+      const rows = await listOrderableGenerators(fid ?? null);
+      if (persist && fid) void generatorCatalogueCache().write(fid, rows);
+      return rows;
+    },
+    enabled: active,
     staleTime: REFERENCE_STALE,
   });
-  return out(q, NONE as CatalogModel[]);
+  useEffect(() => {
+    if (!persist || !active || !fid) return;
+    let cancelled = false;
+    void generatorCatalogueCache().read(fid).then((hit) => {
+      // The server may have answered first: its rows win, a cached copy never overwrites them.
+      if (cancelled || !hit || qc.getQueryData(key) !== undefined) return;
+      // `updatedAt: 0` marks the rows as seeded (and as stale, so the read that is already running is not skipped).
+      qc.setQueryData(key, hit.data, { updatedAt: 0 });
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `key` is derived from `fid`; `qc` is stable
+  }, [persist, active, fid, qc]);
+  const result = out(q, NONE as CatalogModel[]);
+  const seeded = persist && q.data !== undefined && q.dataUpdatedAt === 0;
+  return seeded ? { ...result, isLoading: q.isFetching, hasData: false } : result;
 }
 
 /** The `Generator` rows of the project's types, whatever their phase-out. */
 export function useGeneratorModels(ids: readonly string[]): ReadResult<CatalogModel[]> {
-  const sorted = [...new Set(ids)].sort();
+  // D143: memoized, so the key's id list keeps its identity while `ids` does (the screen passes a memoized list).
+  const sorted = useMemo(() => [...new Set(ids)].sort(), [ids]);
   const q = useQuery({
     queryKey: qk.generatorModels(sorted),
     queryFn: () => listGeneratorsByIds(sorted),
@@ -140,13 +174,13 @@ export function useGeneratorModels(ids: readonly string[]): ReadResult<CatalogMo
  * `gblEstimationPriceInflationDirectConstants.AdditionalCost.AccumulatedIndex` (Y:63):
  * `prev + (curr − prev) × Month(FID) / 12`, blanks as 0 (rule 7).
  */
-export function useInflationIndex(fid: string | null | undefined): ReadResult<number> {
+export function useInflationIndex(fid: string | null | undefined, enabled = true): ReadResult<number> {
   const year = fid ? Number(fid.slice(0, 4)) : NaN;
   const month = fid ? Number(fid.slice(5, 7)) : NaN;
   const q = useQuery({
     queryKey: qk.priceInflation(Number.isFinite(year) ? year : 0),
     queryFn: () => loadPriceInflation(year),
-    enabled: Number.isFinite(year),
+    enabled: Number.isFinite(year) && enabled,
     staleTime: REFERENCE_STALE,
   });
   const index = q.data
@@ -155,32 +189,34 @@ export function useInflationIndex(fid: string | null | undefined): ReadResult<nu
   return out({ ...q, data: q.data ? index : undefined }, 0);
 }
 
-/** `gblDiviceCoststConstants`. */
-export function useDeviceCosts(countryId: string | null | undefined): ReadResult<DeviceCosts> {
+/** `gblDiviceCoststConstants`. `enabled` (default true): see `useGeneratorCatalog`. */
+export function useDeviceCosts(countryId: string | null | undefined, enabled = true): ReadResult<DeviceCosts> {
   const q = useQuery({
     queryKey: qk.deviceCosts(countryId ?? ""),
     queryFn: () => loadDeviceCosts(countryId ?? null),
     staleTime: REFERENCE_STALE,
+    enabled,
   });
   return out(q, { modules: null, inverter: null, mountingFix: null, mountingTracker: null });
 }
 
 export function useGeneratorTypes(projectId: string | undefined): ReadResult<GeneratorTypeRow[]> {
-  const q = useQuery({
-    queryKey: qk.generators(projectId ?? "", "types"),
-    queryFn: () => listGeneratorTypes(projectId!),
-    enabled: Boolean(projectId),
-  });
+  const q = useQuery({ ...generatorTypesQueryOptions(projectId ?? ""), enabled: Boolean(projectId) });
   return out(q, NONE as GeneratorTypeRow[]);
 }
 
 /** Every turbine of the project's WTG types (`colGeneratorsInProjectsTemporary`). */
 export function useProjectTurbines(projectId: string | undefined, typeIds: readonly string[]): ReadResult<TurbineRow[]> {
-  const sorted = [...typeIds].sort();
+  const sorted = useMemo(() => [...typeIds].sort(), [typeIds]);
+  // D142 (`GENERATORS_PERF.readsByProject`, default OFF): read by the project, not by the type ids, so the turbines do not wait for
+  // the types. The old read below stays exactly as it was; both go through the same `useQuery`, so the hook count is the same.
+  const byProject = generatorsPerf().readsByProject;
   const q = useQuery({
-    queryKey: qk.generators(projectId ?? "", "turbines", ...sorted),
-    queryFn: () => listProjectTurbines(sorted),
-    enabled: Boolean(projectId) && sorted.length > 0,
+    ...(byProject ? turbinesByProjectQueryOptions(projectId ?? "") : {
+      queryKey: qk.generators(projectId ?? "", "turbines", ...sorted),
+      queryFn: () => listProjectTurbines(sorted),
+    }),
+    enabled: Boolean(projectId) && (byProject || sorted.length > 0),
     // F3: the key embeds the type ids, so a save that adds or removes a type changes it; keep the previous turbines
     // (flagged `placeholder`) until the new set has loaded, so the list never blinks empty and the actions wait. Another
     // project's turbines are never kept (the key's second part is the project id).
@@ -191,7 +227,7 @@ export function useProjectTurbines(projectId: string | undefined, typeIds: reado
 
 /** `colPVModulesSuppliers`. */
 export function usePvModuleCatalog(): ReadResult<PvModuleOption[]> {
-  const q = useQuery({ queryKey: qk.pvModuleCatalog, queryFn: listPvModules, staleTime: REFERENCE_STALE });
+  const q = useQuery(pvModuleCatalogQueryOptions());
   return out(q, NONE as PvModuleOption[]);
 }
 
@@ -211,31 +247,22 @@ export function usePlantSupplierCatalog(kind: "inverter" | "substructure", enabl
 
 /** The project's PV types, each with its `PVModule.Supplier` joined from the catalogue. */
 export function usePvModuleTypes(projectId: string | undefined, modules: readonly PvModuleOption[]): ReadResult<SimpleTypeRow[]> {
-  const q = useQuery({
-    queryKey: qk.generators(projectId ?? "", "pv"),
-    queryFn: () => listPvTypes(projectId!),
-    enabled: Boolean(projectId),
-  });
-  const supplierOf = new Map(modules.map((m) => [m.id, m.supplier]));
-  const data = q.data?.map((r) => ({ ...r, catalogueSupplier: r.catalogueId ? supplierOf.get(r.catalogueId) ?? null : null }));
+  const q = useQuery({ ...pvTypesQueryOptions(projectId ?? ""), enabled: Boolean(projectId) });
+  // D143: joined once per (rows, catalogue), so the PV section gets the same array until one of them changes.
+  const data = useMemo(() => {
+    const supplierOf = new Map(modules.map((m) => [m.id, m.supplier]));
+    return q.data?.map((r) => ({ ...r, catalogueSupplier: r.catalogueId ? supplierOf.get(r.catalogueId) ?? null : null }));
+  }, [q.data, modules]);
   return out({ ...q, data }, NONE as SimpleTypeRow[]);
 }
 
 export function useInverterTypes(projectId: string | undefined): ReadResult<SimpleTypeRow[]> {
-  const q = useQuery({
-    queryKey: qk.generators(projectId ?? "", "inverter"),
-    queryFn: () => listInverterTypes(projectId!),
-    enabled: Boolean(projectId),
-  });
+  const q = useQuery({ ...inverterTypesQueryOptions(projectId ?? ""), enabled: Boolean(projectId) });
   return out(q, NONE as SimpleTypeRow[]);
 }
 
 export function useSubstructureTypes(projectId: string | undefined): ReadResult<SimpleTypeRow[]> {
-  const q = useQuery({
-    queryKey: qk.generators(projectId ?? "", "substructure"),
-    queryFn: () => listSubstructureTypes(projectId!),
-    enabled: Boolean(projectId),
-  });
+  const q = useQuery({ ...substructureTypesQueryOptions(projectId ?? ""), enabled: Boolean(projectId) });
   return out(q, NONE as SimpleTypeRow[]);
 }
 
@@ -243,20 +270,16 @@ export function useSubstructureTypes(projectId: string | undefined): ReadResult<
 export function useSimpleTypes(
   family: "storage" | "hydrogen" | "substation", projectId: string | undefined,
 ): ReadResult<SimpleTypeRow[]> {
-  const q = useQuery({
-    queryKey: qk.generators(projectId ?? "", family),
-    queryFn: () => listSimpleTypes(family, projectId!),
-    enabled: Boolean(projectId),
-  });
+  const q = useQuery({ ...simpleTypesQueryOptions(family, projectId ?? ""), enabled: Boolean(projectId) });
   return out(q, NONE as SimpleTypeRow[]);
 }
 
-/** The AllWTG land-lease costs a new turbine is allocated to (rule 20). */
-export function useAllWtgLandLeaseCosts(projectId: string | undefined): ReadResult<LandLeaseCostRow[]> {
+/** The AllWTG land-lease costs a new turbine is allocated to (rule 20). `enabled` (default true): see `useGeneratorCatalog`. */
+export function useAllWtgLandLeaseCosts(projectId: string | undefined, enabled = true): ReadResult<LandLeaseCostRow[]> {
   const q = useQuery({
     queryKey: qk.generators(projectId ?? "", "allWtgCosts"),
     queryFn: () => listAllWtgLandLeaseCosts(projectId!),
-    enabled: Boolean(projectId),
+    enabled: Boolean(projectId) && enabled,
   });
   return out(q, NONE as LandLeaseCostRow[]);
 }
@@ -303,6 +326,10 @@ export const SERVER_DECIDES: GeneratorPermissions = {
  * Runs the screen's writes and refreshes the screen, the session's project header and Milestones' copy.
  * Save performance (6 Nov 2026): the progress dialog closes once the writes have landed and the screen
  * reloads behind it (`refresh: "background"`); the Screen holds its actions back while `refreshing`.
+ *
+ * D141 (`GENERATORS_PERF.targetedReload`): the list below is the DEFAULT, "everything", and what a job gets when it carries no
+ * reload kind (the rollback jobs, and every job while the switch is off). A save names its kind (`reload.ts`, `withReload`)
+ * and refreshes only the queries that kind can change, through the job's own `invalidate`.
  */
 export function useGeneratorWrites(projectId: string | undefined) {
   const id = projectId ?? "";

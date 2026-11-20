@@ -14,6 +14,9 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   plugins: [react()],
   base: "./",
+  // The build this code came from. A new build changes it, which drops the reference data a previous build kept in IndexedDB
+  // (`data/persistedReference.ts`, D142). It is also set under Vitest (the time the config loaded).
+  define: { __APP_BUILD__: JSON.stringify(new Date().toISOString()) },
   server: {
     port: 3000,
     strictPort: true,

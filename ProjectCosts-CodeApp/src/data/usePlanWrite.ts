@@ -25,7 +25,7 @@
  *    part-way failure, so a screen can name only the real leftovers after a failed rollback.
  */
 import { useCallback, useRef, useState } from "react";
-import { useMutation, useQueryClient, type QueryKey } from "@tanstack/react-query";
+import { useMutation, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
 import { isRecordGone, RECORD_GONE_TEXT } from "@/platform/errors";
 import { permissionMessage } from "@/platform/privileges";
 import { BulkRowsGoneError } from "./bulkBackend";
@@ -73,6 +73,14 @@ export interface PlanJob {
    * except the PM Checklist, whose cluster visit must not refetch the states, the gates and the Entra lookups it never changes.
    */
   invalidate?: readonly QueryKey[];
+  /**
+   * Shows the job's result in the screen's cached rows BEFORE the writes run (Generators status toggle, D143), and returns the
+   * rollback that puts the exact previous rows back. The hook calls the rollback when the writes end without success (a refusal,
+   * a failure, a part-way stop, a "rows gone" refusal), before `onWritten(false)`; on success the cached rows stay until the reload
+   * that follows replaces them. A throw from this function is ignored: the result is cosmetic and the save goes on without it.
+   * Optional; no caller sets it except the Generators screen with its switch on.
+   */
+  optimistic?: (qc: QueryClient) => Promise<(() => void) | void> | (() => void) | void;
 }
 
 /**
@@ -162,11 +170,16 @@ export function usePlanWrite(opts: {
       // The writes are over (landed or failed) once the body settles, BEFORE `onSettled` reloads the screen's data:
       // tell the caller (it closes its panel) and switch the spinner text to the reload's (D106).
       let ok = false;
+      let rollback: (() => void) | undefined;
+      if (job.optimistic) {
+        try { rollback = (await job.optimistic(qc)) ?? undefined; } catch { rollback = undefined; }
+      }
       try {
         const result = await runJob(job);
         ok = true;
         return result;
       } finally {
+        if (!ok) rollback?.();
         job.onWritten?.(ok);
         if (job.reloadProgress) setProgress(job.reloadProgress);
       }

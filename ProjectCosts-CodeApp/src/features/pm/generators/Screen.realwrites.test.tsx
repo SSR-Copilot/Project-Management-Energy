@@ -116,7 +116,7 @@ afterEach(() => { cleanup(); h.queue = []; h.followUp.fail = false; });
 const commandBar = () => screen.getByRole("toolbar", { name: "pcf_Generators_DisplayProject_Body_Form_CommandBar" });
 
 describe("a failed delete, with the real write hook", () => {
-  it("UT-GEN-1270 Delete BESS that the server refuses shows the canvas error text with the cause and refreshes the four cache keys", async () => {
+  it("UT-GEN-1270 Delete BESS that the server refuses shows the canvas error text with the cause and refreshes the keys of a BESS delete", async () => {
     h.queue = [() => { throw new PlanError(0, 2, "delete the BESS type", new Error("HTTP 409 Conflict")); }];
     const { spy } = renderScreen();
     fireEvent.click(screen.getByTestId("gal_Generators_DisplayProject_Body_Form_Storage_1-select-s1"));
@@ -125,8 +125,11 @@ describe("a failed delete, with the real write hook", () => {
     const banner = await screen.findByTestId("generators-write-error");
     expect(banner.textContent).toContain(WRITE_ERROR.storageDelete("“delete the BESS type” failed: HTTP 409 Conflict."));
     expect(banner.textContent).toContain("HTTP 409 Conflict");
+    // D141 (`GENERATORS_PERF.targetedReload`, on by default): a BESS delete reloads the project roll-up and the BESS list only
+    // (before: `qk.generatorsAll` + the three project copies; with the switch off that list is back, UT-GENPERF-029).
     await waitFor(() => expect(spy.mock.calls.map((c) => (c[0] as { queryKey: unknown }).queryKey)).toEqual([
-      qk.generatorsAll(PROJECT_ID), qk.project(PROJECT_ID), qk.milestoneProject(PROJECT_ID), qk.generalDataProject(PROJECT_ID),
+      qk.generators(PROJECT_ID, "project"), qk.project(PROJECT_ID), qk.milestoneProject(PROJECT_ID), qk.generalDataProject(PROJECT_ID),
+      qk.generators(PROJECT_ID, "storage"),
     ]));
     // The screen is still usable: the delete is offered again.
     expect((within(commandBar()).getByRole("button", { name: "Delete BESS" }) as HTMLButtonElement).disabled).toBe(false);
