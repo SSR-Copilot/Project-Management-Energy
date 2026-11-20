@@ -1962,7 +1962,7 @@ describe("D34 — card formats", () => {
   });
 });
 
-describe("D144 — Financial Close without the weekday (bug 15290)", () => {
+describe("D147 — Financial Close without the weekday (bug 15290)", () => {
   const WEEKDAY = /Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b/;
 
   it("UT-FIN-925 the card shows the long date with no weekday; the canvas twin keeps LongDate", () => {

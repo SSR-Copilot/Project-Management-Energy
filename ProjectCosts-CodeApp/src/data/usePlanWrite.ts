@@ -74,6 +74,12 @@ export interface PlanJob {
    */
   invalidate?: readonly QueryKey[];
   /**
+   * A subset of `invalidate` (compared by key) that is only MARKED STALE after the writes (`refetchType: "none"`): no request is
+   * sent for it now; a screen that mounts the query later refetches it, as it does after any invalidation. Optional; no caller sets
+   * it except the Generators screen with `GENERATORS_PERF.trimReload` on (D144).
+   */
+  staleOnly?: readonly QueryKey[];
+  /**
    * Shows the job's result in the screen's cached rows BEFORE the writes run (Generators status toggle, D143), and returns the
    * rollback that puts the exact previous rows back. The hook calls the rollback when the writes end without success (a refusal,
    * a failure, a part-way stop, a "rows gone" refusal), before `onWritten(false)`; on success the cached rows stay until the reload
@@ -185,7 +191,9 @@ export function usePlanWrite(opts: {
       }
     },
     onSettled: (_data, _error, job) => {
-      const reload = Promise.all((job?.invalidate ?? opts.invalidate).map((queryKey) => qc.invalidateQueries({ queryKey })));
+      const stale = new Set((job?.staleOnly ?? []).map((key) => JSON.stringify(key)));
+      const reload = Promise.all((job?.invalidate ?? opts.invalidate).map((queryKey) =>
+        qc.invalidateQueries(stale.has(JSON.stringify(queryKey)) ? { queryKey, refetchType: "none" } : { queryKey })));
       if (opts.refresh !== "background") return reload;
       pendingRefreshes.current += 1;
       setRefreshing(true);

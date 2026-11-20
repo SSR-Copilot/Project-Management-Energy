@@ -4,7 +4,8 @@
  *
  * Every flag test pins both halves: the DEFAULT (today's plan) and the overridden value.
  */
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { setGeneratorsPerfFlags } from "@/data/generatorsPerfFlags";
 import { CASCADE_DELETE_CONCURRENCY, LEAF_DELETE_CONCURRENCY } from "@/data/concurrency";
 import { GENERATORS_DELETE } from "@/data/generatorsDeleteFlags";
 import { executePlan, PlanError, type PlanClient } from "@/data/executePlan";
@@ -16,6 +17,13 @@ import {
   ALLOC, BRIDGE, COST, OPEX, P, PROJECTS, PVTYPE, TURBINE, TYPE, costs, counter, genType, model, n, only, reps, simple,
   steps, turbine, wtgUnits, withoutGroupIds,
 } from "./bulkPlans.testkit";
+
+/*
+ * D144 pin: this file tests the D115 / D116 flags and the plan shapes of BEFORE the save-latency work (relaneWrites, replaceLanes,
+ * wideGroups), so those three switches are held OFF here. The same builders with the switches ON are covered by saveLatency.test.ts.
+ */
+beforeEach(() => setGeneratorsPerfFlags({ relaneWrites: false, replaceLanes: false, wideGroups: false }));
+afterEach(() => setGeneratorsPerfFlags(null));
 
 /** A turbine delete with `perCost` allocations on shared costs (`cs*`) and `alone` on costs only it uses (`ca*`). */
 function turbinePlan(opts?: R.PlanBulkOptions, shared = 4, alone = 2) {

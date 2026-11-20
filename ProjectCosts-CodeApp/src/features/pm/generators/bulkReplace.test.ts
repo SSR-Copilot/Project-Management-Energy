@@ -3,7 +3,8 @@
  * composed from the other phases (flag `replace`: the repoint, the O&M detach and the re-link as `updateMany`).
  * Decision 3 holds: delete and recreate, no repointing of old allocation rows to new ones. IDs UT-GEN-250..; both halves.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, beforeEach, afterEach } from "vitest";
+import { setGeneratorsPerfFlags } from "@/data/generatorsPerfFlags";
 import { LEAF_DELETE_CONCURRENCY } from "@/data/concurrency";
 import type { PlannedWrite } from "@/data/writePlan";
 import * as R from "./rules";
@@ -11,6 +12,13 @@ import {
   ALLOC, BRIDGE, OBU, OFF, OPEX, PROJECTS, PVTYPE, TURBINE, TYPE, P, changes, costs, counter, genType, model, n, noBulkInGroup, only,
   reps, simple, steps, turbine, waves, withoutGroupIds,
 } from "./bulkPlans.testkit";
+
+/*
+ * D144 pin: this file tests the D115 / D116 flags and the plan shapes of BEFORE the save-latency work (relaneWrites, replaceLanes,
+ * wideGroups), so those three switches are held OFF here. The same builders with the switches ON are covered by saveLatency.test.ts.
+ */
+beforeEach(() => setGeneratorsPerfFlags({ relaneWrites: false, replaceLanes: false, wideGroups: false }));
+afterEach(() => setGeneratorsPerfFlags(null));
 
 const PV = { capacity: "12", moduleLabel: "JA 600", supplier: "m1", degradation1stYear: "", degradationRemainingYears: "", dirty: new Set<string>() };
 const DETACH_NULL = { "vsb_DeviceTypeInProject@odata.bind": null };

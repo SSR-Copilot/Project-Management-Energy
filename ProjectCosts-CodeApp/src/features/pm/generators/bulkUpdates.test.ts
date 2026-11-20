@@ -2,7 +2,8 @@
  * Phase 3 of the Generators bulk programme (work package R2, plan §3 phase 3, §9.5): the status toggle (flag `status`)
  * and the apply-to-all siblings (flag `applyAll`) as ONE `updateMany` each. IDs UT-GEN-230..; both halves pinned.
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { setGeneratorsPerfFlags } from "@/data/generatorsPerfFlags";
 import { CHOICE_PLANT } from "@/data/dataverseNames";
 import { GEN_INSTANCE_COL } from "./rules";
 import * as R from "./rules";
@@ -10,6 +11,13 @@ import {
   ALLOC, OBU, OFF, PROJECTS, TURBINE, TYPE, P, changes, costs, counter, genType, model, noBulkInGroup, only, reps, steps, turbine,
   waves, wtgUnits,
 } from "./bulkPlans.testkit";
+
+/*
+ * D144 pin: this file tests the D115 / D116 flags and the plan shapes of BEFORE the save-latency work (relaneWrites, replaceLanes,
+ * wideGroups), so those three switches are held OFF here. The same builders with the switches ON are covered by saveLatency.test.ts.
+ */
+beforeEach(() => setGeneratorsPerfFlags({ relaneWrites: false, replaceLanes: false, wideGroups: false }));
+afterEach(() => setGeneratorsPerfFlags(null));
 
 const STATUS = only("status");
 const APPLY = only("applyAll");

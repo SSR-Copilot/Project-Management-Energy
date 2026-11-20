@@ -13,7 +13,7 @@
  *   `con_cmp_Header_Title_4.Text` = Switch(gblEnvironmentName, "Hotfix"…, "QA" → "Quality Assurance"),
  *                                   with its version in a block before Help (not a badge)
  *   The canvas (i) environment marker (`ico_cmp_Header_Info`, `ico_cmp_Header_Info_4`) is not drawn:
- *                                   it has no OnSelect and no Tooltip (DIVERGENCE, D145, bug 15341)
+ *                                   it has no OnSelect and no Tooltip (DIVERGENCE, D148, bug 15341)
  *   `con_cmp_Header.Fill`         = the per-environment band colour (`environmentHeaderFill`)
  *   `lbl_cmp_In_Header_UserName`  = "Hi " & User().FullName
  *   Help menu (`pcf_HeaderContainerReportError_CommandBar_1.Items`):
@@ -64,7 +64,7 @@ const useStyles = makeStyles({
    * screenshot (Dev, 19 Nov 2026): logo-relative, "Cloud" is 8 px lower and the version 7 px lower
    * than the old centred column. The PM `cmp_Header` uses other numbers (a 70 px band, and its
    * version at `ico_cmp_Header_Info.Y+1`), so the PM header keeps the centred column.
-   * The icon itself is not drawn (D145); the version keeps the place the canvas gives it.
+   * The icon itself is not drawn (D148); the version keeps the place the canvas gives it.
    */
   costBrandText: { flexGrow: 1, minWidth: 0 },
   costTitle: { position: "absolute", left: 0, top: "22px", whiteSpace: "nowrap" },
@@ -93,7 +93,7 @@ const useStyles = makeStyles({
   /*
    * `con_cmp_Header_Logo_Title_4` — the environment block first in `con_cmp_Header_Service_ReportError`,
    * before the error icon and Help: a 200-wide, full-height ManualLayout holding
-   *  - `ico_cmp_Header_Info_4`: the (i) environment marker, 16 x 16 at X 5. Not drawn (D145);
+   *  - `ico_cmp_Header_Info_4`: the (i) environment marker, 16 x 16 at X 5. Not drawn (D148);
    *  - `con_cmp_Header_Title_4`: right-aligned Semibold 12 pt black, `PaddingLeft 10`, half the band high
    *    and centred on it;
    *  - `con_cmp_Header_Version_4`: right-aligned, `Lighter` ExtraExtraSmall (the brand version's look) at
@@ -307,7 +307,7 @@ export function AppHeader({
   const styles = useStyles();
   const badge = environmentBadge(environmentName);
   /*
-   * DIVERGENCE (D145, bug 15341): no (i) environment marker on any header. The canvas draws one under
+   * DIVERGENCE (D148, bug 15341): no (i) environment marker on any header. The canvas draws one under
    * "Cloud" on Cost screens (`ico_cmp_Header_Info`) and one before Help on PM and admin screens
    * (`ico_cmp_Header_Info_4`), coloured per environment. It has no OnSelect and no Tooltip, so it does
    * nothing when clicked; the band colour and the environment name already show the environment. The
@@ -351,7 +351,7 @@ export function AppHeader({
               <Text className={`${styles.version} canvas-brand-version`}>{versionLabel(appVersion, environmentName)}</Text>
             </span>
           ) : null}
-          {/* `ico_cmp_Header_Info` (projectcosts `cmp_Header.pa.yaml:210-219`) is not drawn (D145). */}
+          {/* `ico_cmp_Header_Info` (projectcosts `cmp_Header.pa.yaml:210-219`) is not drawn (D148). */}
         </div>
       </div>
 
@@ -422,7 +422,7 @@ export function AppHeader({
 
       <div className={styles.right}>
         <div className={styles.envBlock} data-testid="con_cmp_Header_Logo_Title_4">
-          {/* `ico_cmp_Header_Info_4` (projectmanagement `cmp_Header.pa.yaml:639`) is not drawn (D145). */}
+          {/* `ico_cmp_Header_Info_4` (projectmanagement `cmp_Header.pa.yaml:639`) is not drawn (D148). */}
           {badge ? <Text className={styles.envTitle} data-testid="con_cmp_Header_Title_4">{badge}</Text> : null}
           {environmentVersionVisible(environmentName) ? (
             <Text className={mergeClasses(styles.version, styles.envVersion)} data-testid="con_cmp_Header_Version_4">

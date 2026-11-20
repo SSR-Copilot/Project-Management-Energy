@@ -715,13 +715,10 @@ export async function findPvUnit(pvTypeId: string): Promise<string | null> {
 }
 
 /**
- * The land-lease allocations of some turbines, and how many allocations each of their costs has
- * in all (`CountRows(Filter('Land Lease Allocation WTGS', 'Project Cost' = …))`, Y:15812).
+ * The land-lease allocations of some turbines (one read per 40 turbines), WITHOUT the count of each cost's allocations. D144
+ * (`replaceLanes`): a replace needs only these rows, so it skips the second read `loadTurbineAllocations` makes for the counts.
  */
-export async function loadTurbineAllocations(turbineIds: readonly string[]): Promise<{
-  allocations: { id: string; costId: string; turbineId: string }[];
-  countByCost: Record<string, number>;
-}> {
+export async function loadTurbineAllocationRows(turbineIds: readonly string[]): Promise<{ id: string; costId: string; turbineId: string }[]> {
   const allocations: { id: string; costId: string; turbineId: string }[] = [];
   const allocationRows = await readChunks(turbineIds, async (part) => raw(await fetchAll(
     "load the turbines' land-lease allocations",
@@ -732,6 +729,18 @@ export async function loadTurbineAllocations(turbineIds: readonly string[]): Pro
     const costId = str(r._vsb_projectcost_value);
     if (costId) allocations.push({ id: String(r.vsb_landleaseallocationwtgid), costId, turbineId: String(r._vsb_generatorinproject_value) });
   }
+  return allocations;
+}
+
+/**
+ * The land-lease allocations of some turbines, and how many allocations each of their costs has
+ * in all (`CountRows(Filter('Land Lease Allocation WTGS', 'Project Cost' = …))`, Y:15812).
+ */
+export async function loadTurbineAllocations(turbineIds: readonly string[]): Promise<{
+  allocations: { id: string; costId: string; turbineId: string }[];
+  countByCost: Record<string, number>;
+}> {
+  const allocations = await loadTurbineAllocationRows(turbineIds);
   const countByCost: Record<string, number> = {};
   const countRows = await readChunks([...new Set(allocations.map((a) => a.costId))], async (part) => raw(await fetchAll(
     "count the land-lease costs' allocations",

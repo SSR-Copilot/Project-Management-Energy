@@ -5,13 +5,21 @@
  * Phase 1B (200-209) has no flag: concurrency tiers only. Phases 2-5 (210 up) are flag-gated; every test pins both
  * halves (flag off = today's plan, flag on = the bulk plan) with an injected `newId`.
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { setGeneratorsPerfFlags } from "@/data/generatorsPerfFlags";
 import { CHOICE_PLANT } from "@/data/dataverseNames";
 import { CASCADE_DELETE_CONCURRENCY, LEAF_DELETE_CONCURRENCY, WRITE_CONCURRENCY } from "@/data/concurrency";
 import * as R from "./rules";
 import {
   ALLOC, BRIDGE, COST, OPEX, PROJECTS, PVTYPE, TURBINE, TYPE, P, costs, genType, idsOf, model, n, reps, simple, steps, turbine, wtgUnits,
 } from "./bulkPlans.testkit";
+
+/*
+ * D144 pin: this file tests the D115 / D116 flags and the plan shapes of BEFORE the save-latency work (relaneWrites, replaceLanes,
+ * wideGroups), so those three switches are held OFF here. The same builders with the switches ON are covered by saveLatency.test.ts.
+ */
+beforeEach(() => setGeneratorsPerfFlags({ relaneWrites: false, replaceLanes: false, wideGroups: false }));
+afterEach(() => setGeneratorsPerfFlags(null));
 
 /* ═════════════════════════════════════════════ phase 1B — tiered parallel deletes ═══ */
 

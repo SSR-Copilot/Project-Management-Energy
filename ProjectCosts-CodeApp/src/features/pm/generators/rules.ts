@@ -59,9 +59,10 @@ import { foundationCostAdded, foundationCostAddedBooleanReading } from "@/domain
 import {
   CREATED_ROW_ID, createdRowRef, createMany, emptyPlan, hardenedDelete, refusePlan, together, updateMany, type PlannedWrite, type WritePlan,
 } from "@/data/writePlan";
-import { CASCADE_DELETE_CONCURRENCY, LEAF_DELETE_CONCURRENCY } from "@/data/concurrency";
+import { CASCADE_DELETE_CONCURRENCY, LEAF_DELETE_CONCURRENCY, WIDE_GROUP_CONCURRENCY } from "@/data/concurrency";
 import type { LandedRow } from "@/data/executePlan";
 import { GENERATORS_BULK } from "@/data/generatorsBulkFlags";
+import { generatorsPerf, type GeneratorsPerfFlags } from "@/data/generatorsPerfFlags";
 import { GENERATORS_DELETE, type DeleteFlagOverrides, type GeneratorsDeleteFlags } from "@/data/generatorsDeleteFlags";
 import { newRowId } from "@/data/newRowId";
 import type { BulkRow } from "@/data/bulkBackend";
@@ -3580,11 +3581,32 @@ export interface PlanBulkOptions {
    * flag (`ExecutePlanOptions.deleteFlags`); the plans do not read it.
    */
   delete?: DeleteFlagOverrides;
+  /**
+   * Per-switch overrides of `GENERATORS_PERF` for the save-latency switches (D144): `relaneWrites`, `replaceLanes`,
+   * `wideGroups`. A switch is read as `opts.perf?.X ?? generatorsPerf().X`; the golden-master tests build the same plan
+   * with all three off (today's plan) and on.
+   */
+  perf?: Partial<Pick<GeneratorsPerfFlags, "relaneWrites" | "replaceLanes" | "wideGroups">>;
   /** Source of the pre-generated row ids of bulk creates. Tests inject a counter. */
   newId?: () => string;
 }
 
-const bulkOn = (opts: PlanBulkOptions | undefined, flag: keyof typeof GENERATORS_BULK): boolean =>
+/** D144: a save-latency switch (`opts.perf` first, else the shipped / test-installed `GENERATORS_PERF`). */
+const perfOn = (opts: PlanBulkOptions | undefined, flag: "relaneWrites" | "replaceLanes" | "wideGroups"): boolean =>
+  (opts?.perf?.[flag] ?? generatorsPerf()[flag]) === true;
+
+/**
+ * One parallel group of the Generators plans at its DEFAULT limit: 8 (`WRITE_CONCURRENCY`) with `wideGroups` off, 16
+ * (`WIDE_GROUP_CONCURRENCY`) with it on (D144). The delete tiers (`leafDeletes`, `cascadeDeletes`) keep their own limits.
+ */
+const group = (writes: readonly PlannedWrite[], opts?: PlanBulkOptions): PlannedWrite[] =>
+  (perfOn(opts, "wideGroups") ? together(writes, { limit: WIDE_GROUP_CONCURRENCY }) : together(writes));
+
+/** One WAVE (D144): nothing is a plain step, one write stays a plain step, two or more are ONE parallel group. */
+const wave = (writes: readonly PlannedWrite[], opts?: PlanBulkOptions): PlannedWrite[] =>
+  (writes.length > 1 ? group(writes, opts) : [...writes]);
+
+const bulkOn =(opts: PlanBulkOptions | undefined, flag: keyof typeof GENERATORS_BULK): boolean =>
   (opts?.bulk?.[flag] ?? GENERATORS_BULK[flag]) === true;
 function deleteFlagOn(opts: PlanBulkOptions | undefined, flag: keyof GeneratorsDeleteFlags): boolean {
   return (opts?.delete?.[flag] ?? GENERATORS_DELETE[flag]) === true;
@@ -3659,7 +3681,7 @@ function allocationRows(args: Parameters<typeof allocationCreates>[0], newId: ()
  * (plan §2.4). The off path is today's plan, kept as the rollback (CONVENTIONS rule 15).
  */
 function allocationStep(args: Parameters<typeof allocationCreates>[0], opts: PlanBulkOptions | undefined): PlannedWrite[] {
-  if (!bulkOn(opts, "allocations")) return together(allocationCreates(args));
+  if (!bulkOn(opts, "allocations")) return group(allocationCreates(args), opts);
   const rows = allocationRows(args, rowIdSource(opts));
   return rows.length > 0 ? [createMany(ES.landLeaseAllocationWtgs, rows, "the land-lease allocations of the new turbines")] : [];
 }
@@ -3692,7 +3714,13 @@ function planCreateGeneratorTypeUnchecked(args: {
   revisedHubHeight: number | null;
   existingTypes: GeneratorTypeRow[];
   projectTurbines: Pick<TurbineRow, "index">[];
-}, opts?: PlanBulkOptions): WritePlan {
+  /**
+   * D144 (`relaneWrites`; Replace passes `replaceLanes`): true = the in-country roll-up is NOT appended to the plan but handed
+   * back as `deferredRollup`, for the follow-up plan to write in its one wave (`planGeneratorTypeFollowUp({ rollup })`). The
+   * write is the same one; only the wave it is sent in changes. Unset = the switch of `opts`.
+   */
+  deferRollup?: boolean;
+}, opts?: PlanBulkOptions): CreateTypePlan {
   const n = args.numberOfGenerators;
   const cost = pfxRound(args.costPerWtg, 2);
   const totals = generatorTypeTotals({ count: n, costPerWtg: cost, specificCapacity: args.model.specificCapacity });
@@ -3731,18 +3759,29 @@ function planCreateGeneratorTypeUnchecked(args: {
     turbines = rows.length > 0 ? [createMany(ES_PLANT.generatorInProjects, rows, "the new generator type's turbines")] : [];
   } else {
     // Today: the turbines go together; the roll-up last.
-    turbines = together(names.map((name) => ins(ES_PLANT.generatorInProjects, turbineData(name), `turbine ${name}`)));
+    turbines = group(names.map((name) => ins(ES_PLANT.generatorInProjects, turbineData(name), `turbine ${name}`)), opts);
   }
   const writes: PlannedWrite[] = [typeCreate, ...turbines];
   if (requiresPermissionRequest(args.inCountry)) return { writes, log: [`Generator type with ${n} turbines`] };
   // After every turbine, as in the canvas: `LoadDevexCapexCostTotalCapacityTrigger` fires on these project
   // columns, and a failed turbine stops the plan before the project totals change.
-  writes.push(projectWtgRollup(args.project.id, [
+  const rollup = projectWtgRollup(args.project.id, [
     ...args.existingTypes,
     { requestPermissionState: null, status: CHOICE_PLANT.status.active,
       generatorsCapacity: totals.generatorsCapacity, generatorsCost: totals.generatorsCost },
-  ]));
+  ]);
+  // D144: with the switch on the roll-up is sent in the follow-up plan's wave (beside the device-type row and the
+  // allocations), still AFTER every turbine and exactly once; the plan hands it back instead of ending with it.
+  if (args.deferRollup ?? perfOn(opts, "relaneWrites")) {
+    return { writes, log: [`Generator type with ${n} turbines`], deferredRollup: rollup };
+  }
+  writes.push(rollup);
   return { writes, log: [`Generator type with ${n} turbines`] };
+}
+
+/** A plan that may hand its project roll-up to the follow-up plan (D144, `relaneWrites` / `replaceLanes`). */
+export interface CreateTypePlan extends WritePlan {
+  deferredRollup?: PlannedWrite;
 }
 
 /** `planCreateGeneratorType` with the F6 owning-business-unit refusal (a plan that creates rows is refused when the project has none). */
@@ -3781,6 +3820,11 @@ function planGeneratorTypeFollowUpUnchecked(args: {
   hasDeviceType: boolean;
   turbines: { id: string; name: string | null }[];
   landLeaseCosts: LandLeaseCostRow[];
+  /**
+   * D144 (`relaneWrites`): the project roll-up `planCreateGeneratorType` handed back (`deferredRollup`). It joins the device-type
+   * row and the allocations in this plan's ONE wave. Unset (out of country, or the switch off) = today's plan.
+   */
+  rollup?: PlannedWrite;
 }, opts?: PlanBulkOptions): WritePlan {
   const writes: PlannedWrite[] = [];
   if (!args.hasDeviceType) {
@@ -3795,11 +3839,14 @@ function planGeneratorTypeFollowUpUnchecked(args: {
   if (bulkOn(opts, "allocations")) {
     // DIVERGENCE (plan §3 phase 2): the allocations are ONE `createMany` step. A bulk step is never part of a group,
     // so the device-type row is a plain create before it (it has no allocation to wait for, and no one to wait for it).
-    return { writes: [...writes, ...allocationStep(allocation, opts)], log: [] };
+    // D144: the roll-up, when handed over, shares the device-type row's wave (a lone write stays a plain step).
+    return { writes: [...wave([...writes, ...(args.rollup ? [args.rollup] : [])], opts), ...allocationStep(allocation, opts)], log: [] };
   }
   writes.push(...allocationCreates(allocation));
-  // The device-type row and the allocations bind only to rows that already exist: one parallel run.
-  return { writes: together(writes), log: [] };
+  // The device-type row and the allocations bind only to rows that already exist: one parallel run. D144: and the roll-up
+  // (after the turbines it sums, which this plan's caller created first) in the same run.
+  if (args.rollup) writes.push(args.rollup);
+  return { writes: group(writes, opts), log: [] };
 }
 
 /** `planGeneratorTypeFollowUp` with the F6 owning-business-unit refusal (a plan that creates rows is refused when the project has none). */
@@ -3907,6 +3954,32 @@ function planSaveTurbineUnchecked(args: {
     [GEN_TYPE_COL.generatorsCost]: re.generatorsCost,
     [GEN_TYPE_COL.generatorsCapacity]: re.generatorsCapacity,
   };
+  // D144 (`relaneWrites`), a NEW turbine only: after the turbine create, the sibling patches, the type totals, the roll-up and
+  // the allocations are ONE wave. None needs a row another of them writes: the totals and the roll-up come from the form and the
+  // rows read before the save, and the allocations bind only to the turbine step 1 created. An edit keeps today's order.
+  const relane = !args.turbine && perfOn(opts, "relaneWrites");
+  const typeWrite = guardedIf(upd(ES_PLANT.generatorTypeInProjects, args.type.id, typeFields, "the generator type's totals"), opts);
+  const rollupWrite = projectWtgRollup(args.project.id, args.allTypes.map((t) => t.id === args.type.id
+    ? { ...t, generatorsCapacity: re.generatorsCapacity, generatorsCost: re.generatorsCost } : t));
+  if (relane) {
+    const lane: PlannedWrite[] = [];
+    if (bulkOn(opts, "applyAll") && applyAll.length > 0) {
+      writes.push(updateMany(
+        ES_PLANT.generatorInProjects, uniqueRows(applyAll.map((w) => ({ id: w.id!, data: w.data! }))), "apply to all: the type's other turbines",
+      ));
+    } else {
+      lane.push(...applyAll.map((w) => guardedIf(w, opts)));
+    }
+    lane.push(typeWrite, rollupWrite);
+    const allocationArgs = {
+      costs: args.landLeaseCosts, turbines: [{ id: createdRowRef(0), name }],
+      owningBusinessUnitId: args.project.owningBusinessUnitId,
+    };
+    const bulkAllocations = bulkOn(opts, "allocations");
+    if (!bulkAllocations) lane.push(...allocationCreates(allocationArgs));
+    writes.push(...wave(lane, opts), ...(bulkAllocations ? allocationStep(allocationArgs, opts) : []));
+    return { writes, log: [name] };
+  }
   if (bulkOn(opts, "applyAll") && applyAll.length > 0) {
     // DIVERGENCE (plan §3 phase 3, §9.5; flag `applyAll`): the sibling patches are ONE `updateMany` step with today's
     // per-row payloads (each sibling's own total height, the owning-business-unit bind as today's single updates carry
@@ -3917,13 +3990,12 @@ function planSaveTurbineUnchecked(args: {
     ));
   } else {
     // DEL-7(a): flag `guardedUpdates`: a sibling another user deleted is never re-created by the PATCH (the bulk form is guarded already).
-    writes.push(...together(applyAll.map((w) => guardedIf(w, opts))));
+    writes.push(...group(applyAll.map((w) => guardedIf(w, opts)), opts));
   }
-  writes.push(guardedIf(upd(ES_PLANT.generatorTypeInProjects, args.type.id, typeFields, "the generator type's totals"), opts));
+  writes.push(typeWrite);
 
   // 4. the roll-up with the re-derived type.
-  writes.push(projectWtgRollup(args.project.id, args.allTypes.map((t) => t.id === args.type.id
-    ? { ...t, generatorsCapacity: re.generatorsCapacity, generatorsCost: re.generatorsCost } : t)));
+  writes.push(rollupWrite);
 
   // 5. a new turbine's AllWTG allocations — bound to the row step 1 created.
   if (!args.turbine) {
@@ -4070,13 +4142,20 @@ export function planToggleStatus(args: {
       log: [],
     };
   }
+  const turbineUpdates = p.turbineIds.map((id) => upd(ES_PLANT.generatorInProjects, id, { statecode: p.nextStatus }, "a turbine's status"));
+  if (perfOn(opts, "relaneWrites")) {
+    // D144 (`relaneWrites`): the type's status update and the turbines' `statecode` updates are independent rows (each sets
+    // the same next status; no one reads another's result): ONE wave, then the roll-up last, as before. A lone type update
+    // (no turbines) stays a plain step.
+    return { writes: [...wave([typeUpdate, ...turbineUpdates], opts), rollup], log: [] };
+  }
   const writes: PlannedWrite[] = [
     typeUpdate,
     // Save performance (phase 1, 16 Nov 2026): the turbines' `statecode` updates are independent rows, sent as one
-    // parallel run (`together`, 8 at a time). Order unchanged: the type first, the turbine group, the roll-up last.
-    // Tier: these are UPDATES (`statecode`), not deletes, so the group keeps the default limit (8); the delete tiers
-    // (plan §9.4) do not apply.
-    ...together(p.turbineIds.map((id) => upd(ES_PLANT.generatorInProjects, id, { statecode: p.nextStatus }, "a turbine's status"))),
+    // parallel run (`together`, 8 at a time; 16 with `wideGroups`). Order unchanged: the type first, the turbine group, the
+    // roll-up last. Tier: these are UPDATES (`statecode`), not deletes, so the group keeps the default limit; the delete
+    // tiers (plan §9.4) do not apply.
+    ...group(turbineUpdates, opts),
     rollup,
   ];
   return { writes, log: [] };
@@ -4459,28 +4538,43 @@ function planPvFollowUpUnchecked(args: {
     [PLANT_BIND.moduleTypePv]: ref(ES_PLANT.pvModuleTypeInProjects, args.pvId),
     ...owner(args.project.owningBusinessUnitId),
   };
+  const unitWrite = args.unitId
+    ? upd(ES_PLANT.generatorInProjects, args.unitId, unit, "the PV type's unit")
+    : ins(ES_PLANT.generatorInProjects, unit, "the PV type's unit");
+  const allocationArgs = {
+    costs: args.landLeaseCosts ?? [], turbines: [{ id: args.unitId ?? createdRowRef(0), name: args.pvName }],
+    owningBusinessUnitId: args.project.owningBusinessUnitId,
+  };
+  const rollupWrite = upd(ES.projects, args.project.id, {
+    [PROJECT_PLANT_COL.plantPvCapacity]: plantPvCapacity(args.pvRows),
+    [PROJECT_PLANT_COL.plantPvCost]: plantPvCost({ pv: args.pvRows, inverters: args.inverters, substructures: args.substructures }),
+  }, "the project's Plant PV Capacity / Cost");
+  const shadow = args.hasDeviceType ? [] : [deviceTypeShadow({
+    family: "pv", typeId: args.pvId, typeName: args.pvName, owningBusinessUnitId: args.project.owningBusinessUnitId,
+  })];
+  if (perfOn(opts, "relaneWrites")) {
+    // D144 (`relaneWrites`): after the unit, the G7 allocations (bound to the unit), the project's PV capacity / cost and the
+    // device-type row (it needs only the PV type's name) are ONE wave: no one of them reads a row another writes. The roll-up
+    // still comes after the PV type and the unit it sums, and is written once. With `allocations` on the createMany stays its
+    // own step, where it was (after the unit), and the roll-up and the device-type row share a wave.
+    const bulkAllocations = bulkOn(opts, "allocations");
+    const lane = [
+      ...(args.isNew && !bulkAllocations ? allocationCreates(allocationArgs) : []),
+      rollupWrite, ...shadow,
+    ];
+    return {
+      writes: [unitWrite, ...(args.isNew && bulkAllocations ? allocationStep(allocationArgs, opts) : []), ...wave(lane, opts)],
+      log: [],
+    };
+  }
   const writes: PlannedWrite[] = [
-    args.unitId
-      ? upd(ES_PLANT.generatorInProjects, args.unitId, unit, "the PV type's unit")
-      : ins(ES_PLANT.generatorInProjects, unit, "the PV type's unit"),
+    unitWrite,
     // G7 — bound to the unit this plan created (its first create), or the existing one. Save performance
     // (6 Nov 2026): independent rows, sent as one parallel run; the unit before them, the roll-up after.
-    ...(args.isNew
-      ? allocationStep({
-          costs: args.landLeaseCosts ?? [], turbines: [{ id: args.unitId ?? createdRowRef(0), name: args.pvName }],
-          owningBusinessUnitId: args.project.owningBusinessUnitId,
-        }, opts)
-      : []),
-    upd(ES.projects, args.project.id, {
-      [PROJECT_PLANT_COL.plantPvCapacity]: plantPvCapacity(args.pvRows),
-      [PROJECT_PLANT_COL.plantPvCost]: plantPvCost({ pv: args.pvRows, inverters: args.inverters, substructures: args.substructures }),
-    }, "the project's Plant PV Capacity / Cost"),
+    ...(args.isNew ? allocationStep(allocationArgs, opts) : []),
+    rollupWrite,
   ];
-  if (!args.hasDeviceType) {
-    writes.push(deviceTypeShadow({
-      family: "pv", typeId: args.pvId, typeName: args.pvName, owningBusinessUnitId: args.project.owningBusinessUnitId,
-    }));
-  }
+  writes.push(...shadow);
   return { writes, log: [] };
 }
 
@@ -4516,7 +4610,7 @@ export function planDeletePvTypeCanvasParity(args: {
     del(ES_PLANT.pvModuleTypeInProjects, args.pv.id, "the PV module type", { confirm: true }),
     upd(ES.projects, args.project.id, { [PROJECT_PLANT_COL.plantPvCapacity]: capacity }, "the project's Plant PV Capacity"),
     // Save performance (6 Nov 2026): independent rows, one parallel run between the capacity and the PV cost.
-    ...together(substructures.map((s) => upd(ES_PLANT.substructureTypeInProjects, s.id, { vsb_substructurecost: s.cost }, "a substructure cost"))),
+    ...group(substructures.map((s) => upd(ES_PLANT.substructureTypeInProjects, s.id, { vsb_substructurecost: s.cost }, "a substructure cost"))),
     projectPvCost(args.project.id, rest, args.inverters, substructures),
   ];
   return { writes, log: [] };
@@ -5194,11 +5288,19 @@ function replaceDetachAndDelete(inputs: ReplaceInputs, typeSet: string, typeId: 
       ? [updateMany(ES_PLANT.opexProjectCosts, uniqueRows(inputs.opexCostIds.map((id) => ({ id, data: opexLinkData(null) }))),
         "detach the O&M costs from the replaced type")]
       : [])
-    : together(inputs.opexCostIds.map((id) => opexLink(id, null, "detach an O&M cost from the replaced type")));
+    : group(inputs.opexCostIds.map((id) => opexLink(id, null, "detach an O&M cost from the replaced type")), opts);
+  const unitDeletes = inputs.unitIds.map((id) => del(ES_PLANT.generatorInProjects, id, "a unit of the replaced type", { confirm: true }));
+  const bridgeDeletes = inputs.bridgeIds.map((id) => del(ES_PLANT.deviceTypesInProjects, id, "the replaced type's O&M device-type row"));
+  if (perfOn(opts, "replaceLanes")) {
+    // D144 (`replaceLanes`): the units and the device-type rows are sibling leaves of the type: ONE leaf wave (the leaf tier,
+    // 16 in flight) after the detach, then the type delete. The detach still precedes every bridge-row delete, the type goes
+    // last, and every delete keeps its own flags (`confirm`, hardened). One lone delete stays a plain step.
+    return [...detach, ...leafDeletesIfMany([...unitDeletes, ...bridgeDeletes], opts), del(typeSet, typeId, "the replaced type", { confirm: true })];
+  }
   return [
     ...detach,
-    ...leafDeletes(inputs.unitIds.map((id) => del(ES_PLANT.generatorInProjects, id, "a unit of the replaced type", { confirm: true })), opts),
-    ...leafDeletesIfMany(inputs.bridgeIds.map((id) => del(ES_PLANT.deviceTypesInProjects, id, "the replaced type's O&M device-type row")), opts),
+    ...leafDeletes(unitDeletes, opts),
+    ...leafDeletesIfMany(bridgeDeletes, opts),
     del(typeSet, typeId, "the replaced type", { confirm: true }),
   ];
 }
@@ -5226,18 +5328,21 @@ function planReplaceGeneratorTypeUnchecked(args: {
   /** The turbines of every other type. */
   otherTurbines: Pick<TurbineRow, "index">[];
   inputs: ReplaceInputs;
-}, opts?: PlanBulkOptions): WritePlan {
+}, opts?: PlanBulkOptions): CreateTypePlan {
   // Flag `turbines` (phase 4) reaches the Add through `opts`: the new type is still created first, single.
+  // D144 (`replaceLanes`): the in-country roll-up is handed back for the follow-up's wave (`deferredRollup`), as the Add does.
   const add = planCreateGeneratorType({
     project: args.project, inCountry: args.inCountry, model: args.model,
     numberOfGenerators: Math.max(0, args.oldType.numberOfGenerators ?? 0), costPerWtg: args.costPerWtg,
     selectedHeight: args.selectedHeight, revisedHubHeight: args.revisedHubHeight,
     existingTypes: args.otherTypes, projectTurbines: args.otherTurbines,
+    deferRollup: perfOn(opts, "replaceLanes"),
   }, opts);
   if (add.refusedReason) return add;
   return {
     writes: [...replaceDetachAndDelete(args.inputs, ES_PLANT.generatorTypeInProjects, args.oldType.id, opts), ...add.writes],
     log: add.log,
+    ...(add.deferredRollup ? { deferredRollup: add.deferredRollup } : {}),
   };
 }
 
@@ -5265,9 +5370,17 @@ function planReplaceGeneratorTypeFollowUpUnchecked(args: {
   /** The new units, ordered by index. */
   newUnits: { id: string; name: string | null }[];
   inputs: ReplaceInputs;
+  /**
+   * D144 (`replaceLanes`): the project roll-up `planReplaceGeneratorType` handed back (`deferredRollup`). It is written in this
+   * plan's first wave: beside the device-type row when one is created, else beside the allocations. Unset = today's plan.
+   */
+  rollup?: PlannedWrite;
 }, opts?: PlanBulkOptions): ReplaceFollowUpPlan {
   const obu = args.project.owningBusinessUnitId;
   const writes: PlannedWrite[] = [];
+  /** The device-type row and the roll-up, as one wave (D144); empty with the switch off. */
+  const lead: PlannedWrite[] = [];
+  let rollupPending = args.rollup;
   /** Save performance (6 Nov 2026): after the device-type row, every write here is an independent row. */
   const rows: PlannedWrite[] = [];
   /** Plan §9.4 (phase 1B): the old allocations' deletes are their own leaf group, AFTER the new rows were created. */
@@ -5276,7 +5389,13 @@ function planReplaceGeneratorTypeFollowUpUnchecked(args: {
   let bulkCreates: PlannedWrite[] = [];
   let bridge = args.existingBridgeId;
   if (!bridge) {
-    writes.push(deviceTypeShadow({ family: "wtg", typeId: args.newTypeId, typeName: args.newTypeName, owningBusinessUnitId: obu }));
+    const shadow = deviceTypeShadow({ family: "wtg", typeId: args.newTypeId, typeName: args.newTypeName, owningBusinessUnitId: obu });
+    if (rollupPending) {
+      // Both need only rows that exist now (the new type and its units): one wave. The roll-up lands right after the units it sums,
+      // as it did in job 1, so a failure further on never leaves the old type's capacity in the project totals.
+      lead.push(shadow, rollupPending);
+      rollupPending = undefined;
+    } else writes.push(shadow);
     bridge = createdRowRef(0);
   }
   const allocation = { costs: args.inputs.landLeaseCosts, turbines: args.newUnits, owningBusinessUnitId: obu };
@@ -5307,8 +5426,11 @@ function planReplaceGeneratorTypeFollowUpUnchecked(args: {
   // One parallel run after the device-type row it may bind to (the moves, creates and re-links are disjoint rows), then
   // the removals as their own leaf group (plan §9.4: deletes and creates never contend; the D51 lesson). With the flag the
   // moves and re-links are bulk steps after the creates (decision 3: delete and recreate, no repointing of old rows to new ones).
+  // D144: no device-type row to create, so the handed-over roll-up joins the run of creates, moves and re-links.
+  if (rollupPending) rows.push(rollupPending);
   writes.push(
-    ...bulkCreates, ...together(rows),
+    ...wave(lead, opts),
+    ...bulkCreates, ...group(rows, opts),
     ...(moveRows.length > 0 ? [updateMany(ES.landLeaseAllocationWtgs, uniqueRows(moveRows), "move the land-lease allocations to the new units")] : []),
     ...(relinkRows.length > 0 ? [updateMany(ES_PLANT.opexProjectCosts, uniqueRows(relinkRows), "re-link the O&M costs to the new type")] : []),
     ...leafDeletes(removals, opts),
@@ -5378,18 +5500,23 @@ function planReplacePvTypeFollowUpUnchecked(args: {
 }, opts?: PlanBulkOptions): WritePlan {
   const obu = args.project.owningBusinessUnitId;
   const writes: PlannedWrite[] = [];
+  const lanes = perfOn(opts, "replaceLanes");
   let bridge = args.existingBridgeId;
   let creates = 0;
+  /** The device-type row and the new unit: sibling creates, ONE wave with `replaceLanes` (D144). */
+  const siblings: PlannedWrite[] = [];
   if (!bridge) {
-    writes.push(deviceTypeShadow({ family: "pv", typeId: args.newPvId, typeName: args.newPvName, owningBusinessUnitId: obu }));
+    const shadow = deviceTypeShadow({ family: "pv", typeId: args.newPvId, typeName: args.newPvName, owningBusinessUnitId: obu });
+    if (lanes) siblings.push(shadow); else writes.push(shadow);
     bridge = createdRowRef(creates++);
   }
   if (args.inputs.opexCostIds.length > 0 && !bridge) return refusePlan(PV_BRIDGE_MISSING);
-  writes.push(ins(ES_PLANT.generatorInProjects, {
+  const unitCreate = ins(ES_PLANT.generatorInProjects, {
     [GEN_INSTANCE_COL.name]: args.newPvName,
     [PLANT_BIND.moduleTypePv]: ref(ES_PLANT.pvModuleTypeInProjects, args.newPvId),
     ...owner(obu),
-  }, "the new PV type's unit"));
+  }, "the new PV type's unit");
+  if (lanes) siblings.push(unitCreate); else writes.push(unitCreate);
   const unit = createdRowRef(creates);
   // Save performance (6 Nov 2026): after the new unit, its allocation creates, moves and removals are disjoint
   // rows — one parallel run; the project's PV capacity / cost after them; then the O&M re-links, another run.
@@ -5409,24 +5536,39 @@ function planReplacePvTypeFollowUpUnchecked(args: {
   // Plan §9.4 (phase 1B): the old AllWTG allocations go as their own leaf group, after the creates and moves.
   const costOf = costByAllocation(args.inputs.allocations);
   const removals = ll.removeAllWtg.map((id) => allocationDelete(id, "a land-lease allocation of the replaced PV type", costOf, opts));
-  writes.push(
-    ...bulkCreates, ...together(landLease),
-    ...(moveRows.length > 0 ? [updateMany(ES.landLeaseAllocationWtgs, uniqueRows(moveRows), "move the land-lease allocations to the new PV unit")] : []),
-    ...leafDeletes(removals, opts),
-  );
-  writes.push(upd(ES.projects, args.project.id, {
+  const rollupWrite = upd(ES.projects, args.project.id, {
     [PROJECT_PLANT_COL.plantPvCapacity]: plantPvCapacity(args.pvRows),
     [PROJECT_PLANT_COL.plantPvCost]: plantPvCost({ pv: args.pvRows, inverters: args.inverters, substructures: args.substructures }),
-  }, "the project's Plant PV Capacity / Cost"));
-  if (replaceBulk) {
-    if (args.inputs.opexCostIds.length > 0) {
-      writes.push(updateMany(ES_PLANT.opexProjectCosts,
-        uniqueRows(args.inputs.opexCostIds.map((id) => ({ id, data: opexLinkData(bridge) }))), "re-link the O&M costs to the new PV type"));
-    }
-  } else {
-    // DEL-7(a): flag `guardedUpdates`, as in the generator follow-up.
-    writes.push(...together(args.inputs.opexCostIds.map((id) => guardedIf(opexLink(id, bridge, "re-link an O&M cost to the new PV type"), opts))));
+  }, "the project's Plant PV Capacity / Cost");
+  // DEL-7(a): flag `guardedUpdates`, as in the generator follow-up.
+  const relinks = replaceBulk ? [] : args.inputs.opexCostIds.map((id) => guardedIf(opexLink(id, bridge, "re-link an O&M cost to the new PV type"), opts));
+  const relinkBulk = replaceBulk && args.inputs.opexCostIds.length > 0
+    ? [updateMany(ES_PLANT.opexProjectCosts,
+      uniqueRows(args.inputs.opexCostIds.map((id) => ({ id, data: opexLinkData(bridge) }))), "re-link the O&M costs to the new PV type")]
+    : [];
+  const moveBulk = moveRows.length > 0
+    ? [updateMany(ES.landLeaseAllocationWtgs, uniqueRows(moveRows), "move the land-lease allocations to the new PV unit")]
+    : [];
+  if (lanes) {
+    // D144 (`replaceLanes`): the device-type row and the unit are ONE wave (each needs only the new PV type's id and name);
+    // then ONE wave of the allocation creates, the moves, the project's PV capacity / cost (it sums the type and the unit, both
+    // written by now) and the O&M re-links (they need the device-type row, written by now); the old allocations are removed
+    // LAST, after every create and move, so the delete lane never overlaps the create lane (D115 decision 5).
+    writes.push(
+      ...wave(siblings, opts),
+      ...bulkCreates, ...wave([...landLease, rollupWrite, ...relinks], opts),
+      ...moveBulk, ...relinkBulk,
+      ...leafDeletes(removals, opts),
+    );
+    return { writes, log: [] };
   }
+  writes.push(
+    ...bulkCreates, ...group(landLease, opts),
+    ...moveBulk,
+    ...leafDeletes(removals, opts),
+  );
+  writes.push(rollupWrite);
+  writes.push(...relinkBulk, ...group(relinks, opts));
   return { writes, log: [] };
 }
 

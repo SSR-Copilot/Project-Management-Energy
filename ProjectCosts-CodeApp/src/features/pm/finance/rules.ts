@@ -3818,7 +3818,7 @@ const validDate = (d: Date | null | undefined): d is Date => d instanceof Date &
 
 /**
  * Financial Close on the Senior Debt card (`txt_SeniorDebt_Data_Display_Card_FinancialClose`), bug 15290.
- * DIVERGENCE (D144): the canvas card is `Text(ThisItem.'Financial Close', DateTimeFormat.LongDate)` (Y:3816),
+ * DIVERGENCE (D147): the canvas card is `Text(ThisItem.'Financial Close', DateTimeFormat.LongDate)` (Y:3816),
  * which starts with the weekday: "Thursday, September 1, 2033". The weekday means nothing for a financial close
  * date, so this app shows the long date without it: "September 1, 2033" (en-US), "1 September 2033" (en-GB).
  * The canvas text is kept as `financialCloseCardTextCanvasParity`, so the decision stays reversible.
@@ -3826,20 +3826,20 @@ const validDate = (d: Date | null | undefined): d is Date => d instanceof Date &
 export const financialCloseCardText = (d: Date | null | undefined, lang: Lang = "en-US"): string =>
   (validDate(d) ? dateFormat(lang, { year: "numeric", month: "long", day: "numeric" }).format(d) : "");
 
-/** The canvas card: `DateTimeFormat.LongDate`, weekday first (D144 twin). */
+/** The canvas card: `DateTimeFormat.LongDate`, weekday first (D147 twin). */
 export const financialCloseCardTextCanvasParity = (d: Date | null | undefined, lang: Lang = "en-US"): string =>
   fmtLongDate(validDate(d) ? d : null, lang);
 
 /**
  * The Financial Close date box of Add / Edit Tranche (`dte_SeniorDebt_Data_Financial_Close`), bug 15290.
- * DIVERGENCE (D144): the canvas box is a `DatePicker@0.0.46` with no `Format` (Y:9654), so it shows
+ * DIVERGENCE (D147): the canvas box is a `DatePicker@0.0.46` with no `Format` (Y:9654), so it shows
  * LongAbbreviated, weekday first: "Thu, Sep 1, 2033". This app drops the weekday, so the panel matches the card:
  * "Sep 1, 2033" (en-US). Typing a date still works (`parseCanvasDate`). Twin: `financialCloseBoxTextCanvasParity`.
  */
 export const financialCloseBoxText = (d: Date | null | undefined, lang: Lang = "en-US"): string =>
   (validDate(d) ? dateFormat(lang, { year: "numeric", month: "short", day: "numeric" }).format(d) : "");
 
-/** The canvas box: `DatePicker@0.0.46` with no `Format`, LongAbbreviated (D144 twin). */
+/** The canvas box: `DatePicker@0.0.46` with no `Format`, LongAbbreviated (D147 twin). */
 export const financialCloseBoxTextCanvasParity = (d: Date | null | undefined, lang: Lang = "en-US"): string =>
   formatCanvasDate(d, DATE_PICKER_FORMAT, lang);
 

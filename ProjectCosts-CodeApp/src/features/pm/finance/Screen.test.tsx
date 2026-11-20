@@ -511,7 +511,7 @@ describe("UT-FIN Screen (connected)", () => {
     await waitFor(() => expect(screen.queryByText(MSG.dateOfIssueBeforeCluster4)).toBeNull());
   });
 
-  it("UT-FIN-927 Financial Close shows no weekday on the tranche card or in Edit Tranche (bug 15290, D144)", async () => {
+  it("UT-FIN-927 Financial Close shows no weekday on the tranche card or in Edit Tranche (bug 15290, D147)", async () => {
     const WEEKDAY = /Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b/;
     // 1 September 2033 is a Thursday: the canvas card reads "Thursday, 1 September 2033" in en-GB.
     state.inputs = inputs.map((i) => (i.id === "t1" || i.id === "t2")

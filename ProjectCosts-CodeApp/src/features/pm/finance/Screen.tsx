@@ -583,7 +583,7 @@ function YearMonth({ caption, testIdYears, testIdMonths, maxYears, yy, mm, onCha
  * The canvas `DatePicker@0.0.46` — the shared `DateField` (modern controls sweep, 20 Oct 2026)
  * with the control's own `Format`: `"dd.mm.yyyy"` on the three Decommissioning dates, the
  * default LongAbbreviated on End of debt service savings (and on Financial Close in the canvas; this app
- * drops its weekday, D144). All set `IsEditable: true` and `StartOfWeek` Monday.
+ * drops its weekday, D147). All set `IsEditable: true` and `StartOfWeek` Monday.
  */
 function DateBox({ caption, testId, value, onChange, disabled, required, error, standard, format = DATE_PICKER_FORMAT, formatDate }: {
   caption: string; testId: string; value: Date | null; onChange: (v: Date | null) => void;
@@ -592,7 +592,7 @@ function DateBox({ caption, testId, value, onChange, disabled, required, error, 
   standard?: boolean;
   /** The control's canvas `Format`. */
   format?: CanvasDateFormat;
-  /** A pure formatter from `rules.ts` that replaces `format` (Financial Close, D144). Pass a module-level function. */
+  /** A pure formatter from `rules.ts` that replaces `format` (Financial Close, D147). Pass a module-level function. */
   formatDate?: (date: Date | null | undefined, locale: string) => string;
 }) {
   const { locale } = useSession();

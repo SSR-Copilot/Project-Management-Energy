@@ -52,7 +52,7 @@ import { useSession } from "@/app/SessionContext";
 import { GENERATORS_BULK } from "@/data/generatorsBulkFlags";
 import { generatorsPerf } from "@/data/generatorsPerfFlags";
 import { COMMAND_BAR_LABEL, DIALOG_LABELS, DIALOG_TEXT, PERMISSION_MSG, buildGeneratorPermissionPayload, buildInverterPermissionPayload, buildSubstructurePermissionPayload, permissionModuleName, requiresPermissionRequest, type PermissionFamily, GENERATORS_SCREEN_TEXT, GENERATOR_TYPE_SAVED_BANNER, LAST_CAPACITY_MESSAGES, LAST_CAPACITY_TITLES, PAGE_LOCK_TITLE, PV_MSG, TOTAL_CAPACITY_LABEL, WRITE_ERROR, WRITE_MSG, buildTurbineNames, capacityGuardReason, changeStatusDialog, commandBarOrder, commandBarState, commandParentKey, defaultSelection, forLanguage, generatorCommandIcon, heightLimitExceeded, heightPopupTypeName, isBodyVisible, isPageLocked, nextTurbineIndex, numericOr, opexDependencyMessage, pageLock, planCreateGeneratorType, planDeleteGeneratorType, planDeleteInverterOrSubstructure, planDeletePvType, planDeleteSimple, planDeleteTurbine, planGeneratorTypeFollowUp, planPvFollowUp, planSavePvType, planSaveSimple, planSaveTurbine, planToggleStatus, projectCatalog, pvSaveErrorText, pvSaveProgressText, pvDeleteErrorText, rowClickFolds, selectedIn, selectionAfterAddPv, selectionAfterAddWtg, simpleFormDefaults, simpleSaveProgressText, GUARD_READ_MSG, dataSettling, loadErrorMode, opexGuardBlock, opexReadBanner, opexReadState, pvDegradationPrefill, pvFollowUpIsNew, ROLLBACK_DETAIL_MAX, ROLLBACK_MSG, deletePartialMessage, describeLeftovers, planRollbackCreate, plannedDeleteRows, remainingRows, rollbackApplies, toggleExpanded, toggleSelection, turbineFormDefaults, turbineSaveProgressText, typeSaveProgressText, wtgFoldSelection, REPLACE_MSG, SUBSTRUCTURE_MSG, inverterFormDefaults, inverterSaveProgressText, planReplaceGeneratorType, planReplaceGeneratorTypeFollowUp, planReplacePvType, planReplacePvTypeFollowUp, planSaveInverter, planSaveSubstructure, replaceProgressText, replacePvProgressText, replaceSuccessText, substructureFormDefaults, substructureNeedsPvCapacity, substructureSaveProgressText, type CatalogModel, type GeneratorCommandKey, type GeneratorTypeRow, type LandedRowRef, type RollbackScenario, type InverterFormState, type PlanProject, type PlantFamily, type PvTypeFormState, type ReplaceInputs, type ReplaceWtgForm, type SelectedRow, type SimpleCapacityFamily, type SimpleFormState, type SimpleTypeRow, type SubstructureFormState, type TurbineFormState, type TurbineRow, type TypeFormState } from "./rules";
-import { emptyPlan, type WritePlan } from "@/data/writePlan";
+import { emptyPlan, type PlannedWrite, type WritePlan } from "@/data/writePlan";
 import type { PlanResult } from "@/data/executePlan";
 import { SERVER_DECIDES, loadAllocations, loadNewTypeInputs, loadPvDeleteInputs, loadPvFollowUpInputs, useModulePermissionFlows, loadReplaceInputs, loadTypeDeleteInputs, useAllWtgLandLeaseCosts, useDeviceCosts, useEntraObjectId, useGeneratorCatalog, useGeneratorModels, useGeneratorTypes, useGeneratorWrites, useGeneratorsProject, useInflationIndex, useInverterTypes, useOpexDependency, usePlantSupplierCatalog, useProjectPlanning, useProjectTurbines, usePvModuleCatalog, usePvModuleTypes, useSimpleTypes, useSubstructureTypes } from "./hooks";
 import { confirmNeedsLazyRead, lazyNeeds, lazyPending, loadGate, readKnown } from "./loadGate";
@@ -800,18 +800,21 @@ function GeneratorsScreenBody() {
      * allocations, which need the new type's autonumber name and the turbine ids) runs as the job's `then`,
      * so the screen reloads once at the end instead of after each step.
      */
+    // D144 (`relaneWrites`): the in-country roll-up is not the last write of this plan but the follow-up's wave (`deferredRollup`).
+    const firstPlan = planCreateGeneratorType({
+      project: planProject, inCountry, model, numberOfGenerators: n, costPerWtg: derivedCost,
+      selectedHeight: effectiveHubHeight ?? 0, revisedHubHeight: numericOr(typeForm.revisedHubHeight, 0, lang),
+      existingTypes: types, projectTurbines: turbinesQ.data,
+    });
     const ids = await run({
       reload: "addWtgType",
       progress,
       success: GENERATOR_TYPE_SAVED_BANNER,
       errorText: WRITE_ERROR.typeSave,
-      plan: planCreateGeneratorType({
-        project: planProject, inCountry, model, numberOfGenerators: n, costPerWtg: derivedCost,
-        selectedHeight: effectiveHubHeight ?? 0, revisedHubHeight: numericOr(typeForm.revisedHubHeight, 0, lang),
-        existingTypes: types, projectTurbines: turbinesQ.data,
-      }),
+      plan: firstPlan,
       then: async (first: PlanResult): Promise<WritePlan | null> => {
-        // The first plan, which ends with the roll-up, has completed once `then` runs (review finding 2).
+        // The first plan (the type and its turbines; the roll-up too unless `relaneWrites` moved it to the follow-up) has completed
+        // once `then` runs (review finding 2).
         firstPlanDone.current = true;
         const typeId = first.createdIds[0];
         if (!typeId) return null;
@@ -836,6 +839,7 @@ function GeneratorsScreenBody() {
           project: planProject, typeId, typeName: inputs.typeName, hasDeviceType: inputs.hasDeviceType,
           turbines: first.createdIds.slice(1, 1 + n).map((id, i) => ({ id, name: names[i] ?? null })),
           landLeaseCosts: allWtgQ.data,
+          ...(firstPlan.deferredRollup ? { rollup: firstPlan.deferredRollup } : {}),
         });
       },
     });
@@ -1019,7 +1023,7 @@ function GeneratorsScreenBody() {
       inCountry: form.inCountry, newDisplayName: model.displayName,
       oldTurbineType: modelOf(oldType)?.turbineType ?? oldType.generatorDisplayName,
     });
-    const box: { inputs?: ReplaceInputs; unmatched: number } = { unmatched: 0 };
+    const box: { inputs?: ReplaceInputs; unmatched: number; rollup?: PlannedWrite } = { unmatched: 0 };
     close();
     const ids = await run({
       reload: "replaceWtg",
@@ -1030,11 +1034,14 @@ function GeneratorsScreenBody() {
         box.inputs = await loadReplaceInputs(planProject.id, oldType.id);
         // D97 — "RDel001: Cancel pending permission for replaced generator", before the old type goes.
         await permissionFlows.cancelIfOpen("wtg", oldType);
-        return planReplaceGeneratorType({
+        const plan = planReplaceGeneratorType({
           project: planProject, oldType, inCountry: form.inCountry, model, costPerWtg: replaceCost,
           selectedHeight: replaceHub ?? 0, revisedHubHeight: numericOr(form.revisedHubHeight, 0, lang),
           otherTypes: types.filter((t) => t.id !== oldType.id), otherTurbines, inputs: box.inputs,
         });
+        // D144 (`replaceLanes`): the in-country roll-up is the follow-up's first wave, not the last write of this plan.
+        box.rollup = plan.deferredRollup;
+        return plan;
       },
       then: async (first: PlanResult): Promise<WritePlan | null> => {
         // The plan's deletes and updates create nothing: the new type is its first create, its units the next.
@@ -1050,6 +1057,7 @@ function GeneratorsScreenBody() {
           project: planProject, newTypeId, newTypeName: created.typeName, existingBridgeId: created.bridgeId ?? null,
           newUnits: first.createdIds.slice(1, 1 + replaceCount).map((id, i) => ({ id, name: names[i] ?? null })),
           inputs,
+          ...(box.rollup ? { rollup: box.rollup } : {}),
         });
         box.unmatched = plan.unmatchedCount;
         return plan;

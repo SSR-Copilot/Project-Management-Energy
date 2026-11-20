@@ -95,7 +95,8 @@ interface Case {
   owner?: string | null;
 }
 
-function planFor(c: Case, parallel: boolean): WritePlan {
+/** `wide` = `REVENUE_PERF.wideCreateGroup` (D146). The D136 tests (001..034) keep the 8-wide create group they pinned. */
+function planFor(c: Case, parallel: boolean, wide = false): WritePlan {
   const rows = generateVolumeRows(d("2028-01-01"), d(`${2028 + Math.max(c.years, 1) - 1}-12-31`))
     .slice(0, c.years).map((r) => ({ ...r, value: "5", initialState: false }));
   const individual = (c.type ?? "individual") === "individual";
@@ -110,7 +111,7 @@ function planFor(c: Case, parallel: boolean): WritePlan {
     project: project(c.owner === undefined ? {} : { owningBusinessUnitId: c.owner }),
     currencyId: "cur-1",
     storedVolumeIds: Array.from({ length: c.stored }, (_, i) => `v${i}`),
-    perf: { parallelVolumeWrites: parallel },
+    perf: { parallelVolumeWrites: parallel, wideCreateGroup: wide },
   });
 }
 
@@ -344,5 +345,150 @@ describe("UT-REVPERF what a write reloads", () => {
   it("UT-REVPERF-034 another project's keys are never touched", () => {
     for (const key of revenueReloadKeys("p1", "contract")) expect((key as readonly unknown[])[1]).toBe("p1");
     expect(revenueReloadKeys(undefined, "balancing")).toEqual([["pmRevenues", "", "balancing"]]);
+  });
+});
+
+/* ───────────────────────────────────────────── benchmark: write depth (MOCK-MODEL) ── */
+
+describe("UT-REVPERF bench: write depth of a contract Save (MOCK-MODEL, fixed 10 virtual ms per request)", () => {
+  const SCENARIOS: [string, Case][] = [
+    ["New contract, 12 volumes", { edit: false, stored: 0, years: 12 }],
+    ["Edit Individual 12 stored / 12 new", { edit: true, stored: 12, years: 12 }],
+    ["Edit Individual 36 stored / 36 new", { edit: true, stored: 36, years: 36 }],
+    ["Edit Individual to percentage, 12 stored", { edit: true, stored: 12, years: 0, type: "percentage" }],
+    ["Edit percentage, nothing stored", { edit: true, stored: 0, years: 0, type: "percentage" }],
+  ];
+
+  it("UT-REVPERF-100 prints the requests and round trips of each scenario: the canvas order, the D136 plan, the D146 plan", async () => {
+    const table: Record<string, number | string>[] = [];
+    for (const [label, c] of SCENARIOS) {
+      const legacy = await execute(planFor(c, false));
+      const d136 = await execute(planFor(c, true));
+      const wide = await execute(planFor(c, true, true));
+      table.push({
+        scenario: label, requests: wide.requests,
+        legacyRoundTrips: legacy.roundTrips, d136RoundTrips: d136.roundTrips, d146RoundTrips: wide.roundTrips,
+      });
+      expect(d136.requests).toBe(legacy.requests);
+      expect(wide.requests).toBe(legacy.requests);
+    }
+    console.info(`[BENCH write depth MOCK-MODEL]\n${table.map((r) => JSON.stringify(r)).join("\n")}`);
+  });
+});
+
+describe("UT-REVPERF contract Save: the 16-wide create group (D146, REVENUE_PERF.wideCreateGroup)", () => {
+  it("UT-REVPERF-101 the flag is on by default, and the D146 plan has fewer round trips for the same requests", async () => {
+    expect(REVENUE_PERF.wideCreateGroup).toBe(true);
+    const expected: [Case, number, number][] = [
+      [{ edit: true, stored: 12, years: 12 }, 25, 3], // 1 + ceil(12/16) + ceil(12/16)
+      [{ edit: true, stored: 36, years: 36 }, 73, 7], // 1 + ceil(36/16) + ceil(36/16)
+      [{ edit: false, stored: 0, years: 12 }, 13, 2], // 1 + ceil(12/16)
+      [{ edit: false, stored: 0, years: 36 }, 37, 4], // 1 + ceil(36/16)
+    ];
+    for (const [c, requests, roundTrips] of expected) {
+      const o = await execute(planFor(c, true, true));
+      expect(o.requests, JSON.stringify(c)).toBe(requests);
+      expect(o.roundTrips, JSON.stringify(c)).toBe(roundTrips);
+    }
+  });
+
+  it("UT-REVPERF-102 EQUIVALENCE: the same rows, ids and payloads as the D136 plan, across hedge type x mode x stored x new rows", async () => {
+    let cases = 0;
+    for (const type of ["individual", "percentage"] as const) {
+      for (const edit of [false, true]) {
+        for (const stored of [0, 1, 3, 17]) {
+          for (const years of type === "individual" ? [0, 1, 12, 17, 36] : [0]) {
+            const c: Case = { edit, stored: edit ? stored : 0, years, type };
+            const before = await execute(planFor(c, true, false));
+            const after = await execute(planFor(c, true, true));
+            expect(after.lines.slice().sort(), JSON.stringify(c)).toEqual(before.lines.slice().sort());
+            expect(after.requests, JSON.stringify(c)).toBe(before.requests);
+            expect(after.result?.done, JSON.stringify(c)).toBe(before.result?.done);
+            expect(after.result?.createdIds, JSON.stringify(c)).toEqual(before.result?.createdIds);
+            expect(after.result?.deleted, JSON.stringify(c)).toEqual(before.result?.deleted);
+            expect(after.roundTrips, JSON.stringify(c)).toBeLessThanOrEqual(before.roundTrips);
+            cases += 1;
+          }
+        }
+      }
+    }
+    // individual: 2 modes x 4 stored values x 5 row counts; percentage: 2 x 4 x 1 (a New contract forces `stored` to 0)
+    expect(cases).toBe(2 * 4 * 5 + 2 * 4);
+  });
+
+  it("UT-REVPERF-103 the plan keeps its shape: contract first, deletes (16 wide) then creates (16 wide), as two separate groups", () => {
+    const plan = planFor({ edit: true, stored: 20, years: 20 }, true, true);
+    const w = plan.writes;
+    expect(w[0]).toMatchObject({ op: "update", entitySet: CONTRACTS });
+    expect(w[0]!.concurrent).toBeFalsy();
+    const deletes = w.filter((x) => x.op === "delete");
+    const creates = w.filter((x) => x.op === "create");
+    expect(deletes).toHaveLength(20);
+    expect(creates).toHaveLength(20);
+    expect(deletes.every((x) => x.concurrent && x.concurrencyLimit === 16)).toBe(true);
+    expect(creates.every((x) => x.concurrent && x.concurrencyLimit === 16)).toBe(true);
+    expect(new Set(deletes.map((x) => x.concurrencyGroup)).size).toBe(1);
+    expect(new Set(creates.map((x) => x.concurrencyGroup)).size).toBe(1);
+    expect(deletes[0]!.concurrencyGroup).not.toBe(creates[0]!.concurrencyGroup);
+    expect(w.lastIndexOf(deletes.at(-1)!)).toBeLessThan(w.indexOf(creates[0]!)); // every delete is listed before the first create
+  });
+
+  it("UT-REVPERF-104 ORDER on the wire: the contract, then every delete, then the creates, each bound to the contract with the owner", async () => {
+    const o = await execute(planFor({ edit: true, stored: 5, years: 17 }, true, true));
+    const kinds = o.lines.map((l) => l.split("|").slice(0, 2).join(":"));
+    expect(kinds[0]).toBe(`update:${CONTRACTS}`);
+    expect(kinds.lastIndexOf(`delete:${VOLUMES}`)).toBe(5);
+    expect(kinds.indexOf(`create:${VOLUMES}`)).toBe(6);
+    const creates = o.lines.filter((l) => l.startsWith(`create|${VOLUMES}|`)).map((l) => JSON.parse(l.split("|").slice(3).join("|")));
+    expect(creates).toHaveLength(17);
+    for (const body of creates) {
+      expect(body["vsb_RevenueContract@odata.bind"]).toBe(`/${CONTRACTS}(r1)`);
+      expect(body["owningbusinessunit@odata.bind"]).toBe("/businessunits(bu-1)");
+    }
+  });
+
+  it("UT-REVPERF-105 a failed delete still sends no create and a failed create stops the Save, 16 wide as before (DIVERGENCE of D136 unchanged)", async () => {
+    const failedDelete = await execute(planFor({ edit: true, stored: 6, years: 20 }, true, true), 4); // request 4 = a delete
+    expect(failedDelete.error).toBeInstanceOf(PlanError);
+    expect(failedDelete.lines.filter((l) => l.startsWith("create|"))).toHaveLength(0);
+    expect(failedDelete.lines.filter((l) => l.startsWith("delete|"))).toHaveLength(6);
+    const failedCreate = await execute(planFor({ edit: true, stored: 0, years: 20 }, true, true), 5); // a create inside the group
+    expect(failedCreate.error).toBeInstanceOf(PlanError);
+    expect(failedCreate.lines.filter((l) => l.startsWith("create|" + VOLUMES))).toHaveLength(20); // the group still finished
+  });
+
+  it("UT-REVPERF-107 a project without a business unit: no owner bind on any volume, and the same requests as the D136 plan", async () => {
+    const c: Case = { edit: true, stored: 4, years: 20, owner: null };
+    const before = await execute(planFor(c, true, false));
+    const after = await execute(planFor(c, true, true));
+    expect(after.lines.slice().sort()).toEqual(before.lines.slice().sort());
+    for (const l of after.lines.filter((x) => x.startsWith(`create|${VOLUMES}|`))) {
+      expect(l).not.toContain("owningbusinessunit@odata.bind");
+    }
+    expect(after.roundTrips).toBeLessThan(before.roundTrips);
+  });
+
+  it("UT-REVPERF-108 the DEFAULT plan (no `perf` override at all) sends the delete group and the create group 16 wide", () => {
+    const rows = generateVolumeRows(d("2028-01-01"), d("2047-12-31")).map((r) => ({ ...r, value: "5", initialState: false }));
+    const plan = planSaveContract({
+      form: form({
+        mode: "Edit", contractId: "r1",
+        hedge: { type: "individual", percentage: field("70"), fixed: { ...field(""), initialState: true }, individual: rows },
+      }),
+      project: project(), currencyId: "cur-1", storedVolumeIds: ["v0", "v1"],
+    });
+    const creates = plan.writes.filter((x) => x.op === "create");
+    const deletes = plan.writes.filter((x) => x.op === "delete");
+    expect(creates).toHaveLength(20);
+    expect(creates.every((x) => x.concurrencyLimit === 16)).toBe(true);
+    expect(deletes.every((x) => x.concurrencyLimit === 16)).toBe(true);
+  });
+
+  it("UT-REVPERF-106 ROLLBACK: with the flag off the plan is the D136 plan (8 wide) with the very same requests", () => {
+    const off = planFor({ edit: true, stored: 20, years: 20 }, true, false);
+    expect(off.writes.filter((x) => x.op === "create").every((x) => x.concurrent && x.concurrencyLimit === undefined)).toBe(true);
+    expect(off.writes.filter((x) => x.op === "delete").every((x) => x.concurrencyLimit === 16)).toBe(true);
+    const on = planFor({ edit: true, stored: 20, years: 20 }, true, true);
+    expect(on.writes.map((x) => `${x.op}|${x.entitySet}|${x.id ?? ""}`)).toEqual(off.writes.map((x) => `${x.op}|${x.entitySet}|${x.id ?? ""}`));
   });
 });

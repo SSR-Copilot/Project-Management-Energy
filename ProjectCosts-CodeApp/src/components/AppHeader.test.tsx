@@ -109,7 +109,7 @@ describe("AppHeader user menu", () => {
   });
 });
 
-describe("AppHeader environment info icon (removed, D145)", () => {
+describe("AppHeader environment info icon (removed, D148)", () => {
   it("UT-HEADER-003 the canvas twins keep both (i) colour switches, in the canvas colours (akzent5 / akzent3 / #EE940C)", () => {
     // PM `ico_cmp_Header_Info_4` — gblAppColors, with a Hotfix case.
     expect(environmentInfoColorCanvasParity("Dev")).toBe(palette.akzent5);
@@ -133,7 +133,7 @@ describe("AppHeader environment info icon (removed, D145)", () => {
   });
 
   /*
-   * DIVERGENCE (D145, bug 15341): the canvas draws the (i) under "Cloud" on Cost screens and before Help on PM and
+   * DIVERGENCE (D148, bug 15341): the canvas draws the (i) under "Cloud" on Cost screens and before Help on PM and
    * admin screens. It has no OnSelect and no Tooltip, so the code app draws it on no header. Replaces the
    * placement tests of 19 Nov 2026 (33ca317), which pinned where the canvas draws it.
    */
@@ -210,7 +210,7 @@ describe("AppHeader environment info icon (removed, D145)", () => {
     expect(screen.getByTestId("con_cmp_Header").style.backgroundColor).toMatch(/^rgba\(230, 108, 55, 0\.5\d*\)$/);
     expect(screen.getByTestId("con_cmp_Header_Title_4")).toHaveTextContent("Quality Assurance");
     expect(screen.getByTestId("con_cmp_Header_Version_4")).toHaveTextContent("Version 1.21.780");
-    // No (i) before Help (D145, UT-HEADER-004).
+    // No (i) before Help (D148, UT-HEADER-004).
     expect(screen.queryByTestId("ico_cmp_Header_Info_4")).toBeNull();
     // The only version line is the one before Help — none under "Cloud".
     expect(screen.getAllByText("Version 1.21.780")).toEqual([screen.getByTestId("con_cmp_Header_Version_4")]);

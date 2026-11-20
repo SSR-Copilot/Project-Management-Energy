@@ -46,3 +46,6 @@ codeapp-knowledge-base/
 
 # Personal first-prompt template for parallel Claude Code sessions (local only, never committed)
 /ProjectDocs/instructions/SESSION-START-PROMPT.md
+
+# Playwright performance diagnostic suite (Generators save latency): local only, never committed, pushed or merged
+ProjectCosts-CodeApp/diag/

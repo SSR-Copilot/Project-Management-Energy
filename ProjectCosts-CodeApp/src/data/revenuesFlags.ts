@@ -13,11 +13,18 @@
  *    group fails, the other rows of that group are still sent, and the Save then stops. Before, the rows after the
  *    failed one were never sent. The message still says how many changes had been saved ("N of M").
  *
+ *  - `wideCreateGroup` (D146): the group of NEW volumes goes out 16 wide (`WIDE_GROUP_CONCURRENCY`, as the Production
+ *    Save since D145 and the Generators groups since D144) instead of 8 (`WRITE_CONCURRENCY`). It only changes how many
+ *    rows of the create group are in flight at once: the order of the three steps, the rows, the payloads and the
+ *    failure semantics of a group are those of `parallelVolumeWrites`. 12 volumes: 2 waves become 1; 36: 5 become 3.
+ *    Only read when `parallelVolumeWrites` is on. `false` is exactly the D136 plan (8 wide).
+ *
  * The object is typed as the interface so a test can pass overrides without a cast. Treat it like
  * `CANVAS_PARITY_DELETION`: a live product decision. Setting it back to `false` is the rollback.
  */
 export interface RevenuePerfFlags {
   parallelVolumeWrites: boolean;
+  wideCreateGroup: boolean;
 }
 
 /** A partial set of the flags, merged over `REVENUE_PERF` by whoever accepts overrides. */
@@ -25,4 +32,5 @@ export type RevenuePerfOverrides = Partial<RevenuePerfFlags>;
 
 export const REVENUE_PERF: RevenuePerfFlags = {
   parallelVolumeWrites: true,
+  wideCreateGroup: true,
 };
