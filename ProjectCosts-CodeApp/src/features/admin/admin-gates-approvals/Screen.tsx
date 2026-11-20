@@ -224,7 +224,7 @@ export default function ProjectGatesSettingsScreen() {
   /*
    * Reset Gate — `btn_Admin_ProjectGates_Approvals_Form_Fields_ResetGateApproval.OnSelect`, run after
    * the confirmation below.
-   * SOURCE DEFECT (fix kept, D150): the canvas patches at once, with no confirmation, although the write
+   * SOURCE DEFECT (fix kept, D153): the canvas patches at once, with no confirmation, although the write
    * removes every gate participant and cannot be undone; here the user confirms first ("Reset Gate?").
    * DIVERGENCE: a progress text and a success toast are NEW (the canvas shows neither), and a failure
    * keeps the panel open (the canvas closes it whatever the outcome; doc 09 §2, D36 §4).
@@ -436,7 +436,7 @@ export default function ProjectGatesSettingsScreen() {
         />
       ) : null}
       {/*
-        * SOURCE DEFECT fix kept (D150): the canvas has no Reset Gate confirmation (see `runReset`); its texts
+        * SOURCE DEFECT fix kept (D153): the canvas has no Reset Gate confirmation (see `runReset`); its texts
         * have no canvas source. Drawn as the screen's other dialog, the canvas `cmp_PopUp_Confirmation` look:
         * blue ✓ Confirm, 128 px (it was red `destructive` before 20 Nov 2026).
         */}

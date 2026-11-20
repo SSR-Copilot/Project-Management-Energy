@@ -77,7 +77,7 @@ describe("BuildCapexTree", () => {
 });
 
 describe("Number validation", () => {
-  // SOURCE DEFECT fix kept (D150): digits only.
+  // SOURCE DEFECT fix kept (D153): digits only.
   it.each([
     ["123", true], [" 123 ", true], ["12.3", false], ["1,2", false], ["-5", false],
     ["+5", false], ["1e3", false], ["", false], ["00010", true],
@@ -242,7 +242,7 @@ describe("Subaccount commands and row actions", () => {
     expect(subaccountRowActions(sub, parent, hasContracts, ALLOW_ALL)).toEqual(expected);
   });
 
-  it("UT-ADCAPEX-941 SOURCE DEFECT fix kept (D150): no Activate for a subaccount under an inactive account", () => {
+  it("UT-ADCAPEX-941 SOURCE DEFECT fix kept (D153): no Activate for a subaccount under an inactive account", () => {
     expect(subaccountRowActions(I, I, false, ALLOW_ALL).activate).toBe(false);
     expect(subaccountRowActions(I, A, false, ALLOW_ALL).activate).toBe(true);
   });
@@ -296,13 +296,13 @@ describe("Dialog texts", () => {
     expect(subaccountStatusDialog({ name: "S", active: true } as CapexNode).title).toBe("Deactivate Subaccount?");
   });
 
-  it("UT-ADCAPEX-033 delete-account text does not claim subaccounts are deleted (SOURCE DEFECT fix kept, D150)", () => {
+  it("UT-ADCAPEX-033 delete-account text does not claim subaccounts are deleted (SOURCE DEFECT fix kept, D153)", () => {
     const d = deleteAccountDialog("Permits");
     expect(d.description).toBe('Are you sure that you want to permanently delete "Permits" account?');
     expect(d.description).not.toContain("subaccounts");
   });
 
-  it("UT-ADCAPEX-945 the Deactivate descriptions are verbatim; the Activate ones say what activating does (D150)", () => {
+  it("UT-ADCAPEX-945 the Deactivate descriptions are verbatim; the Activate ones say what activating does (D153)", () => {
     expect(accountStatusDialog({ name: "Land", active: true }).description).toBe(
       'Are you sure that you want to deactivate "Land" account? All related subaccounts will be automatically deactivated and associated forecasted costs will be deleted.',
     );

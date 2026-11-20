@@ -84,7 +84,7 @@ All six: connected, no Apply / Apply All (D20; the disabled bars on Contract and
 
 | Screen | Canvas problem found | What the code app does |
 |---|---|---|
-| **Default Checklists** (001, D18) | Gap report found 69 requirements: 37 covered, 20 partial, 3 missing, 9 wrong. Reordering relied on the PowerDragDrop component | Native drag-and-drop plus Move up / Move down buttons, no extra library (drag-and-drop was missing from the D36 port until D149, 20 Nov 2026); canvas defects fixed and documented; New-task Active toggle off as in canvas |
+| **Default Checklists** (001, D18) | Gap report found 69 requirements: 37 covered, 20 partial, 3 missing, 9 wrong. Reordering relied on the PowerDragDrop component | Native drag-and-drop plus Move up / Move down buttons, no extra library (drag-and-drop was missing from the D36 port until D152, 20 Nov 2026); canvas defects fixed and documented; New-task Active toggle off as in canvas |
 | **CAPEX Accounts** (002, D19) | Delete Account checked only the subaccounts; Reorder's `ItemEnabled` is commented out | Delete is also blocked when a contract references the account itself (safer, a documented divergence); reorder kept enabled as in canvas, Dataverse refuses without the privilege; the cascade filter `vsb_month gt N` reproduces `Month > Month(Today())` |
 | **Milestones** (003, D21) | The plan called it "blocked by a missing flow", but the flow call is commented out in the canvas | Block cleared and screen connected. Two column errors corrected (primary key `vsb_milestonesstandardassumptionsid`; "Sales End" is `vsb_salesduration`). Apply, per-country Apply and the recalculating badge left out (D20) |
 | **Gates & Approvals** (004, D22) | Several column names wrong in earlier code (`vsb_gateisactive`, navigation properties); people search used a wrong source | Two payload builders (one per table); people search through Entra (`aadusers`, enabled users only); Spain, Greece and Romania excluded from the country rail as in canvas; hidden controls (Reset, hidden order label) ported; no invented country-scope rule. A live people-search test is still pending |
@@ -856,17 +856,17 @@ Implemented on the integration branches, not product-approved, not run against D
 | Every header (Cost, PM project and admin, project list) | The (i) environment marker is gone in every environment: the canvas draws it under "Cloud" on Cost screens (`ico_cmp_Header_Info`) and before Help on PM screens (`ico_cmp_Header_Info_4`), with no OnSelect and no Tooltip, so it did nothing when clicked. The band colour, the environment name and the version still show the environment. UT-HEADER-004, 004d | **DIVERGENCE** (the user's request), twins `brandInfoColorCanvasParity`, `environmentInfoColorCanvasParity` (UT-HEADER-003) |
 | Header | The project-status glyph, the Help menu's InfoCenter item and the user menu's Version row keep their icons | **reproduced** |
 
-## Check List Settings: Reorder by drag-and-drop, as the canvas (20 Nov 2026, D149, number provisional) — reproduced / fixed (not approved, not run on DEV)
+## Check List Settings: Reorder by drag-and-drop, as the canvas (20 Nov 2026, D152, number provisional) — reproduced / fixed (not approved, not run on DEV)
 
 | Screen | Change | Status |
 |---|---|---|
 | Check List Settings, Reorder panel | The task list drags and drops like the canvas `pcf_ReorderTaskList_AdminScreen` (PowerDragDrop), with a grip on every row and the positions renumbering as a row moves. Since the D36 port the panel had Move up / Move down buttons only, although D18 b and the Default Checklists row in Part 2 A said "drag-and-drop plus Move up / Move down". The buttons stay for the keyboard and touch. Save writes the same 1-based Orders. UT-ADCHK-941, UT-REORDITEMS-005 | **reproduced** (canvas behaviour restored) |
-| Check List Settings, Reorder panel | The hint is the canvas `TextCanvas1` text verbatim, "To reorder drag and drop listed items", as CAPEX Accounts' (D150). A first version of D149 had added ", or use the move up / move down buttons."; withdrawn the same day. UT-ADCHK-941 | **reproduced** |
+| Check List Settings, Reorder panel | The hint is the canvas `TextCanvas1` text verbatim, "To reorder drag and drop listed items", as CAPEX Accounts' (D153). A first version of D152 had added ", or use the move up / move down buttons."; withdrawn the same day. UT-ADCHK-941 | **reproduced** |
 | CAPEX Accounts and Check List Settings (shared `ReorderItems`) | A drag now carries the row id (`dataTransfer.setData`), without which Firefox starts no drag at all; Chrome and Edge were unaffected. UT-REORDITEMS-004, 005 | **fixed** |
 
-## Application Settings: canvas parity sweep of all six screens (20 Nov 2026, D150, number provisional) — reproduced / fixed (not approved, not run on DEV, not seen in a browser)
+## Application Settings: canvas parity sweep of all six screens (20 Nov 2026, D153, number provisional) — reproduced / fixed (not approved, not run on DEV, not seen in a browser)
 
-The user: "scan whole application settings … not same as canvas". Each screen was compared control by control with its `.pa.yaml`. Only Application Settings code changed. The shared components got opt-in props only, so no other screen renders differently. The user also asked that every canvas defect the code had already fixed **stays fixed**, so the nine such fixes the sweep had reverted were restored and marked `SOURCE DEFECT (fix kept, D150)`. Details, the items kept, and the open questions are in D150.
+The user: "scan whole application settings … not same as canvas". Each screen was compared control by control with its `.pa.yaml`. Only Application Settings code changed. The shared components got opt-in props only, so no other screen renders differently. The user also asked that every canvas defect the code had already fixed **stays fixed**, so the nine such fixes the sweep had reverted were restored and marked `SOURCE DEFECT (fix kept, D153)`. Details, the items kept, and the open questions are in D153.
 
 | Screen | Change | Status |
 |---|---|---|
@@ -888,7 +888,7 @@ The user: "scan whole application settings … not same as canvas". Each screen 
 | Contracts, canvas defect kept fixed | An inactive contract keeps its "Inactive" badge: the canvas lists it unmarked, so it looks active although it never seeds project contracts. UT-ADCONTR-928 | **fixed** (SOURCE DEFECT, kept) |
 | Shared components (opt-in only) | `FormPanel closeIconColor`, `ReorderPanel closeIconColor`, `ReorderItems listTestId`, `CountryTechnologyPicker startCollapsed`. The `ReorderItems` look (15 px bold, no border) and the Firefox `setData` fix reach CAPEX Accounts and Check List Settings, its only users. UT-SETPANEL-026, UT-REORDITEMS-005/006, UT-CTPICK-034 | **new** (no other screen changes) |
 
-## Check List Settings: tabs A → Z by name, as the live canvas (21 Nov 2026, D151, number provisional) — reproduced (not approved, not run on DEV)
+## Check List Settings: tabs A → Z by name, as the live canvas (21 Nov 2026, D154, number provisional) — reproduced (not approved, not run on DEV)
 
 | Screen | Change | Status |
 |---|---|---|

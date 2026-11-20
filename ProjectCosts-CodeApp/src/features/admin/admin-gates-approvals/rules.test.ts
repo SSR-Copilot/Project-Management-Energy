@@ -241,7 +241,7 @@ describe("Validation and Save enablement", () => {
     expect(canSave(validateForm(form({ notifications: [person(1)] }), gate))).toBe(true);
   });
 
-  it("UT-ADGATE-025 task editor without a Check List cannot save; the message names the field (SOURCE DEFECT fix kept, D150)", () => {
+  it("UT-ADGATE-025 task editor without a Check List cannot save; the message names the field (SOURCE DEFECT fix kept, D153)", () => {
     const e = validateForm(form({ notifications: [person(1)] }), { kind: "task", gateLabel: "x" });
     expect(e.checklist).toBe(CHECKLIST_BLANK_MESSAGE);
     expect(CHECKLIST_BLANK_MESSAGE).toBe("The check list item cannot be blank.");
@@ -298,7 +298,7 @@ describe("Validation and Save enablement", () => {
     expect(validateForm(form({ notifications: [person(1)] }), { ...gate, conflict: true }).main).toBe(DUPLICATE_GATE_MESSAGE);
   });
 
-  it("UT-ADGATE-032 warns which saved roles a mode change will clear (SOURCE DEFECT fix kept, D150)", () => {
+  it("UT-ADGATE-032 warns which saved roles a mode change will clear (SOURCE DEFECT fix kept, D153)", () => {
     const before = form({ mode: MODE.Formal, portfolioManager: [person(1)], contributors: [person(2)], approvers: [person(3)] });
     expect(droppedRoles(before, { ...before, mode: MODE.Local })).toEqual(["portfolioManager", "contributors"]);
     expect(droppedRoles(before, { ...before, mode: MODE.OnlyNotifications })).toEqual(["portfolioManager", "contributors", "approvers"]);

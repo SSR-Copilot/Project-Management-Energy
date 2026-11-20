@@ -51,7 +51,7 @@ export const EMPTY_MESSAGE = "Value cannot be empty.";
 /** `lbl_Admin_ProjectGates_Approvals_Form_Fields_State_ErrMessage.Text` — verbatim (PGAS:2656). */
 export const GATE_BLANK_MESSAGE = "The cluster cannot be blank.";
 /**
- * SOURCE DEFECT (fix kept, D150): `lbl_Admin_ProjectGates_Approvals_Form_Fields_State_ErrMessage_1.Text` is
+ * SOURCE DEFECT (fix kept, D153): `lbl_Admin_ProjectGates_Approvals_Form_Fields_State_ErrMessage_1.Text` is
  * "The cluster cannot be blank." under the Check List field (PGAS:2799), the Gate field's text copied
  * onto the wrong field. This app names the field it belongs to.
  */
@@ -745,7 +745,7 @@ export function hasGateConflict(editingId: string | undefined, row: GateRow, tem
 
 /**
  * Roles whose saved people a mode change will clear (warned before Save).
- * SOURCE DEFECT (fix kept, D150): the canvas clears them on Save without a word, so saved people
+ * SOURCE DEFECT (fix kept, D153): the canvas clears them on Save without a word, so saved people
  * vanish unannounced.
  */
 export function droppedRoles(initial: ApprovalForm, form: ApprovalForm): PeopleRole[] {
@@ -970,7 +970,7 @@ export function deleteConfirmationText(ctx: GateContext, gate: string, taskName:
 }
 
 /**
- * SOURCE DEFECT (fix kept, D150): the canvas Reset Gate writes at once, with no confirmation
+ * SOURCE DEFECT (fix kept, D153): the canvas Reset Gate writes at once, with no confirmation
  * (`btn_…_ResetGateApproval.OnSelect`, PGAS:3592-3624), although it removes every gate participant and
  * cannot be undone. The first line is `RESET_GATE_DESCRIPTION`; the rest has no canvas source.
  */

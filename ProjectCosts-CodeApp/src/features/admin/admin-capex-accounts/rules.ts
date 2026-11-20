@@ -179,7 +179,7 @@ export const BUSY = {
 /**
  * Digits only, after trim.
  *
- * SOURCE DEFECT (fix kept, D150): the canvas test is `Or(Not(IsNumeric(v)), IsMatch(v, ","), IsMatch(v, "\."))`
+ * SOURCE DEFECT (fix kept, D153): the canvas test is `Or(Not(IsNumeric(v)), IsMatch(v, ","), IsMatch(v, "\."))`
  * (CA:1274-1282, CA:1817-1826), so "-5", "+5" and "1e3" passed it as account / subaccount numbers. This app
  * accepts digits only. The canvas behaviour is `isCanvasNumberCanvasParity`.
  */
@@ -384,7 +384,7 @@ export interface RowActions { edit: boolean; activate: boolean; deactivate: bool
  * subaccount could not be reactivated from the grid. Here it appears for an inactive subaccount.
  * The pre-port twin `subaccountActivateIconCanvasParity` (UT-ADCAPEX-021) was not carried over.
  *
- * SOURCE DEFECT (fix kept, D150): Activate is offered only while the PARENT account is active
+ * SOURCE DEFECT (fix kept, D153): Activate is offered only while the PARENT account is active
  * (`parent.active`). The canvas formula reads the row only, so a subaccount could be activated under an
  * inactive account, leaving an active subaccount below an inactive parent (doc 09 §1).
  */
@@ -426,7 +426,7 @@ export interface DialogText { title: string; description: string; confirmText: s
  * Account?" / "Activate Account?", `ConfirmButtonText` "Deactivate" / "Activate" and the
  * Deactivate `Description` — verbatim.
  *
- * SOURCE DEFECT (fix kept, D150): the canvas Activate `Description` is `"Are you sure that you want to
+ * SOURCE DEFECT (fix kept, D153): the canvas Activate `Description` is `"Are you sure that you want to
  * activate """ & Name & """ account?"` (CA:2416), which hides what activating does. This app adds
  * "Subaccounts keep their current status and previously removed forecast costs are not restored."
  */
@@ -457,7 +457,7 @@ export function accountStatusDialog(account: Pick<CapexNode, "name" | "active">)
  * (CA:2455-2460) — while the description and button read the subaccount's. All three read the
  * subaccount here.
  *
- * SOURCE DEFECT (fix kept, D150): the canvas Activate `Description` is `"Are you sure that you want to
+ * SOURCE DEFECT (fix kept, D153): the canvas Activate `Description` is `"Are you sure that you want to
  * activate """ & Name & """ subaccount?"` (CA:2447); this app adds "Previously removed forecast costs are
  * not restored."
  */
@@ -483,7 +483,7 @@ export function subaccountStatusDialog(sub: Pick<CapexNode, "name" | "active">):
  * `cmp_Account_PopUpConfirmation_DeleteAccount` (CA:2367-2400): `Title` "Delete Account?" and
  * `ConfirmButtonText` "Confirm" — verbatim.
  *
- * SOURCE DEFECT (fix kept, D150): the canvas `Description` is `"Are you sure that you want to permanently
+ * SOURCE DEFECT (fix kept, D153): the canvas `Description` is `"Are you sure that you want to permanently
  * delete """ & Name & """ account with its all related subaccounts?"` (CA:2373). Delete is only offered for an
  * account WITHOUT subaccounts and deletes nothing else, so the text here drops that wrong claim.
  */

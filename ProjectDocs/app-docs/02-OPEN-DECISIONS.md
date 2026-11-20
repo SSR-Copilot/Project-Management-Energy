@@ -8348,7 +8348,7 @@ The environment still shows through the band colour (`environmentHeaderFill`), t
 
 **Verification (D147 and D148):** `npm run verify` on 13a5282 (20 Nov 2026): `check:power`, typecheck, lint and the control-label and canvas-identity gates passed; tests 6,766 passed, 2 failed, 3 todo (334 files). The two failures, UT-GEN-930 and UT-GENPERF-041 (Generators, not touched here), failed only under full-suite load and pass when run alone (41 of 41). The build passed separately. **Not run:** the E2E parity suite (skipped by the user), knip, a DEV or browser check.
 
-## D149 — Check List Settings: Reorder by drag-and-drop, as the canvas (20 Nov 2026; number PROVISIONAL, may be renumbered at merge)
+## D152 — Check List Settings: Reorder by drag-and-drop, as the canvas (20 Nov 2026; number PROVISIONAL, may be renumbered at merge)
 
 **Status:** working tree of `application-settings-bugs`, **uncommitted, NOT product-approved, not run on DEV, not seen in a browser**. The user (20 Nov 2026), with a screenshot of the canvas Checklist settings screen: "application settings sorting like canvas is not in code apps".
 
@@ -8372,7 +8372,7 @@ D18 b (19 Oct 2026, decided with the product owner) is "native drag-and-drop plu
 
 **Not run:** the E2E parity suite, a DEV or browser check (native drag in the Power Apps host iframe, Firefox).
 
-## D150 — Application Settings: canvas parity sweep of all six screens (20 Nov 2026; number PROVISIONAL, may be renumbered at merge)
+## D153 — Application Settings: canvas parity sweep of all six screens (20 Nov 2026; number PROVISIONAL, may be renumbered at merge)
 
 **Status:** working tree of `application-settings-bugs`, **uncommitted, NOT product-approved, not run on DEV, not seen in a browser**. The user (20 Nov 2026) listed problems across Application Settings and asked for the whole area to match the canvas:
 - the Active / Inactive and Completion Date icons;
@@ -8402,12 +8402,12 @@ The entry in `13-CODE-APP-IMPROVEMENTS-OVER-CANVAS.md` lists each change per scr
 - D36 §4: panels stay open on a failed save.
 - D64 row 7: the row hover fill.
 - D65 / rule 22: the "Save" / "Cancel" hover texts.
-- D149: drag and drop with the Move up / Move down buttons.
+- D152: drag and drop with the Move up / Move down buttons.
 - **Rule 16:** existing `data-testid`s were not renamed to the canvas names. This covers the dialog buttons and the panel ✕; the reorder lists only gained a new id.
 
 ### 2a. Canvas defects kept fixed (the user, 20 Nov 2026)
 
-The user: "if you have changed a canvas defect which was resolved in code back to the canvas defect, revert it". The sweep had put nine canvas defects back. They were restored, and each is marked `SOURCE DEFECT (fix kept, D150)` in the code so a later parity pass does not undo them again. Where a twin was useful, the canvas behaviour stays as a `…CanvasParity` twin.
+The user: "if you have changed a canvas defect which was resolved in code back to the canvas defect, revert it". The sweep had put nine canvas defects back. They were restored, and each is marked `SOURCE DEFECT (fix kept, D153)` in the code so a later parity pass does not undo them again. Where a twin was useful, the canvas behaviour stays as a `…CanvasParity` twin.
 
 | Screen | Canvas defect | Kept fix | Tests |
 |---|---|---|---|
@@ -8451,9 +8451,9 @@ These were **not** treated as defects, so they follow the canvas:
    - Contracts: the Add button is focusable at its limit.
    - Gates: the extra Save checks; the optimistic toggles; inactive tasks are hidden.
 
-**Verification:** each screen's folder tests passed, as did the shared component tests and the control-label, chevron and canvas-identity gates: 30 files, 854 tests. `npm run verify` is listed in the session report. **Not run:** the E2E parity suite, DEV and a browser check (icon colours, panel spacing, native drag in the host iframe, Firefox).
+**Verification:** each screen's folder tests passed, as did the shared component tests and the control-label, chevron and canvas-identity gates: 30 files, 854 tests. `npm run verify` is listed in the session report. **Not run:** the E2E parity suite (skipped by the user, 21 Nov 2026), DEV and a browser check (icon colours, panel spacing, native drag in the host iframe, Firefox).
 
-## D151 — Check List Settings: the country / technology tabs sort A → Z by name (21 Nov 2026; number PROVISIONAL, may be renumbered at merge)
+## D154 — Check List Settings: the country / technology tabs sort A → Z by name (21 Nov 2026; number PROVISIONAL, may be renumbered at merge)
 
 **Status:** working tree of `application-settings-bugs`, **uncommitted, NOT product-approved, not run on DEV**. The user (21 Nov 2026, with a screenshot of the code app): "why again like this not alphabetical".
 

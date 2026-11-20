@@ -14,7 +14,7 @@
  * Restored 20 Nov 2026: a blank Description / Margin Type / margin value is an empty label and the
  * margin value is the raw number (no grouping), as the canvas.
  *
- * SOURCE DEFECT (fix kept, D150): the canvas lists an inactive contract unmarked, so it looks the same as an
+ * SOURCE DEFECT (fix kept, D153): the canvas lists an inactive contract unmarked, so it looks the same as an
  * active one although it is never used to seed project contracts; here it carries an "Inactive" badge.
  *
  * DIVERGENCE: the canvas card has a hand-computed height and clips long text; here the height is

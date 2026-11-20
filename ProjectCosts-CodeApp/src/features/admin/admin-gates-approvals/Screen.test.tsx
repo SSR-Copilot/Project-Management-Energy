@@ -270,7 +270,7 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
     expect(sentWrites()[0]!.data).toMatchObject({ vsb_gateactive: true, vsb_approvalmodecode: 952850002 });
   });
 
-  it("UT-ADGATE-910 Reset Gate asks for confirmation first (SOURCE DEFECT fix kept, D150), in the canvas blue, then issues one reset", async () => {
+  it("UT-ADGATE-910 Reset Gate asks for confirmation first (SOURCE DEFECT fix kept, D153), in the canvas blue, then issues one reset", async () => {
     /*
      * CA-19: every role query here is `hidden: true`. In jsdom (no layout) tabster can mark an open
      * Fluent drawer or dialog `aria-hidden="true"` after its deferred 250 ms update (traced, 29 Oct
@@ -651,7 +651,7 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
     noWrites();
   });
 
-  it("UT-ADGATE-935 the Draft gate editor shows 'Gate active' ON (what Save writes), locked, with the hint (SOURCE DEFECT fix kept, D150)", async () => {
+  it("UT-ADGATE-935 the Draft gate editor shows 'Gate active' ON (what Save writes), locked, with the hint (SOURCE DEFECT fix kept, D153)", async () => {
     repo.loadDataset.mockResolvedValue(fixtureDataset({
       templates: FIXTURE_TEMPLATES.map((t) => (t.stateId === stateIdOf(0) ? { ...t, gateActive: false } : t)),
     }));
@@ -666,7 +666,7 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
     expect(screen.getByText("The Draft gate is always active.")).toBeInTheDocument();
   });
 
-  it("UT-ADGATE-936 a mode change that hides saved people warns before Save (SOURCE DEFECT fix kept, D150); Reset Gate's band text is the canvas one", async () => {
+  it("UT-ADGATE-936 a mode change that hides saved people warns before Save (SOURCE DEFECT fix kept, D153); Reset Gate's band text is the canvas one", async () => {
     renderScreen();
     await screen.findByText("Draft to Cluster 1");
     fireEvent.click(gateEdit(1));

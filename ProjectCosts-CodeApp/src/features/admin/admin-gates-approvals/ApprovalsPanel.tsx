@@ -158,7 +158,7 @@ export function ApprovalsPanel({
   const isGate = target.kind === "gate";
   const draftLocked = isGate && isDraftGate(target.row);
   const gateText = gateFieldText(target);
-  /* SOURCE DEFECT fix kept (D150): the canvas clears these roles on Save without a word (see `droppedRoles`). */
+  /* SOURCE DEFECT fix kept (D153): the canvas clears these roles on Save without a word (see `droppedRoles`). */
   const dropped = droppedRoles(initialForm, form);
   const modeNotices: PanelNotice[] = dropped.length > 0
     ? [{ intent: "warning", text: `Saving in this mode clears the saved ${dropped.map((r) => ROLE_LABEL[r]).join(", ")}.` }]
@@ -260,7 +260,7 @@ export function ApprovalsPanel({
         {/*
           * `tog_…_Fields_Active` (`Toggle@1.1.5`, `Label: ="Gate active"`); `DisplayMode` is View for the Draft
           * gate in the gate editor (PGAS:2961-2967).
-          * SOURCE DEFECT fix kept (D150): the canvas then shows the stored 'Gate active', which can read OFF while
+          * SOURCE DEFECT fix kept (D153): the canvas then shows the stored 'Gate active', which can read OFF while
           * Save writes `true` for Draft; this app shows it ON (what Save writes) with the hint below.
           */}
         <div className={mergeClasses(styles.block, styles.toggleBlock)}>

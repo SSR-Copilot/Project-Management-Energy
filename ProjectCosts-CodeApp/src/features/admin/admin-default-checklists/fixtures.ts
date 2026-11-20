@@ -7,7 +7,7 @@ import type {
 } from "@/data/adminDefaultChecklists";
 
 /**
- * The strip sorts A → Z by name (D151): DE Wind, DK PV, FR Wind, so the screen opens on DE Wind, whose
+ * The strip sorts A → Z by name (D154): DE Wind, DK PV, FR Wind, so the screen opens on DE Wind, whose
  * tasks the fixtures hold. The Orders are deliberately out of name order, so the tests also show that
  * Order no longer drives the strip.
  */

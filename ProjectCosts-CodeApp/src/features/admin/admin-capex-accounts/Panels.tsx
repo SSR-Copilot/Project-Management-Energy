@@ -272,7 +272,7 @@ const ALWAYS_SAVE = () => true;
 
 /**
  * `lbl_Account_RightPanel_Ordering_BodyContent.Text` (CA:2145) — verbatim. The port had added
- * ", or use the move up / move down buttons." (a divergence proposed in D149, not approved);
+ * ", or use the move up / move down buttons." (a divergence proposed in D152, not approved);
  * restored on 20 Nov 2026. The Move up / Move down buttons stay for the keyboard.
  */
 const REORDER_HINT = "To reorder drag and drop listed items";

@@ -167,7 +167,7 @@ export function breadcrumbText(countryName: string | undefined, technology: numb
 /**
  * Inactive standard contracts are listed and count toward the limit of 10 (canvas
  * parity), but the project Contracts reader filters them out, so they never seed a project.
- * SOURCE DEFECT (fix kept, D150): the canvas shows them unmarked; the card shows an "Inactive" badge so
+ * SOURCE DEFECT (fix kept, D153): the canvas shows them unmarked; the card shows an "Inactive" badge so
  * that difference is visible. `isInactive` is the one place the state is read.
  */
 export const INCLUDE_INACTIVE_STANDARD_CONTRACTS = true;

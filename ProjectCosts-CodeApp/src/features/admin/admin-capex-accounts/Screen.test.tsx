@@ -919,7 +919,7 @@ describe("CAPEXAccountsSettingsScreen", () => {
     await user.clear(name);
     expect(screen.queryByText(MSG.nameRequired)).not.toBeInTheDocument();
     expect(hiddenButton("Save")).toBeDisabled();
-    // Digits only (SOURCE DEFECT fix kept, D150): a sign, which the canvas let through, shows the message.
+    // Digits only (SOURCE DEFECT fix kept, D153): a sign, which the canvas let through, shows the message.
     await user.type(screen.getByTestId("txt_Account_RightPanel_NewEditAccount_BodyContent_Number"), "-5");
     expect(screen.getByText(MSG.accountNotNumeric)).toBeInTheDocument();
   });

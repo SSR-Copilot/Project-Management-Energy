@@ -68,7 +68,7 @@ export const HOLDING_CUT = 110;
 
 /**
  * `TextCanvas1.Text` (L1542) — verbatim, as the CAPEX Accounts reorder hint (`admin-capex-accounts/Panels.tsx`
- * REORDER_HINT). The panel drags and drops as the canvas PowerDragDrop list (`listProps.draggable`, D149); the
+ * REORDER_HINT). The panel drags and drops as the canvas PowerDragDrop list (`listProps.draggable`, D152); the
  * Move up / Move down buttons stay for the keyboard and touch (D18 b).
  */
 export const REORDER_HELP = "To reorder drag and drop listed items";
@@ -126,7 +126,7 @@ export function yesNo(value: boolean | null | undefined): "Yes" | "No" {
 /* ════════════════════════════════════════════════════════════════ tabs ══ */
 
 /**
- * The tab strip's order: by NAME, A → Z (D151, 21 Nov 2026).
+ * The tab strip's order: by NAME, A → Z (D154, 21 Nov 2026).
  *
  * The live canvas app (VSBCloud_Dev, the user's screenshot of 21 Nov 2026 and the parity run of
  * 29 Oct 2026, O5) lists the tabs alphabetically — Croatia PV, Croatia Wind, Finland PV, … — and opens
@@ -174,7 +174,7 @@ export function sortTabsByOrderCanvasParity<T extends Pick<ChecklistTab, "order"
  *
  * The canvas `OnVisible` sets `locSelectedCountryAndTechnology: First(SortByColumns('Checklist Country
  * And Technologies', "vsb_name"))` (L23-28), the first BY NAME. With the strip sorted by name too
- * (`sortTabs`, D151) that IS the left-most tab, as the live app shows (Croatia PV). D18 f recorded the
+ * (`sortTabs`, D154) that IS the left-most tab, as the live app shows (Croatia PV). D18 f recorded the
  * mismatch against the extracted Order-sorted strip; it no longer arises.
  *
  * DIVERGENCE: the selected tab lives in the URL (`?tab=`); the canvas kept it in a context

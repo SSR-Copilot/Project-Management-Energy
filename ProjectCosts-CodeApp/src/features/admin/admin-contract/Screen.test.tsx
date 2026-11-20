@@ -589,7 +589,7 @@ describe("Gap closure", () => {
     expect((root as HTMLInputElement).indeterminate).toBe(true);
   });
 
-  it("UT-ADCONTR-928 an inactive standard contract shows an Inactive badge (kept unfiltered; SOURCE DEFECT fix kept, D150)", async () => {
+  it("UT-ADCONTR-928 an inactive standard contract shows an Inactive badge (kept unfiltered; SOURCE DEFECT fix kept, D153)", async () => {
     api.listStandardContracts.mockResolvedValue([
       fixtureContracts[0]!, { ...fixtureContracts[1]!, stateCode: 1 },
     ]);

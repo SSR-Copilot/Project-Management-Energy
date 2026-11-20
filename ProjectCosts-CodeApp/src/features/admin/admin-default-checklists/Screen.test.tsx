@@ -146,7 +146,7 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("CheckListSettingsScreen", () => {
-  it("UT-ADCHK-901 tabs A → Z by name, not by Order (D151, the live canvas); left-most selected by default", async () => {
+  it("UT-ADCHK-901 tabs A → Z by name, not by Order (D154, the live canvas); left-most selected by default", async () => {
     renderScreen();
     const tabs = await screen.findAllByRole("tab");
     // Orders are FR Wind 1, DE Wind 2, DK PV 3; the strip still reads DE Wind, DK PV, FR Wind.

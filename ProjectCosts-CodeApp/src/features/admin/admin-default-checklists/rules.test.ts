@@ -105,7 +105,7 @@ describe("YesNo", () => {
 describe("SortTabs / resolveTabId", () => {
   const tab = (id: string, order: string | null, name = id) => ({ id, order, name });
 
-  it("UT-ADCHK-013 the strip is A → Z by name, whatever the Orders (the live canvas, D151)", () => {
+  it("UT-ADCHK-013 the strip is A → Z by name, whatever the Orders (the live canvas, D154)", () => {
     const live = [
       tab("de-w", "1", "Germany Wind"), tab("de-pv", "2", "Germany PV"), tab("pl-pv", "3", "Poland PV"),
       tab("hr-pv", "15", "Croatia PV"), tab("hr-w", "16", "Croatia Wind"), tab("fi-pv", "11", "Finland PV"),
@@ -276,7 +276,7 @@ describe("Dialog and busy texts", () => {
     });
     expect(statusDialog({ name: "Row", isActive: false }).title).toBe("Activate checklist item?");
   });
-  it("UT-ADCHK-048 delete dialog is the canvas `cmp_DeleteChecklistItem_AdminScreen` text, verbatim (L1705-1706, L1754; D150)", () => {
+  it("UT-ADCHK-048 delete dialog is the canvas `cmp_DeleteChecklistItem_AdminScreen` text, verbatim (L1705-1706, L1754; D153)", () => {
     const d = deleteDialog({ name: "Row" });
     expect(d.title).toBe("Delete checklist item?");
     expect(d.confirmText).toBe("Delete");
