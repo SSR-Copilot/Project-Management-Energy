@@ -23,7 +23,7 @@
  * Every branch is a call into `rules.ts`; every caption comes from it. The unsaved-data leave
  * guard is the shell's documented gap (D25/D26); this canvas screen has none of its own.
  */
-import { memo, useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Button, Dropdown, Field, Input, MessageBar, MessageBarBody, Option, Spinner,
@@ -67,7 +67,7 @@ import {
   planSaveContract, planSaveBalancing, saveContractJob, deleteContractJob, saveBalancingJob,
   deleteBalancingJob, SPINNER,
   type RevenueTab, type HedgeType, type RevenueFormState, type StoredRevenueContract,
-  type BalancingPeriod, type BalancingForm, balancingFormFor, balancingPriceText,
+  type BalancingPeriod, type BalancingForm, type IndividualVolumeRow, balancingFormFor, balancingPriceText,
   revenuePanelStandard, touchField, editFieldIfValid, resetStartToCod, negativePriceDisplayMode,
   showsCountryInflationToggle, hedgePercentForCheck, type ContractCardContext,
 } from "./rules";
@@ -672,6 +672,41 @@ const ContractCardFields = memo(function ContractCardFields({ contract: c, ctx, 
   );
 });
 
+/**
+ * One row of the Individual-volume gallery (the read-only period box and the editable MWh box). Memoized (D146): the
+ * Screen holds the contract form, so a keystroke in ONE volume box re-rendered every row, two Fluent fields each (up to
+ * about 74 for a 37-year term). `row` is the form's own row object (an edit replaces only that row's object, so the others
+ * keep their identity), `index` is its place in the list, and `onValue` is the Screen's stable setter. Markup, the
+ * repeated literal test ids and `aria-label`s are exactly those the gallery had inline (D16 c, rule 16).
+ */
+const VolumeRow = memo(function VolumeRow({ row, index, netYieldP50, onValue }: {
+  row: IndividualVolumeRow; index: number; netYieldP50: number | null; onValue: (index: number, value: string) => void;
+}) {
+  const s = useStyles();
+  return (
+    <div className={s.volumeRow}>
+      {/* Individual-volume rows repeat literal ids, as the canvas gallery (D16 c). */}
+      <div className={s.volumePeriod}>
+        {/* `DisplayMode.View` (read-only: the grey box, dark text — not the disabled look). */}
+        <TextInputField
+          label=""
+          name="txt_ProjectRevenue_RightPanel_IndividualVolume_Year"
+          value={volumeRowLabel(row)}
+        />
+      </div>
+      <TextInputField
+        label={SCREEN_LABEL.individualVolume}
+        labelTestId="lbl_ProjectRevenue_RightPanel_IndividualVolume_Header"
+        name="txt_ProjectRevenue_RightPanel_IndividualVolume_Value"
+        required
+        value={row.value}
+        error={validateVolumeMwh(row.value, netYieldP50).message}
+        onChange={(v) => onValue(index, v)}
+      />
+    </div>
+  );
+});
+
 export default function ProjectRevenuesScreen() {
   const s = useStyles();
   const { projectId, locale: lang } = useSession();
@@ -768,15 +803,32 @@ export default function ProjectRevenuesScreen() {
   };
 
   const change = (next: RevenueFormState) => setForm(next);
+  // `txt_ProjectRevenue_RightPanel_IndividualVolume_Value.OnChange` (D146): the same `touchField` edit, applied to the
+  // CURRENT form through a functional update, so the setter is the same function on every render and a memoized
+  // `VolumeRow` is not re-rendered by an edit of another row.
+  const setVolume = useCallback((index: number, value: string) => {
+    setForm((cur) => {
+      const row = cur?.hedge.individual[index];
+      if (!cur || !row) return cur;
+      const next = [...cur.hedge.individual];
+      next[index] = { ...row, value, initialState: false };
+      return touchField(cur, { hedge: { ...cur.hedge, individual: next } });
+    });
+  }, []);
   const closeContract = () => { setPanel("none"); setForm(null); setHedgeError(null); setEditingVolumesFor(null); };
 
-  const runContractSave = async (f: RevenueFormState) => {
+  /**
+   * `idsRead` (D146): the stored volumes' ids, when the caller already started that read (`saveContract` starts it beside
+   * the hedge check's overlap read). It is still a fresh read from the server, never the cache (the orphan protection of
+   * D136 §4); it has only been sent earlier, by the length of the overlap read.
+   */
+  const runContractSave = async (f: RevenueFormState, idsRead?: Promise<string[]>) => {
     if (!project) return;
     closeContract();
     const ids = await writes.run({
       ...saveContractJob(async () => planSaveContract({
         form: f, project, currencyId: currencyQ.data?.id ?? null,
-        storedVolumeIds: f.mode === "Edit" && f.contractId ? await fetchIndividualVolumeIds(f.contractId) : [],
+        storedVolumeIds: f.mode === "Edit" && f.contractId ? await (idsRead ?? fetchIndividualVolumeIds(f.contractId)) : [],
         language: lang,
       })),
       invalidate: revenueReloadKeys(projectId, "contract"),
@@ -791,7 +843,16 @@ export default function ProjectRevenuesScreen() {
   /** `btn_ProjectRevenue_AddEdit_SaveFunctionality` — the hedge 100 % check, then the save. */
   const saveContract = async (f: RevenueFormState) => {
     if (!projectId) return;
+    let idsRead: Promise<string[]> | undefined;
     if (f.hedge.type === "percentage" && f.startDate && f.endDate) {
+      // D146: an Edit reads the contract's stored volume ids (the Save deletes them) and the hedge check reads the
+      // overlapping contracts; neither needs the other, so they run side by side instead of one after the other.
+      // The plan awaits `idsRead` and reports its failure as before; the no-op handler only keeps a failed read from
+      // being an unhandled rejection while the overlap read is still pending (or the check has blocked the Save).
+      if (f.mode === "Edit" && f.contractId) {
+        idsRead = fetchIndividualVolumeIds(f.contractId);
+        idsRead.catch(() => undefined);
+      }
       setValidating(true);
       try {
         const overlap = await fetchOverlappingContracts(projectId, f.startDate, f.endDate, f.mode === "Edit" ? f.contractId : null);
@@ -806,7 +867,7 @@ export default function ProjectRevenuesScreen() {
         setValidating(false);
       }
     }
-    await runContractSave(f);
+    await runContractSave(f, idsRead);
   };
 
   /** `pcf_…_Save_1.OnChange`: Individual Volumes ask first, every other type saves. */
@@ -1436,30 +1497,7 @@ export default function ProjectRevenuesScreen() {
                   <div data-testid="gal_ProjectRevenue_RightPanel_IndividualVolumeDetails" className={s.volumeGallery}>
                     {volumesQ.isLoading ? <Spinner size="tiny" /> : null}
                     {form.hedge.individual.map((row, i) => (
-                      <div key={row.year} className={s.volumeRow}>
-                        {/* Individual-volume rows repeat literal ids, as the canvas gallery (D16 c). */}
-                        <div className={s.volumePeriod}>
-                          {/* `DisplayMode.View` (read-only: the grey box, dark text — not the disabled look). */}
-                          <TextInputField
-                            label=""
-                            name="txt_ProjectRevenue_RightPanel_IndividualVolume_Year"
-                            value={volumeRowLabel(row)}
-                          />
-                        </div>
-                        <TextInputField
-                          label={SCREEN_LABEL.individualVolume}
-                          labelTestId="lbl_ProjectRevenue_RightPanel_IndividualVolume_Header"
-                          name="txt_ProjectRevenue_RightPanel_IndividualVolume_Value"
-                          required
-                          value={row.value}
-                          error={validateVolumeMwh(row.value, form.netYieldP50).message}
-                          onChange={(v) => {
-                            const next = [...form.hedge.individual];
-                            next[i] = { ...row, value: v, initialState: false };
-                            change(touchField(form, { hedge: { ...form.hedge, individual: next } }));
-                          }}
-                        />
-                      </div>
+                      <VolumeRow key={row.year} row={row} index={i} netYieldP50={form.netYieldP50} onValue={setVolume} />
                     ))}
                   </div>
                 ) : null}

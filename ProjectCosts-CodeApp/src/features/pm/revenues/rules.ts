@@ -66,7 +66,7 @@ import { forLanguage } from "@/features/pm/generators/rules";
 import { CHOICE_FINANCE, ES, ES_FINANCE } from "@/data/dataverseNames";
 import { bind, dateOnly } from "@/data/odata";
 import { createdRowRef, refusePlan, together, type PlannedWrite, type WritePlan } from "@/data/writePlan";
-import { LEAF_DELETE_CONCURRENCY } from "@/data/concurrency";
+import { LEAF_DELETE_CONCURRENCY, WIDE_GROUP_CONCURRENCY } from "@/data/concurrency";
 import { REVENUE_PERF, type RevenuePerfOverrides } from "@/data/revenuesFlags";
 import type { PlanJob } from "@/data/usePlanWrite";
 
@@ -3055,10 +3055,15 @@ export function planSaveContract(input: SaveContractInput): WritePlan {
     },
     reason: `create the individual hedge volume ${row.year}`,
   }));
-  if ({ ...REVENUE_PERF, ...input.perf }.parallelVolumeWrites) {
+  const perf = { ...REVENUE_PERF, ...input.perf };
+  if (perf.parallelVolumeWrites) {
     // Two groups, one after the other: every delete finishes before the first create is sent, and a create sees the
-    // contract the plan's first write made (a group sees the ids created BEFORE it).
-    plan.writes.push(...together(volumeDeletes, { limit: LEAF_DELETE_CONCURRENCY }), ...together(volumeCreates));
+    // contract the plan's first write made (a group sees the ids created BEFORE it). D146: the create group is 16 wide
+    // like the delete group (`wideCreateGroup`); off, it is the D136 default of 8.
+    plan.writes.push(
+      ...together(volumeDeletes, { limit: LEAF_DELETE_CONCURRENCY }),
+      ...together(volumeCreates, perf.wideCreateGroup ? { limit: WIDE_GROUP_CONCURRENCY } : undefined),
+    );
   } else {
     plan.writes.push(...volumeDeletes, ...volumeCreates);
   }
