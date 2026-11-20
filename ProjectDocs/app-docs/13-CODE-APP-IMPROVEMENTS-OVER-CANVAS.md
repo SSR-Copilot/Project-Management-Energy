@@ -855,3 +855,11 @@ Implemented on the integration branches, not product-approved, not run against D
 |---|---|---|
 | Every header (Cost, PM project and admin, project list) | The (i) environment marker is gone in every environment: the canvas draws it under "Cloud" on Cost screens (`ico_cmp_Header_Info`) and before Help on PM screens (`ico_cmp_Header_Info_4`), with no OnSelect and no Tooltip, so it did nothing when clicked. The band colour, the environment name and the version still show the environment. UT-HEADER-004, 004d | **DIVERGENCE** (the user's request), twins `brandInfoColorCanvasParity`, `environmentInfoColorCanvasParity` (UT-HEADER-003) |
 | Header | The project-status glyph, the Help menu's InfoCenter item and the user menu's Version row keep their icons | **reproduced** |
+
+
+## Finance: the tranche Save's write group goes out 16 wide (20 Nov 2026, D149, number provisional) — proposed (not approved, not run on DEV)
+
+| Screen | Change | Status |
+|---|---|---|
+| Finance | The tranche Save sends its schedule writes (up to 25 repayments and 4 step-ups) 16 at a time instead of 8, as the Generators and Production saves do. The tranche still goes first alone. Same writes, same order, same binds. Modelled with the real hooks and engine and a fixed latency per request (UT-FINPERF-002, 003): 9 awaited rounds become 7 (D137 had taken it from about 47 to 9). **No real timing exists; the 5x target was NOT achieved** (D149 gives the reason: D137 had already taken most of it, and the rest is a floor) | proposed (DIVERGENCE: the canvas used `Concurrent`; 16 instead of 8 are in flight, and a throttled request ends a Save part-way as before). Switch `wideGroups` (`data/financeFlags.ts`), off = the 8-wide group |
+| Finance | Tests: UT-FINPERF-170…173 (same rows, tranche alone, rounds, switches off), UT-FINPERF-129 (a failed child, window 16). UT-FINPERF-101, 128 and 002 were adjusted for the new switch (D149 says why) | new (tests) |

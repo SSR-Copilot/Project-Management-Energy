@@ -13,6 +13,8 @@
  *    not the whole screen.
  *  - `concurrentWrites`: independent rows of one save go out together (`together()`, the canvas `Concurrent`), and the
  *    visit seeds are one job, not six jobs with six reloads.
+ *  - `wideGroups` (D149): the tranche Save's concurrent group goes out 16 at a time (`WIDE_GROUP_CONCURRENCY`, as the
+ *    Generators saves since D144 and the Production Save since D145) instead of 8; the tranche write stays first and alone.
  *  - `bulkSchedules`: the repayment schedule and the step-up margins of a tranche Save go through `CreateMultiple` /
  *    `UpdateMultiple` once a table has `BULK_MIN_ROWS` rows. OFF until the live probe on DEV has passed (rule 5 of
  *    this work: nothing here may write to an environment), like every `GENERATORS_BULK` flag; flipping it is a one-line
@@ -23,6 +25,7 @@ export interface FinancePerfFlags {
   lazyReads: boolean;
   targetedReload: boolean;
   concurrentWrites: boolean;
+  wideGroups: boolean;
   bulkSchedules: boolean;
 }
 
@@ -31,12 +34,13 @@ const DEFAULTS: Readonly<FinancePerfFlags> = {
   lazyReads: true,
   targetedReload: true,
   concurrentWrites: true,
+  wideGroups: true,
   bulkSchedules: false,
 };
 
 /** Every switch off: today's requests exactly (tests, and the rollback in one line). */
 export const FINANCE_PERF_ALL_OFF: Readonly<FinancePerfFlags> = {
-  parallelReads: false, lazyReads: false, targetedReload: false, concurrentWrites: false, bulkSchedules: false,
+  parallelReads: false, lazyReads: false, targetedReload: false, concurrentWrites: false, wideGroups: false, bulkSchedules: false,
 };
 
 let override: Partial<FinancePerfFlags> | null = null;

@@ -8347,3 +8347,34 @@ The environment still shows through the band colour (`environmentHeaderFill`), t
 **Numbering:** written as D144 / D145 (commit 13a5282); renumbered D147 / D148 when merging `origin/master` (ef032fc), whose D144 (Generators save latency), D145 (Production write group) and D146 (Revenues volumes) came first. Code comments and tests were renumbered with it.
 
 **Verification (D147 and D148):** `npm run verify` on 13a5282 (20 Nov 2026): `check:power`, typecheck, lint and the control-label and canvas-identity gates passed; tests 6,766 passed, 2 failed, 3 todo (334 files). The two failures, UT-GEN-930 and UT-GENPERF-041 (Generators, not touched here), failed only under full-suite load and pass when run alone (41 of 41). The build passed separately. **Not run:** the E2E parity suite (skipped by the user), knip, a DEV or browser check.
+
+
+## D149 — Finance: the tranche Save's write group goes out 16 wide (20 Nov 2026; number PROVISIONAL, may be renumbered at merge)
+
+**Status:** implemented in the worktree `finance-screen-performance-optimization` (branch `sub/finance-screen-performance-optimization`, base `edf38c9`); NOT product-approved; not run on DEV; not seen in a browser; **nothing was timed against Dataverse**. Switch `wideGroups` in `data/financeFlags.ts` (ON; `FINANCE_PERF_ALL_OFF` and `{ wideGroups: false }` give the 8-wide group exactly, CONVENTIONS rule 15).
+
+**Request:** the same "end-to-end performance optimization, minimum 5x" exercise as Production (D145), for the Finance (Financing) screen.
+
+**Finding 1 — the 5x was already taken by D137.** The D137 bench (`financePerf.bench.test.ts`, modelled rounds, three runs on this machine) takes a tranche Save from about 47 awaited rounds (every D137 switch off) to 9 (switches on): about 5x to 6x. The Financing Options cascade (5 writes), the visit seeds (6 writes in one job), the one-write panel saves and the tranche Delete (already 16 wide, `LEAF_DELETE_CONCURRENCY`) are at or near their floor. The reads, the reload and the duplicate-tranche check are D137's and are business rules or already parallel. A further 5x over the current code is not available: the floor is the duplicate read, the tranche write alone (a refused tranche sends nothing else) and the reload.
+
+**Finding 2 — the one lever left is the tranche Save's group width.** After the tranche write, up to 29 schedule writes (25 repayments, 4 step-ups) go out as ONE group at the default 8 in flight: 4 awaited rounds. No flow or plugin fires on `vsb_financinginput`, its repayment or its step-up table (`hooks.ts` header, `04-flow-inventory.md`), so their order is free. At 16 (`WIDE_GROUP_CONCURRENCY`, as the Generators saves since D144 and the Production Save since D145) the same group is 2 rounds.
+
+**Changed:** `optimizeTrancheSavePlan` sends its group with `limit: 16` when `wideGroups` is on. The tranche write is still first and alone; `stopOnFailure` is kept. Same writes, same order, same binds. Nothing else changed: not the Delete (already 16), not the option cascade (5 writes) or the seeds (6), not `bulkSchedules`.
+
+**Modelled result (`UT-FINPERF-002` / `003`, the real hooks, reads, rules, `perf.ts` and `executePlan` against fake services with a fixed latency; MODELLED, not Dataverse time; three runs):**
+
+| Flow | Requests | Rounds, all switches off | Rounds, D137 (8 wide) | Rounds, now (16 wide) | Now vs D137 |
+|---|---:|---:|---:|---:|---:|
+| Tranche save, EDIT (1 tranche + 25 repayments + 4 step-ups, duplicate read and reload included) | 34 | 47 | 9 | 7 | 1.29x |
+| Tranche save, NEW (same rows) | 34 | 45-47 | 9 | 7 | 1.29x |
+| Tranche delete, option switch, seeds, one-write panel saves, visit reads | unchanged | | | unchanged | 1.00x |
+
+**The 5x target is NOT ACHIEVED** over the current code (1.29x on the one flow that changes), and the real-world gain is **NOT VERIFIABLE** from here: no DEV access, no timing, and if the host serialises parallel calls the change gains nothing.
+
+**Side finding:** with the per-row group at 16 the per-row path (7 rounds) is now as fast as or faster than the bulk path (`bulkSchedules`, 8 rounds, 11 requests), which stays OFF. Its case now rests on fewer requests, not fewer rounds; the DEV probe of D137 §2.1 is the place to decide.
+
+**Divergence (proposed, not approved):** the canvas ran these writes with `Concurrent` (D137); 16 are in flight at once instead of 8. A throttled request (HTTP 429; no write retry on this path) can end a Save part-way, as a failure inside an 8-wide group already could. `stopOnFailure` stops every NEW write after the first failure; up to 16 already in flight finish and are counted (UT-FINPERF-129).
+
+**Tests:** `UT-FINPERF-170…173` in `perf.test.ts` (same rows as the 8-wide plan for edit, new, an edit that drops stored years and a small schedule; tranche first and alone, 16 wide on / 8 wide off; 29 group writes are 2 rounds instead of 4; every switch off sends no group), `UT-FINPERF-129` (a failed child with the group 16 wide). EXISTING TESTS CHANGED, each for a stated reason: **UT-FINPERF-101** lists the default switches, so it gains `wideGroups: true`; **UT-FINPERF-128** pins "no new child after a failure, window 8", so it now runs with `wideGroups: false` (its twin is 129); **UT-FINPERF-002** compared the bulk path with the per-row path, which is now faster, so it compares bulk with the 8-wide per-row path (`afterNarrow`) and also asserts the new fact (same requests, fewer rounds).
+
+**Needs a live check (DEV):** time a tranche Save with about 25 repayments before and after with `[VSB] ACTION` / `DATA`; confirm no HTTP 429 at 16 in flight on the repayment and step-up tables; confirm the host really runs the 16 in parallel.

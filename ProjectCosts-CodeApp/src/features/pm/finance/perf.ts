@@ -31,7 +31,7 @@ import { writeErrorMessage, type PlanJob } from "@/data/usePlanWrite";
 import {
   createMany, together, updateMany, type PlannedWrite, type WritePlan,
 } from "@/data/writePlan";
-import { LEAF_DELETE_CONCURRENCY } from "@/data/concurrency";
+import { LEAF_DELETE_CONCURRENCY, WIDE_GROUP_CONCURRENCY } from "@/data/concurrency";
 import {
   FIN_LABEL, NOTIFY, SPINNER, seedWrite,
   type FinanceProject, type SeedRow,
@@ -181,7 +181,12 @@ export function optimizeTrancheSavePlan(
   }
   return {
     ...plan,
-    writes: [tranche, ...(grouped.length ? together(grouped, { stopOnFailure: true }) : []), ...bulkSteps],
+    // D149: `wideGroups` sends the group 16 at a time (a 25 + 4 row schedule is 2 awaited rounds, not 4); off = the 8-wide group.
+    writes: [
+      tranche,
+      ...(grouped.length ? together(grouped, { stopOnFailure: true, ...(flags.wideGroups ? { limit: WIDE_GROUP_CONCURRENCY } : {}) }) : []),
+      ...bulkSteps,
+    ],
   };
 }
 
