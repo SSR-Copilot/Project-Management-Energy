@@ -41,7 +41,7 @@ import { useConfirmDialog } from "@/features/shared/useConfirmDialog";
 import { useCountryTechnologyUrlSelection } from "@/features/shared/useCountryTechnologySelection";
 import { usePanelState } from "@/features/shared/usePanelState";
 import { useToggleSet } from "@/features/shared/useToggleSet";
-import { useBrandButtonStyles } from "@/theme/buttonStyles";
+import { useBrandButtonStyles, usePanelFooterHoverStyles } from "@/theme/buttonStyles";
 import { useAdminAccess } from "@/app/useCurrentUser";
 import { useTablePrivileges } from "@/platform/privileges";
 import { repairLanguageTag } from "@/domain/locale";
@@ -80,6 +80,13 @@ const useStyles = makeStyles({
     display: "flex", flexDirection: "column", gap: "12px", paddingBottom: "10px",
     overflowY: "auto",
   },
+  /*
+   * `btn_AdminContract_Add_Development_Contract` / `_Construction_Contract` (ACS:569-612): a modern
+   * `Button@0.0.45`, `Appearance: Secondary`, `BorderColor` / `FontColor: themePrimary`, `Width: =230`. The modern
+   * control keeps those colours while hovered and only tints the fill; Fluent's secondary hover instead turned the
+   * text and border grey (user screenshot, 21 Nov 2026). The hover is the shared panel-footer hover (D85, the
+   * canvas `hoverButton` fill with themePrimary text and icon), which is known to beat Fluent's hover in the app.
+   */
   addButton: { minWidth: "230px", justifyContent: "flex-start" },
   // Cards touch each other (gallery `TemplatePadding: 0`, ACS:833); `minWidth: 0` keeps long
   // content from widening the column.
@@ -126,6 +133,7 @@ interface PanelState {
 export default function ContractsSettingsScreen() {
   const styles = useStyles();
   const brand = useBrandButtonStyles();
+  const footerHover = usePanelFooterHoverStyles();
   const lang = uiLanguage();
   const notify = useNotify();
 
@@ -363,7 +371,7 @@ export default function ContractsSettingsScreen() {
     return (
       <DisabledReason reason={reason}>
         <Button
-          appearance="secondary" className={mergeClasses(styles.addButton, brand.brandOutline)} icon={<AddFilled />}
+          appearance="secondary" className={mergeClasses(styles.addButton, brand.brandOutline, footerHover.hover)} icon={<AddFilled />}
           disabled={disabled} disabledFocusable={!disabled && full}
           aria-label={label} data-testid={testId}
           onClick={() => { if (!full) openNew(contractType); }}

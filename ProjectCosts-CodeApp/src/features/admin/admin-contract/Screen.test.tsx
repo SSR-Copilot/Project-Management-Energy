@@ -58,7 +58,7 @@ vi.mock("@/generated/services/Vsb_countriesService", () => ({
 }));
 
 import { vsbTheme } from "@/theme/fluent";
-import { appliedRules } from "@/test/appliedRules";
+import { appliedPseudoRules, appliedRules } from "@/test/appliedRules";
 import { AppToaster } from "@/components";
 import { ContractSaveError, DevCoTableUnavailableError, OwnershipConflictError } from "@/data/adminContract";
 import { DataError, RecordGoneError } from "@/platform/errors";
@@ -1041,5 +1041,20 @@ describe("Admin access", () => {
     expect(screen.getByTestId("btn_Delete_AdminContracts-c-dev")).toBeDisabled();
     expect(api.saveStandardContract).not.toHaveBeenCalled();
     expect(api.deleteStandardContract).not.toHaveBeenCalled();
+  });
+});
+
+describe("ContractsSettingsScreen — Add buttons hover (ACS:569-612)", () => {
+  it("UT-ADCONTR-953 the two Add buttons keep themePrimary text and border while hovered, on the light hover fill (the modern Button Secondary look)", async () => {
+    renderScreen();
+    const dev = await screen.findByTestId("btn_AdminContract_Add_Development_Contract");
+    const con = screen.getByTestId("btn_AdminContract_Add_Construction_Contract");
+    for (const button of [dev, con]) {
+      expect(appliedRules(button)["color"]).toMatch(/#006eb9|rgb\(0, 110, 185\)/);
+      const hover = appliedPseudoRules(button, ":hover:enabled");
+      expect(hover["color"]).toMatch(/#006eb9|rgb\(0, 110, 185\)/);
+      expect(hover["border-top-color"]).toMatch(/#006eb9|rgb\(0, 110, 185\)/);
+      expect(hover["background-color"]).toBeTruthy();
+    }
   });
 });
