@@ -1050,11 +1050,11 @@ describe("ContractsSettingsScreen — Add buttons hover (ACS:569-612)", () => {
     const dev = await screen.findByTestId("btn_AdminContract_Add_Development_Contract");
     const con = screen.getByTestId("btn_AdminContract_Add_Construction_Contract");
     for (const button of [dev, con]) {
-      expect(appliedRules(button)["color"]).toMatch(/#006eb9|rgb\(0, 110, 185\)/);
+      // The shared panel-footer hover (D85): the canvas `hoverButton` fill, text and icon stay themePrimary.
       const hover = appliedPseudoRules(button, ":hover:enabled");
       expect(hover["color"]).toMatch(/#006eb9|rgb\(0, 110, 185\)/);
-      expect(hover["border-top-color"]).toMatch(/#006eb9|rgb\(0, 110, 185\)/);
-      expect(hover["background-color"]).toBeTruthy();
+      expect(hover["background-color"]).toMatch(/#cce2f1|rgb\(204, 226, 241\)/i);
+      expect(appliedPseudoRules(button, ":hover:enabled .fui-Button__icon")["color"]).toMatch(/#006eb9|rgb\(0, 110, 185\)/);
     }
   });
 });
