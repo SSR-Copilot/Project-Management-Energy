@@ -26,7 +26,15 @@ import type { MenuItemView } from "./rules";
  */
 const useStyles = makeStyles({
   row: { display: "flex", alignItems: "center", columnGap: "0", flexWrap: "wrap", paddingTop: "10px", paddingBottom: "15px" },
-  leadContract: { flex: "0 0 auto", boxSizing: "border-box", width: "180px" },
+  /*
+   * `cmp_Admin_Cost_LandLease_AddStandardContractType_CommandBar` is one 32 px command, "··· Add Contract Type ⌄",
+   * on a single line (PowerCAT CommandBar). The slot is at least the canvas 180 px but grows with the label; the
+   * button never wraps its caption (user screenshot, 21 Nov 2026: it broke into "Add Contract / Type").
+   */
+  leadContract: {
+    flex: "0 0 auto", boxSizing: "border-box", minWidth: "180px",
+    "& button": { whiteSpace: "nowrap" },
+  },
   leadDevex: { flex: "0 0 auto", boxSizing: "border-box", width: "140px", paddingLeft: "5px" },
 });
 

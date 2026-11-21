@@ -16,7 +16,7 @@ import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { Button, FluentProvider } from "@fluentui/react-components";
 import {
-  CheckmarkRegular, DeleteRegular, DismissRegular, DocumentCheckmarkRegular,
+  CheckmarkRegular, DeleteRegular, DismissRegular,
 } from "@fluentui/react-icons";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
@@ -890,7 +890,7 @@ describe("CheckListSettingsScreen — canvas parity, 20 Nov 2026 (row icons, Add
     const u = user();
     const glyph = {
       calendarReply: "CalendarReply", calendar: "Calendar",
-      deactivateOrders: "DeactivateOrders", activateOrders: iconPath(<DocumentCheckmarkRegular />),
+      deactivateOrders: "DeactivateOrders", activateOrders: "ActivateOrders",
     };
     expect(new Set(Object.values(glyph)).size).toBe(4);
     withT1Completion();
@@ -905,7 +905,7 @@ describe("CheckListSettingsScreen — canvas parity, 20 Nov 2026 (row icons, Add
     expect(mdl2Of(yes)).toBe(glyph.calendarReply);
     expect(mdl2Of(no)).toBe(glyph.calendar);
     expect(mdl2Of(active)).toBe(glyph.deactivateOrders);
-    expect(pathOf(inactive)).toBe(glyph.activateOrders);
+    expect(mdl2Of(inactive)).toBe(glyph.activateOrders);
     // `FontColor` / `IconColor`: akzent3 for Yes / Active, themePrimary for No / Inactive. The icon sets no colour of
     // its own, so it takes the button's (before the fix the grid's `td span` rule painted it #242424).
     for (const b of [yes, active]) expect(atomicColor(b)).toBe(rgb(palette.akzent3));

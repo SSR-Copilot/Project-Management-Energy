@@ -963,7 +963,8 @@ describe("Canvas parity pass (20 Nov 2026): dialogs, standard values and the for
     await screen.findByText("Development Contract - Turbine");
     await user.click(screen.getByRole("button", { name: "Add Development Contract" }));
     await focusDrawer(user);
-    expect(screen.getByRole("textbox", { name: "Month Difference" })).not.toHaveAttribute("placeholder");
+    // The live canvas month box shows the grey hint "Months" (user screenshot, 21 Nov 2026; the extract set none).
+    expect(screen.getByRole("textbox", { name: "Month Difference" })).toHaveAttribute("placeholder", "Months");
     await user.click(screen.getByRole("radio", { name: "Yes" }));
     const pct = screen.getByRole("textbox", { name: /Margin \[%\]/ });
     expect(pct.closest(".fui-Input")!.querySelector(".fui-Input__contentAfter")).toBeNull();

@@ -5712,6 +5712,10 @@ halves are tested.
 - **Checkboxes (CA-22).** One variable, `--devco-check` (18 px), sizes both levels; the column
   centres stay 56 px from the row's right edge. The glyphs are unchanged.
 
+### 3a. Follow-up on master (21 Nov 2026, after the merge)
+
+Four more user requests, all Application Settings only (file 13, "CAPEX form spacing, CAPEX row icons, Costs DEVEX grid"): the CAPEX account panels use the canvas 70 px field blocks; the CAPEX subaccount Edit / status icons are the MDL2 glyphs in **black with no hover feedback** (the user: "chng color of edit and deactivate icon to black", "extra hover effect on buttons not needed"; the canvas draws them in themePrimary, so this is the user's choice, not parity); the Costs DEVEX comment icon is the canvas SVG asset and the Action column follows the canvas 23 / 32 / 32 layout. A shared `EditIcon` (MDL2 Edit) was added to `components/CommandBar.tsx` as an additive export; the `CommandBar` map's own `Edit` entry is unchanged, so no other screen renders differently. A Project Gates table change (blue connector, people wrap) was tried and reverted at the user's request.
+
 ### 4. Open for the product owner
 
 A consequence of showing less: Save can be disabled while the field that blocks it shows no message,

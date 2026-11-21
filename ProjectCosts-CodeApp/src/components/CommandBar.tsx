@@ -21,7 +21,7 @@ import {
   AddRegular, EditRegular, DeleteRegular, ArrowSyncRegular, SaveRegular,
   DocumentRegular, MoreHorizontalRegular, PlayRegular,
   GlassesRegular, OpenRegular,
-  ChevronDownRegular, DocumentCheckmarkRegular, PauseRegular, CheckmarkRegular,
+  ChevronDownRegular, PauseRegular, CheckmarkRegular,
 } from "@fluentui/react-icons";
 import type { ReactElement } from "react";
 import { palette, space } from "@/theme/tokens";
@@ -90,6 +90,36 @@ export const DeactivateOrdersIcon = ({ fit = "slot" }: { fit?: "slot" | "em" }) 
   </svg>
 );
 
+/**
+ * MDL2 `ActivateOrders` (U+EFE0, fabric-icons-8): a document with a tick, the Activate twin of the glyph above
+ * (CAPEX Accounts CA:244 and CA:546-568, Check List Settings L556, the PM bars). Until 21 Nov 2026 Fluent v9's
+ * `DocumentCheckmarkRegular` stood in. Same `fit` as `DeactivateOrdersIcon`.
+ */
+const MDL2_ACTIVATE_ORDERS_PATH = "M2029 1453l-557 558-269-270 90-90 179 178 467-466 90 90zM1024 640H640V512h384v128zm0 256H640V768h384v128zm-384 128h384v128H640v-128zM512 640H384V512h128v128zm0 256H384V768h128v128zm-128 128h128v128H384v-128zm768-384V128H256v1792h896v128H128V0h1115l549 549v731l-128 128V640h-512zm128-128h293l-293-293v293z";
+/**
+ * MDL2 `Edit` (U+E70F, the core fabric-icons set): the pencil the canvas draws for every `"icon:Edit"` /
+ * `IconName: "Edit"` row action (CAPEX Accounts' subaccount grid CA:538-548, Check List Settings' task rows L504).
+ * Drawn AS the em (`viewBox` 0 0 2048), so the icon slot's font-size is the glyph size, as the MDL2 font renders it;
+ * `currentColor` takes the button's colour. The `CommandBar` map's `Edit` entry keeps Fluent's `EditRegular` for the
+ * screens that use it; this export is for the PowerCAT Icon / DetailsList rows that drew the MDL2 glyph.
+ */
+const MDL2_EDIT_PATH =
+  "M2048 335q0 66-25 128t-73 110L633 1890 0 2048l158-633L1475 98q48-48 110-73t128-25q69 0 130 26t106 72 72 107 27 130z" +
+  "M326 1428q106 35 182 111t112 183L1701 640l-293-293L326 1428zm-150 444l329-82q-10-46-32-87t-55-73-73-54-87-33l-82 329z" +
+  "M1792 549q25-25 48-47t41-46 28-53 11-67q0-43-16-80t-45-66-66-45-81-17q-38 0-66 10t-53 29-47 41-47 48l293 293z";
+export const EditIcon = () => (
+  <svg width="1em" height="1em" viewBox="0 0 2048 2048" fill="currentColor" aria-hidden="true" focusable="false" data-icon-name="Edit">
+    <path d={MDL2_EDIT_PATH} />
+  </svg>
+);
+
+export const ActivateOrdersIcon = ({ fit = "slot" }: { fit?: "slot" | "em" }) => (
+  <svg width="1em" height="1em" viewBox={fit === "slot" ? "-256 -256 2560 2560" : "0 0 2048 2048"} fill="currentColor"
+    aria-hidden="true" focusable="false" data-icon-name="ActivateOrders">
+    <path d={MDL2_ACTIVATE_ORDERS_PATH} />
+  </svg>
+);
+
 const ICONS: Record<CommandIcon, ReactElement> = {
   Add: <AddRegular />,
   Edit: <EditRegular />,
@@ -104,8 +134,8 @@ const ICONS: Record<CommandIcon, ReactElement> = {
   ReadingMode: <GlassesRegular />,
   View: <OpenRegular />,
   NumberedList: <NumberedListIcon />,
-  // MDL2 `ActivateOrders` is a document with a tick (Fluent v9's lookalike); `DeactivateOrders` is the MDL2 outline itself.
-  ActivateOrders: <DocumentCheckmarkRegular />,
+  // MDL2 `ActivateOrders` / `DeactivateOrders` — a document with a tick / a cross — as the MDL2 outlines themselves.
+  ActivateOrders: <ActivateOrdersIcon />,
   DeactivateOrders: <DeactivateOrdersIcon />,
   Reorder: <NumberedListIcon />,
   Activate: <PlayRegular />,

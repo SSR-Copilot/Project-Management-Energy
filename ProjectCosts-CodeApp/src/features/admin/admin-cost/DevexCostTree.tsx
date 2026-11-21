@@ -42,7 +42,20 @@ const useStyles = makeStyles({
   // so it is regular, not semibold; only the column headers are semibold.
   parentLabel: { fontWeight: tokens.fontWeightRegular },
   fold: { marginRight: "10px" },
-  actionCell: { display: "flex", alignItems: "center", justifyContent: "center" },
+  /*
+   * The Action column is the 120 px `…_CostsTableHeader_Action` (ACS:3649-3680), laid out as the canvas does
+   * (ACS:4236-4365): the 23 x 23 comment image at X 0, then Edit (32 wide) at X 46 and Delete (32 wide) at X 88,
+   * 10 px apart, flush right — so no cell padding and the three spread across the column.
+   */
+  actionTd: { paddingLeft: 0, paddingRight: 0 },
+  actionCell: { display: "flex", alignItems: "center", justifyContent: "space-between", width: "120px" },
+  commentButton: { minWidth: "23px", width: "23px", height: "23px", paddingLeft: 0, paddingRight: 0, paddingTop: 0, paddingBottom: 0 },
+  /* `ButtonCanvas` icon-only, `Width: =32`: a 32 px button with a 16 px glyph. */
+  editDelete: {
+    columnGap: "10px",
+    "& button": { minWidth: "32px", width: "32px", height: "32px", paddingLeft: 0, paddingRight: 0 },
+    "& .fui-Button__icon": { fontSize: "16px", width: "16px", height: "16px" },
+  },
 });
 
 /**
@@ -172,7 +185,7 @@ export function DevexCostTree({ groups, openCategories, canEdit, canDelete, onTo
                   <td className={styles.td} title={row.costText}>{row.costText}</td>
                   <td className={mergeClasses(styles.td, styles.right)} title={row.clusterText}>{row.clusterText}</td>
                   <td className={styles.td} />
-                  <td className={mergeClasses(styles.td, styles.center)}>
+                  <td className={mergeClasses(styles.td, styles.actionTd)}>
                     <div className={styles.actionCell}>
                       {/*
                         `img_DevexCapex_Content_StandardCosts_CardBody_CostsTable_Comment` — its own
@@ -184,6 +197,7 @@ export function DevexCostTree({ groups, openCategories, canEdit, canDelete, onTo
                         <Button
                           appearance="transparent"
                           size="small"
+                          className={styles.commentButton}
                           icon={<CommentGlyph hasComment={row.hasComment} />}
                           disabled={!canEdit(row.cost)}
                           aria-label={MSG.commentLabel(row.hasComment)}
@@ -199,6 +213,7 @@ export function DevexCostTree({ groups, openCategories, canEdit, canDelete, onTo
                         size="small"
                         tone="brand"
                         toneWhenLocked
+                        className={styles.editDelete}
                         actions={[
                           { key: "edit", icon: <EditRegular />, label: "Edit", disabled: !canEdit(row.cost), onClick: () => onEdit(row.cost), testId: `btn_DevexCapex_Content_StandardCosts_CardBody_CostsTable_Action_Edit-${row.cost.id}` },
                           { key: "delete", icon: <DeleteRegular />, label: "Delete", disabled: !canDelete(row.cost), onClick: () => onDelete(row.cost), testId: `btn_DevexCapex_Content_StandardCosts_CardBody_CostsTable_Action_delete-${row.cost.id}` },

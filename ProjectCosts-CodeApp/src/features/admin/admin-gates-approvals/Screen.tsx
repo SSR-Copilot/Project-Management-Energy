@@ -71,9 +71,16 @@ const useStyles = makeStyles({
     paddingTop: "5px", paddingBottom: "5px", paddingLeft: "5px", paddingRight: "5px",
     boxSizing: "border-box",
   },
+  /*
+   * `con_Admin_ProjectGatest_Approvals_RightContent`: the headline (64) and the column header (32) sit directly
+   * on top of each other with no gap (PGAS:400-447), and both stay put while the gallery scrolls beneath them —
+   * the canvas gallery is the only scrolling part. Here the section is the scroll container and the headline and
+   * header row are `position: sticky` inside it (user screenshots, 21 Nov 2026: the code had an 8 px gap and the
+   * header scrolled away).
+   */
   content: {
     flexGrow: 1, minWidth: 0,
-    display: "flex", flexDirection: "column", rowGap: space.s,
+    display: "flex", flexDirection: "column", rowGap: 0,
     backgroundColor: tokens.colorNeutralBackground1,
     paddingLeft: space.l, paddingRight: "10px", paddingBottom: space.l,
     overflowX: "auto", overflowY: "auto",
@@ -81,11 +88,12 @@ const useStyles = makeStyles({
   /**
    * `lbl_Admin_ProjectGates_Approvals_Headline` (PGAS:389-426): 64 high, `Size: =gblAppSizes.Font.Large`
    * (12 pt = 16 px), `Color: =gblAppColors.Label.Color` (black), normal weight. It was 20 px (canvas
-   * parity pass, 20 Nov 2026).
+   * parity pass, 20 Nov 2026). Sticky at the top of the scrolling section, on the section's own background.
    */
   headline: {
     display: "flex", alignItems: "center", minHeight: "64px",
     fontSize: "16px", lineHeight: "16px", fontWeight: tokens.fontWeightRegular, color: palette.black,
+    position: "sticky", top: 0, zIndex: 2, backgroundColor: tokens.colorNeutralBackground1,
   },
 });
 

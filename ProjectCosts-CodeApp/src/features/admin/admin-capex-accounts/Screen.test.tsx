@@ -9,7 +9,7 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { FluentProvider } from "@fluentui/react-components";
 import {
-  CheckmarkRegular, DismissRegular, DocumentCheckmarkRegular,
+  CheckmarkRegular, DismissRegular,
 } from "@fluentui/react-icons";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactElement, ReactNode } from "react";
@@ -809,7 +809,7 @@ describe("CAPEXAccountsSettingsScreen", () => {
 
   it("UT-ADCAPEX-947 the account commands carry the canvas ItemIconNames and the header the canvas radio image", async () => {
     const dismiss = "DeactivateOrders";
-    const checkmark = iconPath(<DocumentCheckmarkRegular />);
+    const checkmark = "ActivateOrders";
     const list = "NumberedList";
     const user = await openDevelopmentTab();
     const bar = "pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar";
@@ -828,19 +828,38 @@ describe("CAPEXAccountsSettingsScreen", () => {
 
     await user.click(screen.getByRole("button", { name: "Select account 80010 - Permits" }));
     // "ActivateOrders" for an Inactive account (CA:244).
-    expect(pathIn(screen.getByTestId(`${bar}-activateAccount`))).toBe(checkmark);
+    expect(screen.getByTestId(`${bar}-activateAccount`).querySelector("svg")?.getAttribute("data-icon-name")).toBe(checkmark);
   });
 
   it("UT-ADCAPEX-948 the subaccount grid: canvas status icons per state, Reorder subaccounts always on, no invented empty line", async () => {
     const dismiss = "DeactivateOrders";
-    const checkmark = iconPath(<DocumentCheckmarkRegular />);
+    const checkmark = "ActivateOrders";
     const list = "NumberedList";
     const user = await openDevelopmentTab();
     await user.click(screen.getByRole("button", { name: "Expand account 80000 - Land" }));
     const grid = "pcf_Account_AccountCardBody_SubAccounts";
     // "icon:DeactivateOrders" on an Active row, "icon:ActivateOrders" on an Inactive one (CA:546-568).
     expect((await screen.findByTestId(`${grid}-ChangeStatusIcon-${IDS.land1}`)).querySelector("svg")?.getAttribute("data-icon-name")).toBe(dismiss);
-    expect(pathIn(screen.getByTestId(`${grid}-ChangeStatusIcon-${IDS.land2}`))).toBe(checkmark);
+    expect(screen.getByTestId(`${grid}-ChangeStatusIcon-${IDS.land2}`).querySelector("svg")?.getAttribute("data-icon-name")).toBe(checkmark);
+    // "icon:Edit" (CA:538-548) is the MDL2 pencil, drawn as the em: a 15 px glyph (`ColImageWidth: 15`). Edit and the
+    // status icon are black, Delete keeps the brand blue (the user, 21 Nov 2026).
+    const edit = screen.getByTestId(`${grid}-EditIcon-${IDS.land1}`);
+    const pencil = edit.querySelector("svg") as SVGElement;
+    expect(pencil.getAttribute("data-icon-name")).toBe("Edit");
+    expect(pencil.getAttribute("viewBox")).toBe("0 0 2048 2048");
+    // The colour and the no-hover rules live on the row-actions container (`iconBlack`), as nested rules on the
+    // icon slot and the button; read them off the stylesheet for that container's classes.
+    const rulesFor = (button: HTMLElement) => {
+      // The button's parent is the `RowActions` container that carries the screen's `icon` / `iconBlack` classes.
+      const classes = Array.from((button.parentElement as HTMLElement).classList);
+      return Array.from(document.styleSheets).flatMap((s) => Array.from(s.cssRules ?? [])).map((r) => r.cssText)
+        .filter((t) => classes.some((c) => t.includes(`.${c} `) || t.includes(`.${c}:`)));
+    };
+    const editRules = rulesFor(edit);
+    expect(editRules.some((t) => t.includes(".fui-Button__icon") && /color: (#0b0b0b|rgb\(11, 11, 11\))/.test(t) && !t.includes(":hover"))).toBe(true);
+    expect(editRules.some((t) => t.includes(":hover") && t.includes("background-color: transparent"))).toBe(true);
+    const statusRules = rulesFor(screen.getByTestId(`${grid}-ChangeStatusIcon-${IDS.land1}`));
+    expect(statusRules.some((t) => t.includes(".fui-Button__icon") && /color: (#0b0b0b|rgb\(11, 11, 11\))/.test(t))).toBe(true);
     // `HeaderVisible: =false`: no column headers.
     expect(screen.queryAllByRole("columnheader", { hidden: true })).toHaveLength(0);
 

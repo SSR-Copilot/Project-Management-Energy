@@ -448,6 +448,47 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
     expect(gateCollapse(1)).toHaveAttribute("aria-label", "+");
   });
 
+  it("UT-ADGATE-939 the task tree lines are continuous: a full-height vertical on every child but the last (which stops at its elbow), an elbow at mid-row starting on the vertical", async () => {
+    renderScreen();
+    await screen.findByText("Draft to Cluster 1");
+    const rows = screen.getAllByTestId(/^cnt_Admin_ProjectGates_DefaultClusterApproval_Item_ChecklistDefaultApproval_Item-/);
+    expect(rows.length).toBeGreaterThan(0);
+    const line = (row: HTMLElement) => row.querySelector("[data-tree='line']") as HTMLElement;
+    const elbow = (row: HTMLElement) => row.querySelector("[data-tree='elbow']") as HTMLElement;
+    rows.forEach((row, i) => {
+      expect(appliedRules(line(row))["top"]).toMatch(/^0(px)?$/);
+      // Not the last child: the vertical runs 1 px past the row's bottom (over the separator), so rows join with no
+      // gap. The last child: it ends at the elbow.
+      expect(appliedRules(line(row))["bottom"]).toBe(i === rows.length - 1 ? "50%" : "-1px");
+    });
+    // The elbow sits at mid-row and starts on the vertical (same left), 18 px long.
+    for (const row of rows) {
+      expect(appliedRules(elbow(row))["top"]).toBe("50%");
+      expect(appliedRules(elbow(row))["left"]).toBe(appliedRules(line(row))["left"]);
+      expect(appliedRules(elbow(row))["width"]).toBe("18px");
+      // Both are absolutely positioned inside the relative cell, so they follow the row's real height.
+      expect(appliedRules(line(row))["position"]).toBe("absolute");
+      expect(appliedRules(line(row).closest("td") as HTMLElement)["position"]).toBe("relative");
+    }
+  });
+
+  it("UT-ADGATE-940 the headline and the column header are a fixed area: no gap between them, both sticky in the scrolling section (headline top 0, header top 64), the table box adds no scroll root", async () => {
+    renderScreen();
+    await screen.findByText("Draft to Cluster 1");
+    const section = screen.getByTestId("con_Admin_ProjectGatest_Approvals_RightContent");
+    expect(appliedRules(section)["row-gap"]).toMatch(/^0(px)?$/);
+    expect(appliedRules(section)["overflow-y"]).toBe("auto");
+    const headline = screen.getByTestId("lbl_Admin_ProjectGates_Approvals_Headline");
+    expect(appliedRules(headline)["position"]).toBe("sticky");
+    expect(appliedRules(headline)["top"]).toMatch(/^0(px)?$/);
+    expect(appliedRules(headline)["min-height"]).toBe("64px");
+    const header = screen.getByTestId("lbl_Admin_ProjectGatest_Approvals_Header_Description");
+    expect(appliedRules(header)["position"]).toBe("sticky");
+    expect(appliedRules(header)["top"]).toBe("64px");
+    const box = header.closest("table")!.parentElement as HTMLElement;
+    expect(appliedRules(box)["overflow-x"]).toBeUndefined();
+  });
+
   it("UT-ADGATE-938 every country on the rail starts collapsed, the selected one included (PGAS:118-119 `Expanded, false`)", async () => {
     renderScreen();
     expect(await screen.findByText("Project Gates | Germany | Wind")).toBeInTheDocument();

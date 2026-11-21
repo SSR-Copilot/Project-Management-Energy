@@ -239,6 +239,26 @@ describe("CostsSettingsScreen", () => {
     expect(elbow["width"]).toBe("15px");
   });
 
+  it("UT-ADCOST-946 the Action column lays out as the canvas: 120 px, no cell padding, a 23 px comment button, then 32 px Edit and Delete 10 px apart (ACS:3649-3680, 4236-4365)", () => {
+    render(<Harness><CostsSettingsScreen /></Harness>);
+    openSection("DEVEX/CAPEX");
+    fireEvent.click(screen.getByTestId(T.devexFold(DEVEX_CATEGORY)));
+    const comment = screen.getAllByTestId(/^img_DevexCapex_Content_StandardCosts_CardBody_CostsTable_Comment-/)[0] as HTMLElement;
+    expect(appliedRules(comment)["width"]).toBe("23px");
+    const cell = comment.closest("td") as HTMLElement;
+    expect(appliedRules(cell)["padding-left"]).toMatch(/^0(px)?$/);
+    const flex = comment.closest("div") as HTMLElement;
+    expect(appliedRules(flex)["width"]).toBe("120px");
+    expect(appliedRules(flex)["justify-content"]).toBe("space-between");
+    const edit = screen.getAllByTestId(/^btn_DevexCapex_Content_StandardCosts_CardBody_CostsTable_Action_Edit-/)[0] as HTMLElement;
+    const actions = edit.parentElement as HTMLElement;
+    expect(appliedRules(actions)["column-gap"]).toBe("10px");
+    const nested = Array.from(document.styleSheets).flatMap((s) => Array.from(s.cssRules ?? [])).map((r) => r.cssText)
+      .filter((t) => Array.from(actions.classList).some((c) => t.includes(`.${c} `)));
+    expect(nested.some((t) => t.includes("button") && t.includes("width: 32px"))).toBe(true);
+    expect(nested.some((t) => t.includes(".fui-Button__icon") && t.includes("font-size: 16px"))).toBe(true);
+  });
+
   it("UT-ADCOST-906 opens Edit Period with the inflation block read-only", async () => {
     render(<Harness><CostsSettingsScreen /></Harness>);
     openSection("Land Lease");

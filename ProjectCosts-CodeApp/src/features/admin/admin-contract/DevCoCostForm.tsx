@@ -51,9 +51,13 @@ const useStyles = makeStyles({
     borderLeftWidth: "3px", borderLeftStyle: "solid", borderLeftColor: "transparent",
   },
   rootRowOpen: { borderLeftColor: palette.akzent1, borderBottomColor: "transparent" },
+  /*
+   * `lbl_Add_Edit_AdminContracts_Right_Panel_DevCoCostForm_Card_Category` (ACS:3346-3369): `FontWeight: Semibold`,
+   * `Size: Medium` (11 pt = 14.67 px), `Color: gblAppStyles.Label.Color`, `Text: "{Nummer} {Name}"`.
+   */
   rootToggle: {
     flexGrow: 1, minWidth: "0", justifyContent: "flex-start", textAlign: "left",
-    fontWeight: tokens.fontWeightSemibold,
+    fontWeight: tokens.fontWeightSemibold, fontSize: "14.6667px", color: palette.black,
   },
   /* Root chevron: brand blue (ACS:3417-3483), a fixed 24 px so child checkboxes line up under the root ones. */
   chevron: { color: palette.themePrimary, width: "24px", minWidth: "24px", flexShrink: 0 },

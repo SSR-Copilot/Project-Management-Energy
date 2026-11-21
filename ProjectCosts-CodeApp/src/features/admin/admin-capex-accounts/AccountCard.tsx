@@ -35,10 +35,10 @@
 import {
   Button, Table, TableBody, TableCell, TableRow, makeStyles, mergeClasses, tokens,
 } from "@fluentui/react-components";
+import { DeleteRegular } from "@fluentui/react-icons";
 import {
-  DeleteRegular, DocumentCheckmarkRegular, EditRegular,
-} from "@fluentui/react-icons";
-import { CollapsibleCard, CommandBar, DeactivateOrdersIcon, RowActions, StatusPill, type RowAction } from "@/components";
+  ActivateOrdersIcon, CollapsibleCard, CommandBar, DeactivateOrdersIcon, EditIcon, RowActions, StatusPill, type RowAction,
+} from "@/components";
 import type { TablePrivileges } from "@/platform/privileges";
 import { palette } from "@/theme/tokens";
 import {
@@ -100,6 +100,16 @@ const useStyles = makeStyles({
   icon: {
     "& button": { minWidth: "18px", width: "18px", height: "18px", paddingLeft: 0, paddingRight: 0 },
     "& .fui-Button__icon": { fontSize: "15px", width: "15px", height: "15px" },
+  },
+  /**
+   * The Edit and Deactivate / Activate row icons are black, with no hover fill and no hover recolour (the user,
+   * 21 Nov 2026: the Fluent subtle button's grey hover box and brand hover tint are not wanted here); Delete
+   * keeps the brand blue.
+   */
+  iconBlack: {
+    "& .fui-Button__icon": { color: palette.black },
+    "& button:hover, & button:hover:active": { backgroundColor: "transparent" },
+    "& button:hover .fui-Button__icon, & button:hover:active .fui-Button__icon": { color: palette.black },
   },
 });
 
@@ -215,9 +225,12 @@ export function AccountCard(props: AccountCardProps) {
               const numberId = `capex-subaccount-number-${sub.id}`;
               const nameId = `capex-subaccount-name-${sub.id}`;
               const describedBy = `${numberId} ${nameId}`;
-              const iconColumn = (cellActions: readonly RowAction[]) => (
+              const iconColumn = (cellActions: readonly RowAction[], black = true) => (
                 <TableCell className={mergeClasses(styles.cell, styles.iconCell)}>
-                  <RowActions appearance="subtle" size="small" tone="brand" className={styles.icon} actions={cellActions} />
+                  <RowActions
+                    appearance="subtle" size="small" {...(black ? {} : { tone: "brand" as const })}
+                    className={mergeClasses(styles.icon, black && styles.iconBlack)} actions={cellActions}
+                  />
                 </TableCell>
               );
               return (
@@ -229,16 +242,18 @@ export function AccountCard(props: AccountCardProps) {
                   {/*
                     * The icon columns, one per canvas column (CA:538-589): `EditIcon` "icon:Edit",
                     * `ChangeStatusIcon` "icon:DeactivateOrders" (Active) / "icon:ActivateOrders"
-                    * (Inactive) and `DeleteIcon` "icon:Delete" — the MDL2 glyphs as the shared
-                    * `CommandBar` maps them (the MDL2 DeactivateOrders outline / a document with a tick).
+                    * (Inactive) and `DeleteIcon` "icon:Delete". Edit and the two Orders glyphs are the
+                    * MDL2 outlines the v8 DetailsList drew (shared `EditIcon` / `…OrdersIcon`), 15 px; Fluent's
+                    * `EditRegular` was a thinner, rounder pencil (user screenshot, 21 Nov 2026). Edit and the
+                    * status icon are black, Delete brand blue (the user, 21 Nov 2026).
                     */}
                   {iconColumn([{
-                    key: "edit", icon: <EditRegular />, label: "Edit", title: "Edit", describedBy,
+                    key: "edit", icon: <EditIcon />, label: "Edit", title: "Edit", describedBy,
                     testId: `${SUBACCOUNTS_GRID}-EditIcon-${sub.id}`,
                     visible: actions.edit, onClick: () => props.onEditSubaccount(sub),
                   }])}
                   {iconColumn([{
-                    key: "status", icon: actions.deactivate ? <DeactivateOrdersIcon fit="em" /> : <DocumentCheckmarkRegular />,
+                    key: "status", icon: actions.deactivate ? <DeactivateOrdersIcon fit="em" /> : <ActivateOrdersIcon fit="em" />,
                     label: statusVerb, title: statusVerb, describedBy,
                     testId: `${SUBACCOUNTS_GRID}-ChangeStatusIcon-${sub.id}`,
                     visible: actions.deactivate || actions.activate,
@@ -258,7 +273,7 @@ export function AccountCard(props: AccountCardProps) {
                       visible: deleteUnavailable, disabledReason: CONTRACT_CHECK_FAILED.subaccount,
                       testId: `delete-unavailable-${sub.number}`, onClick: () => {},
                     },
-                  ])}
+                  ], false)}
                   <TableCell className={styles.fillerCell} />
                 </TableRow>
               );

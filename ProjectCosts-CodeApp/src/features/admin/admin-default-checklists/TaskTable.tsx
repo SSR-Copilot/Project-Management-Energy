@@ -18,15 +18,15 @@
  * Icons as the canvas: the Active button shows `DeactivateOrders` on an Active row and `ActivateOrders` on
  * an Inactive one (the action: a document with a cross / a tick), and the Completion Date button `CalendarReply`
  * / `Calendar`. (27 Oct 2026: the earlier port showed the state, a check / cross and a calendar with / without a tick.)
- * Edit, Calendar, CalendarReply (`MDL2_PATH`) and DeactivateOrders (the shared `DeactivateOrdersIcon`) are the MDL2
- * outlines themselves (21 Nov 2026); Delete and ActivateOrders are still Fluent v9 lookalikes.
+ * Edit, Calendar, CalendarReply (`MDL2_PATH`) and the two Orders glyphs (the shared `ActivateOrdersIcon` /
+ * `DeactivateOrdersIcon`) are the MDL2 outlines themselves (21 Nov 2026); Delete is still a Fluent v9 lookalike.
  */
 import {
   Button, Spinner, Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow, Text, Tooltip,
   makeStyles, mergeClasses, tokens,
 } from "@fluentui/react-components";
-import { DeleteRegular, DocumentCheckmarkRegular } from "@fluentui/react-icons";
-import { DeactivateOrdersIcon, DisabledReason, InlineEmpty, RowActions } from "@/components";
+import { DeleteRegular } from "@fluentui/react-icons";
+import { ActivateOrdersIcon, DeactivateOrdersIcon, DisabledReason, EditIcon, InlineEmpty, RowActions } from "@/components";
 import type { ChecklistTask } from "@/data/adminDefaultChecklists";
 import { palette } from "@/theme/tokens";
 import { useRowActionStyles } from "@/theme/buttonStyles";
@@ -40,9 +40,8 @@ import { HOLDING_CUT, truncateHolding, yesNo } from "./rules";
  * `EditRegular` (a rounder pencil) and `CalendarReplyRegular` / `CalendarRegular` (another arrow and grid).
  * The render tests read the glyph's `data-icon-name`.
  */
+// The Edit pencil (U+E70F) is the shared `EditIcon` (`@/components`), which CAPEX Accounts' rows draw too.
 const MDL2_PATH = {
-  // Edit — U+E70F, the core fabric-icons set.
-  edit: "M2048 335q0 66-25 128t-73 110L633 1890 0 2048l158-633L1475 98q48-48 110-73t128-25q69 0 130 26t106 72 72 107 27 130zM326 1428q106 35 182 111t112 183L1701 640l-293-293L326 1428zm-150 444l329-82q-10-46-32-87t-55-73-73-54-87-33l-82 329zM1792 549q25-25 48-47t41-46 28-53 11-67q0-43-16-80t-45-66-66-45-81-17q-38 0-66 10t-53 29-47 41-47 48l293 293z",
   // Calendar — U+E787, the core fabric-icons set.
   calendar: "M768 768h128v128H768V768zm384 768h128v128h-128v-128zm384-768h128v128h-128V768zm-384 0h128v128h-128V768zm-384 256h128v128H768v-128zm-384 0h128v128H384v-128zm1152 0h128v128h-128v-128zm-384 0h128v128h-128v-128zm-384 256h128v128H768v-128zm-384 0h128v128H384v-128zm1152 0h128v128h-128v-128zm-384 0h128v128h-128v-128zm-384 256h128v128H768v-128zm-384 0h128v128H384v-128zM2048 128v1792H0V128h384V0h128v128h1024V0h128v128h384zM128 256v256h1792V256h-256v128h-128V256H512v128H384V256H128zm1792 1536V640H128v1152h1792z",
   // CalendarReply — U+E8F5, fabric-icons-1.
@@ -240,7 +239,7 @@ export function TaskTable({
                     <Button
                       appearance="transparent"
                       className={mergeClasses(styles.flagButton, styles.activeButton, !disabled && feedback.interactive, lockReason ? styles.locked : task.isActive ? styles.positive : styles.neutral)}
-                      icon={task.isActive ? <DeactivateOrdersIcon fit="em" /> : <DocumentCheckmarkRegular />}
+                      icon={task.isActive ? <DeactivateOrdersIcon fit="em" /> : <ActivateOrdersIcon fit="em" />}
                       disabled={disabled}
                       aria-label={status}
                       aria-describedby={nameId}
@@ -256,7 +255,7 @@ export function TaskTable({
                       tone="accent"
                       actions={[
                         {
-                          key: "edit", icon: <Mdl2Icon name="Edit" path={MDL2_PATH.edit} />, label: "Edit", describedBy: nameId,
+                          key: "edit", icon: <EditIcon />, label: "Edit", describedBy: nameId,
                           testId: `ico_Edit_TasksInClusterDefaultChecklist_AdminScreen-${task.id}`,
                           disabled, ...(lockReason ? { disabledReason: lockReason } : {}),
                           onClick: () => onEdit(task),

@@ -15,7 +15,7 @@
  *  - the error labels (`lbl_…_ErrorMessage`, ACS:1975, 2276, 2561, 2651) are `palette.Error`, Semibold,
  *    `ExtraExtraSmall` (8 pt = 10.67 px), no icon, and `Visible` only for a NON-blank invalid value: a
  *    blank field only greys Save (`visibleFieldError`);
- *  - no placeholder on the month box (ACS:2398), no "%" / currency inside the margin boxes (ACS:2543,
+ *  - the live canvas's "Months" placeholder on the month box, no "%" / currency inside the margin boxes (ACS:2543,
  *    2776), no caption and no `*` on `rad_AddEdit_AdminContracts_RightPanel_MarginType` (ACS:2897) —
  *    it keeps its accessible name only;
  *  - the fixed-value caption's currency is the canvas Poland → "PLN" / else "EUR" rule
@@ -196,8 +196,10 @@ export function ContractPanel({
 
           {/*
             The sign and the number share the canvas caption "Month Difference" (CONVENTIONS rule 16:
-            no canvas AccessibleLabel, so the visible caption). No placeholder: the canvas
-            `txt_Add_Edit_AdminContracts_MonthDifference_Month` sets none (ACS:2398).
+            no canvas AccessibleLabel, so the visible caption). Placeholder "Months": the LIVE canvas
+            `txt_Add_Edit_AdminContracts_MonthDifference_Month` shows it as grey hint text (user screenshot,
+            21 Nov 2026); the extracted YAML (1.21.709, ACS:2398) predates it and sets none, as with the
+            tab-strip sort (D154).
           */}
           <Field label={T.monthDifference} required validationMessage={visibleFieldError(errors.month)} validationMessageIcon={null}>
             <div className={styles.monthRow}>
@@ -211,6 +213,7 @@ export function ContractPanel({
               <Input
                 className={mergeClasses(styles.months, standardClass(panelInputIsStandard("month")))}
                 aria-label={T.monthDifference} data-testid="txt_Add_Edit_AdminContracts_MonthDifference_Month"
+                placeholder="Months"
                 inputMode="numeric" value={form.monthText}
                 onChange={(_, d) => set({ monthText: d.value })}
               />

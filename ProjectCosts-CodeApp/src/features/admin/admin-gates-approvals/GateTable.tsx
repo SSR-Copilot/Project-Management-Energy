@@ -59,7 +59,12 @@ const addTaskDisabledReason = (tasksAvailable: boolean) => (tasksAvailable
   : "Check list tasks are not available.");
 
 const useStyles = makeStyles({
-  scroller: { overflowX: "auto", maxWidth: "100%" },
+  /*
+   * No overflow of its own: the surrounding section (`Screen.tsx` `content`) is the one scroll container, both
+   * ways, so the sticky header below sticks to IT while the rows scroll (an `overflow-x: auto` here would have made
+   * this box the sticky's scroll root and the header would have scrolled away with the rows).
+   */
+  scroller: { maxWidth: "100%" },
   table: { width: `${TABLE_WIDTH}px`, tableLayout: "fixed" },
   /*
    * `con_Admin_ProjectGatest_Approvals_Gallery_Header` (PGAS:435-437): `Fill: =gblAppColors.Gallery.Header`
@@ -71,19 +76,43 @@ const useStyles = makeStyles({
     ":hover": { backgroundColor: palette.Grayscale40 },
   },
   // Canvas header labels: Size gblAppSizes.Font.ExtraExtraSmall (8 pt = 10.67 px), colour measured in the Canvas run (rgb(11, 11, 11)).
-  headerCell: { fontWeight: tokens.fontWeightSemibold, fontSize: "10.6667px", color: "#0B0B0B", height: "32px", paddingTop: 0, paddingBottom: 0 },
+  /*
+   * Sticky under the 64 px headline (`Screen.tsx` `headline`), as the canvas header sits outside the scrolling
+   * gallery (PGAS:427-447). Each cell is sticky (a sticky `thead` is not honoured everywhere) on the header fill.
+   */
+  headerCell: {
+    fontWeight: tokens.fontWeightSemibold, fontSize: "10.6667px", color: "#0B0B0B", height: "32px", paddingTop: 0, paddingBottom: 0,
+    position: "sticky", top: "64px", zIndex: 1, backgroundColor: palette.Grayscale40,
+  },
   gateRow: {
     // PGAS:1655 — Fill RGBA(0,0,0,0.1), DropShadow.Semilight.
     backgroundColor: "rgba(0,0,0,0.1)",
     ":hover": { backgroundColor: "rgba(0,0,0,0.1)" },
   },
-  cell: { verticalAlign: "top", paddingTop: space.s, paddingBottom: space.s },
+  /*
+   * Every canvas cell is centred in its row (`Y: =(Parent.Height-Self.Height)/2` on the labels and the people
+   * lists, PGAS:1033-1452, 1780-2202): a task name or a "-" sits at mid-row beside a tall people list, never at
+   * the top (user screenshot, 21 Nov 2026).
+   */
+  cell: { verticalAlign: "middle", paddingTop: space.s, paddingBottom: space.s },
   descriptionCell: { display: "flex", alignItems: "center", columnGap: space.s },
   gateName: { fontWeight: tokens.fontWeightSemibold, fontSize: "12px", color: "#242424" },
   taskCell: { position: "relative", paddingLeft: "44px" },
+  /*
+   * The hierarchy lines, sized by the row they sit in (absolute inside the `position: relative` cell, so a
+   * taller row with wrapped text or many people stretches them): one continuous vertical line from the first
+   * child to the last, and a horizontal elbow per row at the row's middle. The vertical overruns the row by 1 px
+   * (`bottom: -1px`) to cover the row separator, so it never breaks between rows; on the LAST child it stops at
+   * the elbow (`treeLineLast`). The elbow starts ON the vertical (same `left`), so the two always meet.
+   */
   treeLine: {
-    position: "absolute", left: "20px", top: 0, bottom: "50%", width: "18px",
-    borderLeft: "1px solid #B0B0B0", borderBottom: "1px solid #B3B5B5",
+    position: "absolute", left: "20px", top: 0, bottom: "-1px", width: 0,
+    borderLeftWidth: "1px", borderLeftStyle: "solid", borderLeftColor: "#B0B0B0",
+  },
+  treeLineLast: { bottom: "50%" },
+  treeElbow: {
+    position: "absolute", left: "20px", top: "50%", width: "18px", height: 0,
+    borderTopWidth: "1px", borderTopStyle: "solid", borderTopColor: "#B3B5B5",
   },
   taskName: { fontWeight: tokens.fontWeightSemibold, fontSize: "12px", color: "#242424", wordBreak: "break-word" },
   person: { display: "flex", flexDirection: "column", marginBottom: space.s },
@@ -254,15 +283,17 @@ export function GateTable(props: GateTableProps) {
 
     // `gal_…_ChecklistDefaultApprovals.Visible`: hidden while the gate is collapsed.
     if (!isCollapsed) {
-      for (const task of tasks) {
+      tasks.forEach((task, index) => {
         const a = task.approval;
         const tc = parsePeople(a.contributors);
         const ta = parsePeople(a.approvers);
         const tn = parsePeople(a.notifications);
+        const last = index === tasks.length - 1;
         body.push(
           <TableRow key={`task-${a.id}`} data-testid={`cnt_Admin_ProjectGates_DefaultClusterApproval_Item_ChecklistDefaultApproval_Item-${a.id}`}>
             <TableCell className={mergeClasses(styles.cell, styles.taskCell)}>
-              <span className={styles.treeLine} aria-hidden="true" />
+              <span className={mergeClasses(styles.treeLine, last && styles.treeLineLast)} aria-hidden="true" data-tree="line" />
+              <span className={styles.treeElbow} aria-hidden="true" data-tree="elbow" />
               <Text
                 className={styles.taskName}
                 data-testid={`lbl_Admin_ProjectGates_DefaultClusterApproval_Item_ChecklistDefaultApproval_Item_ApprovalDescription-${a.id}`}
@@ -313,7 +344,7 @@ export function GateTable(props: GateTableProps) {
             </TableCell>
           </TableRow>,
         );
-      }
+      });
     }
 
     // `con_AddChecklistApproval` has no `Visible`, so Add Task stays while the gate is collapsed.
