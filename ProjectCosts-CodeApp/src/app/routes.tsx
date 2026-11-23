@@ -16,31 +16,35 @@ import { Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams } 
 import { EmptyState, LoadingOverlay } from "@/components";
 import { useSession } from "./SessionContext";
 import { costLocation, launchCostPath, launchPmPath } from "./deepLinks";
-import { loadGeneralDataScreen, loadGeneratorsScreen, loadProjectOverviewScreen } from "./screenLoaders";
+import {
+  loadAddCostsFromTableScreen, loadCapexCostsScreen, loadCheckListScreen, loadContractsScreen, loadFinanceScreen,
+  loadGeneralDataScreen, loadGeneratorsScreen, loadGridOperatorScreen, loadLandLeaseScreen, loadMilestonesScreen,
+  loadOpexCostsScreen, loadPlanningScreen, loadProductionScreen, loadProjectOverviewScreen, loadRevenuesScreen, loadTeamScreen,
+} from "./screenLoaders";
 import { useGeneratorsWarmup } from "./generatorsWarmup";
 
-// The two screens the app usually opens on load through `screenLoaders.ts`, so `bootPrefetch.ts` can start them early.
+// Every screen loads through `screenLoaders.ts`, so `bootPrefetch.ts` can start its chunk early (D119, OPT-03).
 const ProjectOverviewScreen = lazy(loadProjectOverviewScreen);
-const ContractsScreen = lazy(() => import("@/features/cost/contracts/Screen"));
-const CapexCostsScreen = lazy(() => import("@/features/cost/capex-costs/Screen"));
-const OpexCostsScreen = lazy(() => import("@/features/cost/opex-costs/Screen"));
-const LandLeaseScreen = lazy(() => import("@/features/cost/land-lease/Screen"));
-const AddCostsFromTableScreen = lazy(() => import("@/features/cost/add-costs-from-table/Screen"));
+const ContractsScreen = lazy(loadContractsScreen);
+const CapexCostsScreen = lazy(loadCapexCostsScreen);
+const OpexCostsScreen = lazy(loadOpexCostsScreen);
+const LandLeaseScreen = lazy(loadLandLeaseScreen);
+const AddCostsFromTableScreen = lazy(loadAddCostsFromTableScreen);
 
 /*
  * Project Management — each screen's `hooks.ts` says what it reads and writes; anything not wired
  * yet is listed in `data/notConnected.ts`.
  */
 const GeneralDataScreen = lazy(loadGeneralDataScreen);
-const MilestonesScreen = lazy(() => import("@/features/pm/milestones/Screen"));
+const MilestonesScreen = lazy(loadMilestonesScreen);
 const GeneratorsScreen = lazy(loadGeneratorsScreen);
-const ProductionScreen = lazy(() => import("@/features/pm/production/Screen"));
-const CheckListScreen = lazy(() => import("@/features/pm/checklist/Screen"));
-const TeamScreen = lazy(() => import("@/features/pm/team/Screen"));
-const PlanningScreen = lazy(() => import("@/features/pm/planning/Screen"));
-const GridOperatorScreen = lazy(() => import("@/features/pm/grid-operator/Screen"));
-const RevenuesScreen = lazy(() => import("@/features/pm/revenues/Screen"));
-const FinanceScreen = lazy(() => import("@/features/pm/finance/Screen"));
+const ProductionScreen = lazy(loadProductionScreen);
+const CheckListScreen = lazy(loadCheckListScreen);
+const TeamScreen = lazy(loadTeamScreen);
+const PlanningScreen = lazy(loadPlanningScreen);
+const GridOperatorScreen = lazy(loadGridOperatorScreen);
+const RevenuesScreen = lazy(loadRevenuesScreen);
+const FinanceScreen = lazy(loadFinanceScreen);
 
 /* Administration — UI built, not connected to Dataverse yet. */
 const AdminChecklistsScreen = lazy(() => import("@/features/admin/admin-default-checklists/Screen"));

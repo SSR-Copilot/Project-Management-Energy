@@ -47,14 +47,12 @@ import { fetchAll, fetchPage } from "./client";
 import { mapLimit } from "./concurrency";
 import { createGeneratorsBulkBackend } from "./generatorsBulk";
 import { generatorsPerf } from "./generatorsPerfFlags";
-import { ACTIVE, and, chunk, eq, gtDate, guid, idIn, lookupEq, lookupIn, numberOf, or } from "./odata";
+import { ACTIVE, and, chunk, eq, gtDate, guid, idIn, lookupEq, lookupIn, or } from "./odata";
+import { rowStr as str, rowNum as num, rowBool as bool } from "./rowValues";
 
 registerDefaultBulkBackend(createGeneratorsBulkBackend);
 
 type Raw = Record<string, unknown>;
-const str = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
-const num = (v: unknown): number | null => numberOf(v) ?? null;
-const bool = (v: unknown): boolean | null => (typeof v === "boolean" ? v : null);
 const raw = <T,>(rows: T[]): Raw[] => rows as unknown as Raw[];
 
 /** Id-chunk reads of one call in flight at once (`GENERATORS_PERF.parallelChunks`, D142); the same width as `OPEX_READ_CONCURRENCY`. */
@@ -96,11 +94,20 @@ const PROJECT_SELECT = [
   PROJECT_PLANT_COL.plantSubstationCapacity,
 ];
 
+/** OPT-07a: the shared countries list (`data/countries.ts`, 30 minutes), as a lookup the caller supplies. Only the three fields used here. */
+export type SharedCountries = () => Promise<readonly { id: string; name: string; isoCurrencyCode: string | undefined }[]>;
+
 /**
  * `OnVisible`: `Set(gblRecordSelectedProject, LookUp(Projects, Project = …))` (Y:63) and
  * `gblRecordSelectedProjectCountry` (the ISO currency and the country name the availability uses).
  */
-export async function loadGeneratorsProject(projectId: string): Promise<GeneratorsProjectRow | null> {
+export async function loadGeneratorsProject(projectId: string, countries?: SharedCountries): Promise<GeneratorsProjectRow | null> {
+  // OPT-07a (S4-05, `GENERATORS_PERF.countryFromSharedList`): the country name and ISO currency come from the shared, cached
+  // countries list, which needs nothing from the project row, so it is asked for NOW, beside the project read, instead of one
+  // single-row read after it. The data layer has no query client: the caller passes the lookup in. A rejected lookup matters
+  // only when the project has a country (as the single-row read failed only then); a missing country row stays tolerated.
+  const countriesRead = countries?.();
+  countriesRead?.catch(() => undefined);
   const rows = raw(await fetchPage(
     "load the project's generators data",
     (o) => Vsb_projectsService.getAll(o),
@@ -111,7 +118,11 @@ export async function loadGeneratorsProject(projectId: string): Promise<Generato
   const countryId = str(r[PROJECT_PLANT_COL.country]);
   let countryName: string | null = null;
   let isoCurrencyCode: string | null = null;
-  if (countryId) {
+  if (countryId && countriesRead) {
+    const own = (await countriesRead).find((c) => c.id.toLowerCase() === countryId.toLowerCase());
+    countryName = str(own?.name);
+    isoCurrencyCode = str(own?.isoCurrencyCode);
+  } else if (countryId) {
     const c = raw(await fetchPage(
       "load the project's country",
       (o) => Vsb_countriesService.getAll(o),

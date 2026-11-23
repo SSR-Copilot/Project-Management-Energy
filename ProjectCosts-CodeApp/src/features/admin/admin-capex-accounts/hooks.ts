@@ -17,6 +17,7 @@ import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/rea
 import { qk } from "@/data/keys";
 import { ACCOUNTS_TABLE, hasContracts, loadCapexAccountRows } from "@/data/adminCapexAccounts";
 import { invalidateAfterCapexAccountsWrite } from "@/data/adminInvalidation";
+import { invalidateCapexChart } from "@/data/capexChart";
 import { FRESH_ON_ENTRY } from "@/data/adminQueryPresets";
 import { useTablePrivileges, type TablePrivileges } from "@/platform/privileges";
 import { buildCapexTree, type ContractCheck } from "./rules";
@@ -80,7 +81,11 @@ export function useCapexPrivileges(): TablePrivileges {
 export function useCapexWrite() {
   const queryClient = useQueryClient();
   return useMutation<unknown, unknown, () => Promise<unknown>>({
-    mutationFn: (run) => run(),
+    // B2 (OPT-07c): the shared chart read is dropped the moment the write has finished (landed or failed part-way), before
+    // `onSettled` refetches anything, so no Cost read can be served the pre-write chart after this point.
+    mutationFn: async (run) => {
+      try { return await run(); } finally { invalidateCapexChart(); }
+    },
     onSettled: () => invalidateAfterCapexAccountsWrite(queryClient),
   });
 }

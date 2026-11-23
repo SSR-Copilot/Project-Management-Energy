@@ -39,7 +39,8 @@
  */
 import { inRange, isDecimal, isNumeric, orZero, parseNumber } from "@/domain/numeric";
 import { canvasNumberText, localeInfo, numberFormat } from "@/domain/locale";
-import { addMonths } from "@/domain/dates";
+import { addMonths, dateOnly } from "@/domain/dates";
+import { startsWithStandard } from "@/domain/costStandards";
 
 /* ═══════════════════════════════════════════════════════════════════ dates ══ */
 
@@ -725,12 +726,12 @@ export function descriptionIsFree(
  */
 export function isStandardLocked(cost: Pick<OpexCost, "isStandardContract" | "name">): boolean {
   // Power Fx `StartsWith` ignores case (FT-BR-OPEX-028, run 3): "standard…" locks like "Standard…".
-  return cost.isStandardContract || cost.name.toLowerCase().startsWith("standard");
+  return cost.isStandardContract || startsWithStandard(cost.name);
 }
 
 /** `Delete`'s own test (`:541-544`, `:2889-2892`) — `StartsWith(Lower(Description), "standard")`. */
 export function isStandardByDescription(cost: Pick<OpexCost, "description">): boolean {
-  return cost.description.toLowerCase().startsWith("standard");
+  return startsWithStandard(cost.description);
 }
 
 /**
@@ -1595,7 +1596,8 @@ export function standardAssumptionFilter(
 }
 
 export function matchesStandardAssumption(
-  assumption: OpexAssumption,
+  // OPT-26 (D160): the four fields the test reads, so a caller holding only the scope rows need not build a full assumption per call.
+  assumption: Pick<OpexAssumption, "typeOfContract" | "countryId" | "technology" | "opexSubaccountId">,
   filter: StandardAssumptionFilter,
 ): boolean {
   if (assumption.typeOfContract !== filter.typeOfContract) return false;
@@ -2102,7 +2104,14 @@ export function otherAlignWarningVisible(
     .sort(byPeriodOrder);
   const last = inChain[inChain.length - 1];
   if (!last || last.id !== row.id) return false;
+  return otherRowMisses(row, project);
+}
 
+/** The second half of `otherAlignWarningVisible`: THIS row is its chain's last period; does it miss while aligned? */
+function otherRowMisses(
+  row: OpexCost,
+  project: Pick<OpexProjectContext, "projectStartDate" | "endDate">,
+): boolean {
   const projectEnd = toDate(project.endDate);
   const projectStart = toDate(project.projectStartDate);
   const start = toDate(row.startDate);
@@ -2111,6 +2120,41 @@ export function otherAlignWarningVisible(
     && start.getTime() < projectStart.getTime();
   const misses = end === null || projectEnd === null || ymd(end) !== ymd(projectEnd);
   return (before || misses) && row.alignWithProjectDuration;
+}
+
+/**
+ * The alignment warning of EVERY row of one card, from one pass over the card (OPT-26, D160).
+ *
+ * Same answers as calling `omAlignWarningVisible` / `otherAlignWarningVisible` once per row, which each sorted
+ * (or filtered and sorted) the whole card for every row:
+ *  - O&M: the answer is the same for every row (defect O-4b, reproduced), so it is computed once.
+ *  - Other OPEX: the last period of each chain in `byPeriodOrder` is found for all chains at once (a cost counts for the
+ *    chain it points at AND for the chain it heads, as the per-row filter `parentCostId === head || id === head` did;
+ *    on a tie the later row wins, as the stable sort's last element did), then each row is a lookup.
+ */
+export function cardAlignWarnings(
+  mode: OpexMode,
+  cardCosts: readonly OpexCost[],
+  project: Pick<OpexProjectContext, "projectStartDate" | "endDate">,
+): (row: OpexCost) => boolean {
+  if (mode === "om") {
+    const visible = omAlignWarningVisible(cardCosts, project);
+    return () => visible;
+  }
+  const lastOfChain = new Map<string, OpexCost>();
+  const offer = (head: string, c: OpexCost) => {
+    const best = lastOfChain.get(head);
+    if (best === undefined || byPeriodOrder(c, best) >= 0) lastOfChain.set(head, c);
+  };
+  for (const c of cardCosts) {
+    if (c.parentCostId !== null) offer(c.parentCostId, c);
+    offer(c.id, c);
+  }
+  return (row) => {
+    const last = lastOfChain.get(row.parentCostId ?? row.id);
+    if (!last || last.id !== row.id) return false;
+    return otherRowMisses(row, project);
+  };
 }
 
 /**
@@ -2705,8 +2749,7 @@ export function planFollowingPeriodStarts(args: {
     if (changed || !sameStartDate(row.startDate, start)) {
       out.push({
         id: row.id,
-        startDate: `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${
-          String(start.getDate()).padStart(2, "0")}`,
+        startDate: dateOnly(start),
       });
     }
     prevStart = start;
@@ -2903,6 +2946,27 @@ export interface SaveGateContext {
   costsInScope: readonly OpexCost[];
   countryName: string | null;
   locale?: string;
+  /**
+   * OPT-28 (D160): the `opexNumberErrors` of the SAME form, computed once. `canSaveOpexCost` and `opexFormErrors` both read
+   * the numeric boxes' errors and the screen calls both on every render; with this they share one validation pass.
+   * Omitted, each validates for itself (identical answers).
+   */
+  numberErrors?: OpexNumberErrors;
+}
+
+/** `validateOpexNumber` for every numeric box of the panel, in one pass. */
+export type OpexNumberErrors = Record<OpexNumericField, string | null>;
+
+export function opexNumberErrors(form: OpexForm, locale?: string): OpexNumberErrors {
+  return {
+    fixCosts: validateOpexNumber("fixCosts", form.fixCosts, locale),
+    percentOfRevenues: validateOpexNumber("percentOfRevenues", form.percentOfRevenues, locale),
+    thresholdIndividual: validateOpexNumber("thresholdIndividual", form.thresholdIndividual, locale),
+    eurPerMwh: validateOpexNumber("eurPerMwh", form.eurPerMwh, locale),
+    eurPerWtg: validateOpexNumber("eurPerWtg", form.eurPerWtg, locale),
+    eurPerMw: validateOpexNumber("eurPerMw", form.eurPerMw, locale),
+    inflationProfile: validateOpexNumber("inflationProfile", form.inflationProfile, locale),
+  };
 }
 
 /**
@@ -2939,16 +3003,13 @@ export interface SaveGateContext {
  */
 export function canSaveOpexCost(form: OpexForm, ctx: SaveGateContext): boolean {
   const { selected, costsInScope: scope, countryName, locale } = ctx;
+  // OPT-28: the numeric errors come from the caller's single pass when it made one.
+  const numberErrors = ctx.numberErrors ?? opexNumberErrors(form, locale);
 
-  const numeric: [OpexNumericField, string][] = [
-    ["fixCosts", form.fixCosts],
-    ["percentOfRevenues", form.percentOfRevenues],
-    ["thresholdIndividual", form.thresholdIndividual],
-    ["eurPerMwh", form.eurPerMwh],
-    ["eurPerWtg", form.eurPerWtg],
-    ["eurPerMw", form.eurPerMw],
+  const numeric: OpexNumericField[] = [
+    "fixCosts", "percentOfRevenues", "thresholdIndividual", "eurPerMwh", "eurPerWtg", "eurPerMw",
   ];
-  if (numeric.some(([f, v]) => validateOpexNumber(f, v, locale) !== null)) return false;
+  if (numeric.some((f) => numberErrors[f] !== null)) return false;
 
   const description = form.description.trim();
   if (description === "") return false;
@@ -2980,7 +3041,7 @@ export function canSaveOpexCost(form: OpexForm, ctx: SaveGateContext): boolean {
     // `Text(Max(LookUp(...).Inflation, 0), "0.0")`, never blank (FT-BR-OPEX-071, run 3); the save
     // recomputes the percentage, so the typed box neither blocks nor validates.
     if (!form.useCountryInflationProfile) {
-      if (validateOpexNumber("inflationProfile", form.inflationProfile, locale) !== null) return false;
+      if (numberErrors.inflationProfile !== null) return false;
       if (form.inflationProfile.trim() === "") return false;
     }
   }
@@ -3030,23 +3091,19 @@ export function opexFormErrors(form: OpexForm, ctx: SaveGateContext): FieldError
     && ctx.costsInScope.some((c) => sameDescription(c.description, form.description.trim()))) {
     errors.push({ field: "description", message: OPEX_DESCRIPTION_MSG.duplicate });
   }
-  push("fixCosts", validateOpexNumber("fixCosts", form.fixCosts, ctx.locale));
-  push("percentOfRevenues",
-    validateOpexNumber("percentOfRevenues", form.percentOfRevenues, ctx.locale));
-  push("eurPerMwh", validateOpexNumber("eurPerMwh", form.eurPerMwh, ctx.locale));
-  push("eurPerMw", validateOpexNumber("eurPerMw", form.eurPerMw, ctx.locale));
-  push("eurPerWtg", validateOpexNumber("eurPerWtg", form.eurPerWtg, ctx.locale));
+  const numberErrors = ctx.numberErrors ?? opexNumberErrors(form, ctx.locale);
+  push("fixCosts", numberErrors.fixCosts);
+  push("percentOfRevenues", numberErrors.percentOfRevenues);
+  push("eurPerMwh", numberErrors.eurPerMwh);
+  push("eurPerMw", numberErrors.eurPerMw);
+  push("eurPerWtg", numberErrors.eurPerWtg);
   if (form.thresholdOn) {
     push("thresholdType", thresholdTypeError(form.thresholdType));
-    push("thresholdIndividual",
-      validateOpexNumber("thresholdIndividual", form.thresholdIndividual, ctx.locale));
+    push("thresholdIndividual", numberErrors.thresholdIndividual);
   }
   if (form.inflationOn) {
     push("inflationStartYear", validateInflationStartYear(form.inflationStartYear));
-    if (!form.useCountryInflationProfile) {
-      push("inflationProfile",
-        validateOpexNumber("inflationProfile", form.inflationProfile, ctx.locale));
-    }
+    if (!form.useCountryInflationProfile) push("inflationProfile", numberErrors.inflationProfile);
   }
   return errors;
 }
@@ -3162,8 +3219,7 @@ export function opexCostWrite(
     description: form.description.trim(),
     startDate: start === null
       ? null
-      : `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${
-        String(start.getDate()).padStart(2, "0")}`,
+      : dateOnly(start),
     durationYears: form.durationYears,
     durationMonths: form.durationMonths,
     currencyId: form.currencyId,
@@ -3226,8 +3282,13 @@ export function toOpexRow(args: {
   project: Pick<OpexProjectContext, "countryName" | "areaStateProvince" | "projectStartDate" | "endDate">;
   /** The rows of the card this one is drawn in, for the alignment warning. */
   cardCosts: readonly OpexCost[];
+  /**
+   * OPT-26 (D160): the card's warning answers, from `cardAlignWarnings`, computed ONCE per card. Omitted, the row
+   * computes its own (the pre-OPT-26 path, kept as the oracle for `UT-OPEX-OPT-*`): a sort of the whole card per row.
+   */
+  warnings?: (cost: OpexCost) => boolean;
 }): OpexRow {
-  const { cost, mode, selectedId, project, cardCosts } = args;
+  const { cost, mode, selectedId, project, cardCosts, warnings } = args;
   const end = periodEndDate(cost);
   return {
     id: cost.id,
@@ -3237,9 +3298,11 @@ export function toOpexRow(args: {
     // (`:2084-2089`): a chain root's Description is bold, a period's is not.
     boldDescription: mode === "other" && cost.parentCostId === null,
     selected: cost.id === selectedId,
-    warnAlignment: mode === "om"
-      ? omAlignWarningVisible(cardCosts, project)
-      : otherAlignWarningVisible(cost, cardCosts, project),
+    warnAlignment: warnings
+      ? warnings(cost)
+      : mode === "om"
+        ? omAlignWarningVisible(cardCosts, project)
+        : otherAlignWarningVisible(cost, cardCosts, project),
     cells: {
       description: cost.description,
       startDate: formatTableDate(cost.startDate),

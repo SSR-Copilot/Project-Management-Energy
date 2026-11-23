@@ -178,12 +178,16 @@ vi.mock("@/generated/services/TransactioncurrenciesService", () => ({
 
 const {
   contractLabel, loadCapexTotals, loadCapexCategories, loadCostAccounts, loadCostBook, standardContractExists,
-  loadCostLines, loadCountryInflationAreas, loadLandLeaseContracts,
+  loadCostLines,
   loadMilestoneDurations, loadProjectStates, resolvePayer,
-  loadLandLeaseCostFlags, linkOpexChains, mapOpexRow, mapLandLeasePeriodRow, groupAllocations,
+  linkOpexChains, mapOpexRow, mapLandLeasePeriodRow, groupAllocations,
   AGGREGATION_VALUE, readAggregation, writeAggregation,
 } = await import("./costBook");
 const { deleteCostLine, saveCostLine } = await import("./capexWrites");
+// B2 (OPT-07b/c): the chart of accounts and the currencies are read through short-lived SHARED reads. Every case below sets its own
+// fixture, so each starts with those memos empty.
+const { invalidateCapexChart } = await import("./capexChart");
+const { invalidateCurrencies } = await import("./currencies");
 
 /**
  * The real VSBCloud_Dev hierarchy, transcribed from `pac org fetch`. Note that
@@ -211,7 +215,7 @@ function realShapedRows(): Row[] {
   ];
 }
 
-beforeEach(() => { rows = realShapedRows(); });
+beforeEach(() => { rows = realShapedRows(); invalidateCapexChart(); invalidateCurrencies(); });
 
 describe("loadCostAccounts", () => {
   it("UT-BOOK-001 returns accounts even though vsb_accountcategory is empty on every row", async () => {
@@ -323,69 +327,8 @@ describe("resolvePayer", () => {
   });
 });
 
-describe("loadLandLeaseCostFlags", () => {
-  // `LandLeaseCostScreenCode.txt:1050-1063` / `:1001-1014` — the Allocation and OTP columns'
-  // source fields, read straight off the Land Lease Project Cost header.
-  const PROJECT_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
-  interface FlagRow {
-    vsb_landleaseprojectcostid: string;
-    vsb_allwtgallocated?: boolean;
-    vsb_duedateonetimepayment?: string;
-    vsb_amountonetimepayment?: number;
-  }
-
-  /**
-   * The header rows, under the ONE Land Lease reader's query label.
-   *
-   * `loadLandLeaseCostFlags` reads through `loadLeaseBook` (`./landLease.ts`) rather than
-   * issuing a second, narrower header query of its own — see `costBook.ts`'s Land Lease block.
-   */
-  const setRows = (flagRows: FlagRow[]) => {
-    rowsByLabel = { "list Land Lease project costs": flagRows };
-    rows = [];
-  };
-
-  // Real-shaped ids: `loadLeaseBook` scopes its period and allocation queries by the header ids
-  // the first query returned, and `guid()` rejects anything that is not a GUID.
-  const H1 = "6f189e32-3c0a-f011-bae2-6045bd882926";
-  const H2 = "29377394-d40a-f011-bae2-6045bd882926";
-  const H3 = "a597c465-440a-f011-bae2-6045bd882926";
-
-  it("UT-BOOK-016 keys the flags by the header id a period's Project Cost points at", async () => {
-    setRows([
-      {
-        vsb_landleaseprojectcostid: H1, vsb_allwtgallocated: true,
-        vsb_duedateonetimepayment: "2027-01-01", vsb_amountonetimepayment: 500,
-      },
-      { vsb_landleaseprojectcostid: H2, vsb_allwtgallocated: false },
-    ]);
-
-    const flags = await loadLandLeaseCostFlags(PROJECT_ID);
-    expect(flags.get(H1)).toEqual({ allWtgAllocated: true, hasOneTimePayment: true });
-    expect(flags.get(H2)).toEqual({ allWtgAllocated: false, hasOneTimePayment: false });
-  });
-
-  it("UT-BOOK-017 requires BOTH the due date and the amount for OTP, not either alone", async () => {
-    // Same guard the canvas uses: `Not(IsBlank(Due Date)) && Not(IsBlank(Amount))`.
-    setRows([
-      { vsb_landleaseprojectcostid: H1, vsb_duedateonetimepayment: "2027-01-01" },
-      { vsb_landleaseprojectcostid: H2, vsb_amountonetimepayment: 500 },
-      { vsb_landleaseprojectcostid: H3 },
-    ]);
-
-    const flags = await loadLandLeaseCostFlags(PROJECT_ID);
-    expect(flags.get(H1)?.hasOneTimePayment).toBe(false);
-    expect(flags.get(H2)?.hasOneTimePayment).toBe(false);
-    expect(flags.get(H3)?.hasOneTimePayment).toBe(false);
-  });
-
-  it("UT-BOOK-018 treats an unset AllWTGAllocated as false, not as missing", async () => {
-    setRows([{ vsb_landleaseprojectcostid: H1 }]);
-
-    const flags = await loadLandLeaseCostFlags(PROJECT_ID);
-    expect(flags.get(H1)?.allWtgAllocated).toBe(false);
-  });
-});
+// OPT-34 (B8): `loadCountryInflationAreas` (UT-BOOK-067, and the repository method `getCountryInflationAreas`) had no caller outside its tests and was removed.
+// OPT-34 (B3): `loadLandLeaseCostFlags` (UT-BOOK-016 to 018) and `loadLandLeaseContracts` (UT-BOOK-066) had no caller outside their tests and were removed.
 
 describe("mapOpexRow", () => {
   // `vsb_opexprojectcosts` — both O&M and Other OPEX rows are this same table; the mapper takes
@@ -787,12 +730,10 @@ describe("loadPeriods", () => {
   const ZLOTY = "6b1e4d8f-1f57-ea11-a811-000d3a4a9d2f";
   // `Locations`, order 1 — a REAL `vsb_landleasesubaccounts` row, not a pseudo-header.
   const LOCATIONS = "cfc603b0-d2d0-ee11-9079-000d3abd8704";
-  const LEASEHOLDERS = "ec862e59-d3d0-ee11-9079-000d3ab6f27e";
   const OM_SUB = "61a30faa-b7e1-eddc-a5b5-fc1376f538f5";
   // Two of the twelve `Locations` headers on Project New Data, by their real ids.
   const HDR_COST101 = "6f189e32-3c0a-f011-bae2-6045bd882926";
   const HDR_TEST1002 = "29377394-d40a-f011-bae2-6045bd882926";
-  const HDR_EMPTY = "a597c465-440a-f011-bae2-6045bd882926";
 
   beforeEach(() => { rows = []; rowsByLabel = {}; queriedBy = {}; });
 
@@ -809,7 +750,8 @@ describe("loadPeriods", () => {
           _vsb_subaccount_value: OM_SUB },
       ],
       "list OPEX subaccounts": [{ vsb_opexsubaccountid: OM_SUB, vsb_name: "Other Sub" }],
-      "list transaction currencies for periods": [
+      // B2 (OPT-07b): one shared currency read (label "list transaction currencies (Cost reads)") serves the OPEX rows and the Land Lease book.
+      "list transaction currencies (Cost reads)": [
         { transactioncurrencyid: EURO, currencyname: "Euro" },
       ],
     };
@@ -875,7 +817,7 @@ describe("loadPeriods", () => {
         { vsb_landleaseperiodid: "p-b2", _vsb_projectcost_value: HDR_TEST1002,
           vsb_name: "Test 1002 - 2", vsb_period: 952850001, vsb_startdate: "2032-01-01" },
       ],
-      "list transaction currencies for Land Lease": [
+      "list transaction currencies (Cost reads)": [
         { transactioncurrencyid: ZLOTY, currencyname: "Polish Zloty" },
       ],
       "list Land Lease WTG allocations": [
@@ -908,53 +850,6 @@ describe("loadPeriods", () => {
     expect(byId.get("p-a1")?.allocatedGeneratorIds).toEqual([]);
   });
 
-  it("UT-BOOK-066 reports a Land Lease contract that has no periods yet", async () => {
-    /*
-     * "Add Contract Type" creates a header, and the first period is saved with it — but a header
-     * whose periods were all deleted stays, and 19 of Project New Data's 27 headers are in
-     * exactly that state today. The book's `periods` cannot show them, so the screen gets them
-     * from `loadLandLeaseContracts`.
-     */
-    rowsByLabel = {
-      "list Land Lease subaccounts": [
-        { vsb_landleasesubaccountid: LEASEHOLDERS, vsb_name: "Leaseholders" },
-      ],
-      "list Land Lease project costs": [
-        { vsb_landleaseprojectcostid: HDR_EMPTY, _vsb_subaccount_value: LEASEHOLDERS,
-          vsb_description: "Trecjjj", vsb_secured: 952850000, vsb_allwtgallocated: true,
-          vsb_duedateonetimepayment: "2027-06-01", vsb_amountonetimepayment: 10_000 },
-      ],
-    };
-
-    await expect(loadLandLeaseContracts(PROJECT_NEW_DATA)).resolves.toEqual([{
-      id: HDR_EMPTY,
-      group: "Leaseholders",
-      name: "Trecjjj",
-      standard: false,
-      secured: true,
-      allWtgAllocated: true,
-      hasOneTimePayment: true,
-    }]);
-  });
-
-  it("UT-BOOK-067 lists the country's inflation AREAS, deduped and sorted", async () => {
-    // `Distinct(Filter('Country Inflation Profiles', Country = project's country).Area, Area)` —
-    // `OpexCostScreenCode.txt:7622`. One row per YEAR, so the same area repeats many times; the
-    // live values are exactly these two strings (`vsb_inflationcountryarea` on 4 of 982 rows).
-    rowsByLabel = {
-      "list country inflation areas": [
-        { vsb_countryinflationprofileid: "1", vsb_area: "North" },
-        { vsb_countryinflationprofileid: "2", vsb_area: "Centre - North" },
-        { vsb_countryinflationprofileid: "3", vsb_area: "North" },
-        { vsb_countryinflationprofileid: "4", vsb_area: "" },
-      ],
-    };
-    await expect(loadCountryInflationAreas("0d3a466a-2b7c-ef11-ac20-000d3a466ab7"))
-      .resolves.toEqual(["Centre - North", "North"]);
-    // No country selected means no query at all, not a query for every area in the org.
-    await expect(loadCountryInflationAreas(undefined)).resolves.toEqual([]);
-    expect(queriedBy["list country inflation areas"]).toHaveLength(1);
-  });
 });
 
 /* ══════════════════════════════════════════════════════════════ round trip ══ */
@@ -1355,7 +1250,7 @@ describe("loadCapexTotals", () => {
     // "Desc" on Wirmighausen: `vsb_totalcost` 52,000 against cost rows of 55,000. The Summary
     // shows 55,000; the grid shows 52,000.
     rowsByLabel = {
-      "list CAPEX accounts for the cost book": rows,
+      "list CAPEX accounts": rows,
       "list CAPEX contract totals": [
         { ...contract(DESC, "81000_0"), vsb_totalcost: 52_000 },
       ],
@@ -1372,7 +1267,7 @@ describe("loadCapexTotals", () => {
     // `Gesamt (59013_0_47110102)`: stored 3,162,000, rows 3,161,999.96. The Summary must show
     // the .96 — it is the sum of what is actually scheduled.
     rowsByLabel = {
-      "list CAPEX accounts for the cost book": rows,
+      "list CAPEX accounts": rows,
       "list CAPEX contract totals": [
         { ...contract(GESAMT, "81000_0"), vsb_totalcost: 3_162_000 },
       ],
@@ -1387,7 +1282,7 @@ describe("loadCapexTotals", () => {
     // Belt and braces for the asymmetry: the column is not even selected, so it cannot be
     // summed by accident.
     rowsByLabel = {
-      "list CAPEX accounts for the cost book": rows,
+      "list CAPEX accounts": rows,
       "list CAPEX contract totals": [contract(DESC, "81000_0")],
       "sum CAPEX cost rows per contract": [],
     };
@@ -1405,7 +1300,7 @@ describe("loadCapexTotals", () => {
 
   it("UT-BOOK-035 groups each contract's rows under its own category", async () => {
     rowsByLabel = {
-      "list CAPEX accounts for the cost book": rows,
+      "list CAPEX accounts": rows,
       "list CAPEX contract totals": [
         contract(NEW_CONTRACT, "80000_0"), contract(NTES, "81000_0"),
       ],
@@ -1424,7 +1319,7 @@ describe("loadCapexTotals", () => {
 
   it("UT-BOOK-036 floors a negative category at zero, as Max(Sum(...), 0) does", async () => {
     rowsByLabel = {
-      "list CAPEX accounts for the cost book": rows,
+      "list CAPEX accounts": rows,
       "list CAPEX contract totals": [contract(NTES, "81000_0")],
       "sum CAPEX cost rows per contract": [costRow(NTES, 100), costRow(NTES, -900)],
     };
@@ -1436,7 +1331,7 @@ describe("loadCapexTotals", () => {
     // `83000` hangs off Overleveraging, which `loadCostAccounts` drops. Its contract has no
     // tile to appear on, so it must not be counted — and must not be fetched for either.
     rowsByLabel = {
-      "list CAPEX accounts for the cost book": rows,
+      "list CAPEX accounts": rows,
       "list CAPEX contract totals": [
         contract(NTES, "81000_0"), contract(GESAMT, "83000"),
       ],
@@ -1454,7 +1349,7 @@ describe("loadCapexTotals", () => {
 
   it("UT-BOOK-038 asks for no cost rows at all when the project has no contracts", async () => {
     rowsByLabel = {
-      "list CAPEX accounts for the cost book": rows,
+      "list CAPEX accounts": rows,
       "list CAPEX contract totals": [],
     };
 
@@ -1465,7 +1360,7 @@ describe("loadCapexTotals", () => {
 
   it("UT-BOOK-075 a contract whose deferred delete is pending is neither summed nor fetched (D51 §11.19)", async () => {
     rowsByLabel = {
-      "list CAPEX accounts for the cost book": rows,
+      "list CAPEX accounts": rows,
       "list CAPEX contract totals": [contract(NTES, "81000_0"), contract(DESC, "81000_0")],
       "sum CAPEX cost rows per contract": [costRow(NTES, 42)],
     };
@@ -1482,7 +1377,7 @@ describe("loadCapexTotals", () => {
   it("UT-BOOK-076 a pending cost row is left out of its contract's sum; only then is the row id selected", async () => {
     const PENDING_COST = "a0000002-0000-4000-8000-000000000002";
     rowsByLabel = {
-      "list CAPEX accounts for the cost book": rows,
+      "list CAPEX accounts": rows,
       "list CAPEX contract totals": [contract(NTES, "81000_0")],
       "sum CAPEX cost rows per contract": [
         { ...costRow(NTES, 100), vsb_capexcostid: "a0000001-0000-4000-8000-000000000001" },

@@ -57,6 +57,21 @@ vi.mock("@/generated/services/Vsb_countriesService", () => ({
   Vsb_countriesService: { getAll: api.countriesGetAll },
 }));
 
+/** OPT-27(c): pass-through counters, so a test can see how much work one keystroke in the open panel costs. */
+const work = vi.hoisted(() => ({ formChanged: 0, canSave: 0, groupTags: 0 }));
+vi.mock("@/domain/form", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/domain/form")>();
+  return { ...real, isDirty: ((...args: Parameters<typeof real.isDirty>) => { work.formChanged += 1; return real.isDirty(...args); }) as typeof real.isDirty };
+});
+vi.mock("./rules", async (importOriginal) => {
+  const real = await importOriginal<typeof import("./rules")>();
+  return {
+    ...real,
+    canSave: ((...args: Parameters<typeof real.canSave>) => { work.canSave += 1; return real.canSave(...args); }) as typeof real.canSave,
+    groupDevCoTags: ((...args: Parameters<typeof real.groupDevCoTags>) => { work.groupTags += 1; return real.groupDevCoTags(...args); }) as typeof real.groupDevCoTags,
+  };
+});
+
 import { vsbTheme } from "@/theme/fluent";
 import { appliedPseudoRules, appliedRules } from "@/test/appliedRules";
 import { AppToaster } from "@/components";
@@ -1056,5 +1071,30 @@ describe("ContractsSettingsScreen — Add buttons hover (ACS:569-612)", () => {
       expect(hover["background-color"]).toMatch(/#cce2f1|rgb\(204, 226, 241\)/i);
       expect(appliedPseudoRules(button, ":hover:enabled .fui-Button__icon")["color"]).toMatch(/#006eb9|rgb\(0, 110, 185\)/);
     }
+  });
+});
+
+describe("OPT-27(c) one keystroke in the open panel does no repeated derivation", () => {
+  it("UT-ADCONTR-OPT-001 typing re-derives neither the card tag groups nor the dirty flag twice (old: tag groups per card per keystroke, isDirty twice per render)", async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await openTurbineEdit(user);
+    const before = { ...work };
+    await user.type(screen.getByRole("textbox", { name: /^Description/ }), "abc");
+    const typed = { formChanged: work.formChanged - before.formChanged, canSave: work.canSave - before.canSave, groupTags: work.groupTags - before.groupTags };
+    expect(typed.canSave).toBeGreaterThanOrEqual(3); // at least one render per character
+    expect(typed.groupTags).toBe(0); // OLD: one per card per render
+    expect(typed.formChanged).toBe(typed.canSave); // OLD: twice as many (the Screen's isDirty and canSave's own)
+  });
+
+  it("UT-ADCONTR-OPT-002 Save still follows the form: enabled after a change, disabled again when the change is reverted", async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await openTurbineEdit(user);
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    await user.type(screen.getByRole("textbox", { name: /^Description/ }), "x");
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+    await user.type(screen.getByRole("textbox", { name: /^Description/ }), "{Backspace}");
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
 });

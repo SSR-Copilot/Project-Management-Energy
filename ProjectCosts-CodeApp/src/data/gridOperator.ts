@@ -9,11 +9,10 @@
 import { Vsb_gridoperatorsService } from "@/generated/services/Vsb_gridoperatorsService";
 import { GRID_OPERATOR_COL, type GridOperatorRecord } from "@/features/pm/grid-operator/rules";
 import { fetchPage } from "./client";
-import { lookupEq, numberOf } from "./odata";
+import { lookupEq } from "./odata";
+import { rowStr as str, rowNum as num } from "./rowValues";
 
 type Raw = Record<string, unknown>;
-const str = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
-const num = (v: unknown): number | null => numberOf(v) ?? null;
 
 const SELECT = [
   GRID_OPERATOR_COL.id, GRID_OPERATOR_COL.operator, GRID_OPERATOR_COL.voltageLevel,

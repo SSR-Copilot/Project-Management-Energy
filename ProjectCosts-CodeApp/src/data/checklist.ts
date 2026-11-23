@@ -32,13 +32,12 @@ import { listProjectStates } from "./generalData";
 import { findScopeCountryTechId, getEntraPeople, listChecklistApprovals, listGateApprovals } from "./adminGatesApprovals";
 import type { Persona } from "./adminGatesApprovals";
 import { ACTIVE, and, eq, guid, lookupEq } from "./odata";
+import { rowStr as str, formattedColumn as formatted } from "./rowValues";
 import { ES } from "./dataverseNames";
-import { lookupPersonOnce } from "./checklistPeople";
+import { lookupPersonOnce, lookupScopeOnce } from "./checklistPeople";
 
 type Raw = Record<string, unknown>;
 /** `<col>@OData.Community.Display.V1.FormattedValue` — a lookup's name. */
-const formatted = (col: string): string => `${col}@OData.Community.Display.V1.FormattedValue`;
-const str = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
 const num = (v: unknown): number | null => (typeof v === "number" ? v : null);
 
 /* ═══════════════════════════════════════════════════════════════════ mappers ════ */
@@ -209,6 +208,25 @@ export async function listChecklistTrackings(projectId: string): Promise<Trackin
   return rows.map((r) => toTrackingRow(r as unknown as Raw));
 }
 
+/**
+ * OPT-24 (S4-12): the ONE tracking of a cluster, with the three columns a "has the gate flow completed it" check reads
+ * (`clusterTransitionDone`). It stands in for `trackingFor(await listChecklistTrackings(project), cluster)` where nothing else of the
+ * project's trackings is needed: the same row (the first the server returns for that project and cluster, as the full list's
+ * first match was), a fraction of the payload. A FRESH read, never cached: it is the transition wait's poll.
+ */
+export async function readClusterTracking(projectId: string, clusterStateId: string): Promise<TrackingRow | null> {
+  const rows = await fetchPage(
+    "read the cluster's state tracking for the checklist",
+    (o) => Vsb_projectstatetrackingsService.getAll(o),
+    {
+      select: [TRACKING_COL.id, TRACKING_COL.clusterState, TRACKING_COL.approvalClusterState],
+      filter: and(lookupEq("vsb_project", projectId), lookupEq("vsb_clusterstate", clusterStateId)),
+      top: 1,
+    },
+  );
+  return rows[0] ? toTrackingRow(rows[0] as unknown as Raw) : null;
+}
+
 const GATE_SELECT = [
   "vsb_projectdefaultapprovalsid", "vsb_name", "vsb_approvalmodecode", "vsb_gateactive", "_vsb_clusterstate_value",
   "_vsb_approvalscountry_value", "vsb_technologycode", "_vsb_approvalparticipant1_value",
@@ -296,6 +314,25 @@ export async function listClusterChecklist(projectId: string, clusterStateId: st
 }
 
 /**
+ * OPT-24 (S4-12): ONE task of the cluster, by id, for the Request Approval's fresh check (C6: is it In Progress or Completed
+ * already). It stands in for `(await listClusterChecklist(project, cluster)).find(r => r.id === id)`: the same filter (project,
+ * cluster, ACTIVE) plus the id, so a task that is inactive or has left the cluster is `null` exactly as the `.find` missed it, and
+ * only the columns `staleTaskRequestRefusal` reads. A FRESH read, never cached.
+ */
+export async function readClusterTask(projectId: string, clusterStateId: string, rowId: string): Promise<ChecklistRow | null> {
+  const rows = await fetchPage(
+    "read the cluster's checklist task",
+    (o) => Vsb_projectchecklistsService.getAll(o),
+    {
+      select: [CHECKLIST_COL.id, CHECKLIST_COL.name, CHECKLIST_COL.approvalChecklistState],
+      filter: and(projectCluster(projectId, clusterStateId), ACTIVE, `${CHECKLIST_COL.id} eq ${guid(rowId)}`),
+      top: 1,
+    },
+  );
+  return rows[0] ? toChecklistRow(rows[0] as unknown as Raw) : null;
+}
+
+/**
  * The materialisation guard's count (Y:2478-2486): `CountRows(Filter('Project Checklists', Project = …,
  * 'Cluster State' = …))` — rows of ANY status. One row answers "is it zero".
  */
@@ -344,7 +381,9 @@ export async function listClusterTemplates(
   clusterStateId: string,
 ): Promise<DefaultChecklistTemplate[]> {
   if (!project.countryId || project.technology === null) return [];
-  const scopeId = await findScopeCountryTechId(project.countryId, project.technology);
+  const { countryId, technology } = project;
+  // OPT-24 (S4-13): the scope row's id is kept for the reference window (`lookupScopeOnce`); it was one read before every copy.
+  const scopeId = await lookupScopeOnce(`${countryId}|${technology}`, () => findScopeCountryTechId(countryId, technology));
   if (!scopeId) return [];
   const rows = await fetchAll(
     "list the cluster's default checklist templates",

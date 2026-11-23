@@ -21,7 +21,8 @@
  * PERMISSIONS: the canvas `DataSourceInfo` / `RecordInfo` checks have no SDK equivalent (D1); they
  * pass and Dataverse refuses what the user may not do (`TEAM_PERMISSIONS`).
  */
-import { useQuery } from "@tanstack/react-query";
+import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useDebouncedValue } from "@/features/shared/useDebouncedValue";
 import { ES } from "@/data/dataverseNames";
 import { qk } from "@/data/keys";
 import type { ScreenData } from "@/data/notConnected";
@@ -32,6 +33,7 @@ import {
   sortMembers,
   type MemberDescriptionOption, type ProjectMemberRow, type TeamPermissions, type TeamPerson, type TeamProject,
 } from "./rules";
+import { teamReloadKeys } from "./reload";
 
 /** Entity sets this screen reads and writes. */
 export const TABLES: readonly string[] = [
@@ -61,26 +63,41 @@ export function useTeamProject(projectId: string | undefined): ScreenData<TeamPr
 
 /** The member gallery, sorted by display name. */
 export function useProjectMembers(projectId: string | undefined): ScreenData<ProjectMemberRow[]> {
+  const qc = useQueryClient();
   const q = useQuery({
     queryKey: qk.team(projectId ?? "", "members"),
-    queryFn: async () => sortMembers(await listTeamMembers(projectId!)),
+    // OPT-14: the descriptions come from the screen's own cached read (one table read per visit, none after a save), handed
+    // over as a promise so the members read and the descriptions still start together.
+    queryFn: async () => sortMembers(await listTeamMembers(projectId!, qc.fetchQuery(memberDescriptionsQuery()))),
     enabled: Boolean(projectId),
   });
   return out(q, NONE as ProjectMemberRow[]);
 }
 
+/** The descriptions read, shared by the panel's dropdown and the member gallery's description column. */
+const memberDescriptionsQuery = () => queryOptions({
+  queryKey: qk.teamMemberDescriptions, queryFn: listMemberDescriptions, staleTime: 5 * 60 * 1000,
+});
+
 /** The panel's Description dropdown. */
 export function useMemberDescriptions(): ScreenData<MemberDescriptionOption[]> {
-  const q = useQuery({ queryKey: qk.teamMemberDescriptions, queryFn: listMemberDescriptions, staleTime: 5 * 60 * 1000 });
+  const q = useQuery(memberDescriptionsQuery());
   return out(q, NONE as MemberDescriptionOption[]);
 }
+
+/** How long the member search waits for a pause in typing (OPT-19; General Data uses the same 250 ms). */
+export const MEMBER_SEARCH_DEBOUNCE_MS = 250;
 
 /**
  * `pcf_Team_RightPanel_Member_Form_Principal.OnSearch` (Y:1408): blank text searches nothing; the
  * same query (and cache key) as General Data's pickers.
  */
 export function useMemberSearch(search: string): ScreenData<TeamPerson[]> {
-  const term = search.trim();
+  // OPT-19: wait for a pause in typing instead of one query per keystroke (as General Data's Manager / Deputy pickers, GD-024).
+  // A blank box is not delayed: it searches nothing at once.
+  const typed = search.trim();
+  const settled = useDebouncedValue(typed, MEMBER_SEARCH_DEBOUNCE_MS);
+  const term = typed === "" ? "" : settled;
   const q = useQuery({
     queryKey: qk.entraPeopleSearch(term),
     queryFn: () => searchEntraPeople(term),
@@ -94,7 +111,8 @@ export function useMemberSearch(search: string): ScreenData<TeamPerson[]> {
 /** Runs the Save / Delete jobs from `rules.ts` and refreshes the screen (`Refresh('Project Members')`). */
 export function useTeamWrites(projectId: string | undefined) {
   return usePlanWrite({
-    invalidate: [qk.teamAll(projectId ?? "")],
+    // OPT-13: only the queries that read `vsb_projectmembers` (see `reload.ts`); the project and its Entra lookups are not re-read.
+    invalidate: teamReloadKeys(projectId),
     action: "change this project's team",
   });
 }

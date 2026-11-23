@@ -73,12 +73,13 @@ describe("Cost tab project lifecycle", () => {
   it("loads a deep-linked project in a fresh tab and reloads it after remount", async () => {
     const first = mount(`/costs/capex?projectId=${PROJECT}`);
     await screen.findByRole("heading", { name: "Selected Project" });
-    expect(loadProject).toHaveBeenCalledWith(PROJECT);
+    // OPT-01 (B5b): the Cost routes keep the FULL load; the call now carries its scope.
+    expect(loadProject).toHaveBeenCalledWith(PROJECT, expect.objectContaining({ scope: "full" }));
     first.unmount();
     vi.mocked(loadProject).mockClear();
     mount(`/costs/contracts?projectId=${PROJECT}`);
     await screen.findByRole("heading", { name: "Selected Project" });
-    expect(loadProject).toHaveBeenCalledWith(PROJECT);
+    expect(loadProject).toHaveBeenCalledWith(PROJECT, expect.objectContaining({ scope: "full" }));
     expect(screen.getByTestId("cost-location")).toHaveTextContent(`/costs/contracts?projectId=${PROJECT}`);
   });
 
@@ -101,8 +102,8 @@ describe("Cost tab project lifecycle", () => {
     });
     mount(`/costs/capex?projectId=${PROJECT}`);
     await screen.findByRole("heading", { name: "Selected Project" });
-    expect(loadProject).toHaveBeenCalledWith(PROJECT);
-    expect(loadProject).not.toHaveBeenCalledWith(OLD_PROJECT);
+    expect(loadProject).toHaveBeenCalledWith(PROJECT, expect.objectContaining({ scope: "full" }));
+    expect(loadProject).not.toHaveBeenCalledWith(OLD_PROJECT, expect.anything());
   });
 
   it.each([

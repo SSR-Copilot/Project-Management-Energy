@@ -25,9 +25,11 @@
 import {
   checkDecimalInput, formatFixed, inRangeInput, isMaxDecimals,
 } from "@/domain/numberInput";
+import { CAPEX_CONTRACT_TREE_EXCLUDED_NUMBER, CAPEX_ROOT_NUMBER } from "@/data/dataverseNames";
 import { scopeBreadcrumb } from "@/domain/countryPicker";
 import { isDirty as formChanged } from "@/domain/form";
 import { powerFxTrim } from "@/domain/powerFx";
+import { numberFormat } from "@/domain/locale";
 import { technologyOptionLabel } from "@/domain/technology";
 import {
   CLOSING_REF, CONTRACT_TYPE, CONTRACT_TYPE_LABEL, MARGIN_TYPE, decimalSeparator,
@@ -319,7 +321,7 @@ export function marginValue(contract: StandardContract, locale?: string): string
   const value = contract.marginType === MARGIN_TYPE.FixedValue
     ? contract.marginFixedValue : contract.marginPercentage;
   if (value === undefined || value === null) return "";
-  return new Intl.NumberFormat(locale, { maximumFractionDigits: 10, useGrouping: false }).format(value);
+  return numberFormat(locale, { maximumFractionDigits: 10, useGrouping: false }).format(value);
 }
 
 /**
@@ -359,8 +361,9 @@ export interface AccountTree {
   accounts: Map<string, CapexAccount>;
 }
 
-const ROOT_PARENT_NUMBER = "00001";
-const EXCLUDED_ROOT_NUMBER = "10006";
+// OPT-07c: the shared definitions (`data/dataverseNames.ts`), same values as the local literals they replace.
+const ROOT_PARENT_NUMBER = CAPEX_ROOT_NUMBER;
+const EXCLUDED_ROOT_NUMBER = CAPEX_CONTRACT_TREE_EXCLUDED_NUMBER;
 
 const byOrderThenNumber = (a: { order?: number; number: string }, b: { order?: number; number: string }) =>
   (a.order ?? Number.POSITIVE_INFINITY) - (b.order ?? Number.POSITIVE_INFINITY) ||
@@ -748,7 +751,11 @@ export function visibleSelectionCount(selectedAccountIds: readonly string[], vis
  * DIVERGENCE: the canvas shows the closing-date message only when editing
  * (`Not(IsBlank(locSelectedBoPStandardContract))`); here it applies to new contracts too.
  */
-export function validateForm(form: ContractForm, lang: string, locale?: string, visible?: VisibleAccounts): FormErrors {
+export function validateForm(
+  form: ContractForm, lang: string, locale?: string, visible?: VisibleAccounts,
+  /** OPT-27(c): `visibleSelectionCount(form.selectedAccountIds, visible)`, when the caller already has it. */
+  selectionCount?: number,
+): FormErrors {
   const errors: FormErrors = {};
   if (form.description.trim() === "") errors.description = MSG.inputBlank;
   if (form.closingRef === null) errors.closingRef = MSG.closingRefBlank;
@@ -766,7 +773,7 @@ export function validateForm(form: ContractForm, lang: string, locale?: string, 
       errors.marginType = MSG.marginTypeBlank;
     }
   }
-  if (visibleSelectionCount(form.selectedAccountIds, visible) === 0) errors.accounts = MSG.accountsNone;
+  if ((selectionCount ?? visibleSelectionCount(form.selectedAccountIds, visible)) === 0) errors.accounts = MSG.accountsNone;
   return errors;
 }
 
@@ -804,11 +811,13 @@ export function isDirty(form: ContractForm, initial: ContractForm): boolean {
 export function canSave(args: {
   form: ContractForm; initial: ContractForm; errors: FormErrors;
   linksAvailable: boolean; forceDirty?: boolean; visible?: VisibleAccounts;
+  /** OPT-27(c): `isDirty(form, initial)` and `visibleSelectionCount(form.selectedAccountIds, visible)`, when the caller already computed them. */
+  dirty?: boolean; selectionCount?: number;
 }): boolean {
   const { form, initial, errors, linksAvailable, forceDirty, visible } = args;
   if (!linksAvailable) return false;
-  if (!forceDirty && !isDirty(form, initial)) return false;
-  if (visibleSelectionCount(form.selectedAccountIds, visible) === 0) return false;
+  if (!forceDirty && !(args.dirty ?? isDirty(form, initial))) return false;
+  if ((args.selectionCount ?? visibleSelectionCount(form.selectedAccountIds, visible)) === 0) return false;
   return Object.values(errors).every((e) => !e);
 }
 

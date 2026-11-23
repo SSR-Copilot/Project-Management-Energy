@@ -23,6 +23,7 @@ import { Vsb_projectstatesService } from "@/generated/services/Vsb_projectstates
 import { DataError } from "@/platform/errors";
 import { trace } from "@/platform/telemetry";
 import { fetchAll, fetchPage } from "./client";
+import { mapLimit } from "./concurrency";
 import { and, chunk, contains, eq, guid, idIn, lookupEq, or } from "./odata";
 import { checklistTables, type ChecklistApproval as GateTaskApproval } from "./adminChecklistTables";
 import { CHECKLIST_ENTITY_SETS } from "@/data/dataverseNames";
@@ -307,6 +308,9 @@ export async function listChecklistApprovals(itemIds: readonly string[]): Promis
   }));
 }
 
+/** OPT-17(b): single-person Graph lookups in flight at once in `getEntraPeople`. */
+const PEOPLE_LOOKUP_FAN_OUT = 6;
+
 const ENTRA_SELECT = [ENTRA_COL.rowId, ENTRA_COL.objectId, ENTRA_COL.displayName, ENTRA_COL.mail];
 
 const toPersona = (r: { aaduserid: string; id?: string; displayname?: string; mail?: string }): Persona => ({
@@ -339,11 +343,13 @@ export async function searchEntraPeople(term: string): Promise<Persona[]> {
  */
 export async function getEntraPeople(ids: readonly string[]): Promise<Map<string, Persona>> {
   const unique = [...new Set(ids)];
-  const rows = await Promise.all(unique.map((id) => fetchPage(
+  // OPT-17(b): at most PEOPLE_LOOKUP_FAN_OUT lookups in flight (was one unbounded request per id). `mapLimit` keeps the result in
+  // input order and rejects with the first failure, exactly what `Promise.all` did for every caller.
+  const rows = await mapLimit(unique, (id) => fetchPage(
     "look up a portfolio manager in Microsoft Entra ID",
     (o) => AadusersService.getAll(o),
     { select: ENTRA_SELECT, filter: `${ENTRA_COL.rowId} eq ${guid(id)}`, top: 1 },
-  ).then((r) => [id, r[0]] as const)));
+  ).then((r) => [id, r[0]] as const), PEOPLE_LOOKUP_FAN_OUT);
   const out = new Map<string, Persona>();
   for (const [id, r] of rows) if (r) out.set(id, toPersona(r));
   return out;
@@ -471,6 +477,18 @@ export const PEOPLE_SELECT = ["aaduserid", "id", "displayname", "mail"];
 /** Graph-backed `aadusers` accepts few `or` clauses per filter; 15 is Graph's own cap. */
 export const PEOPLE_CHUNK = 15;
 
+/** OPT-17(b): people chunks (of `PEOPLE_CHUNK` ids) in flight at once. */
+const PEOPLE_CHUNK_FAN_OUT = 4;
+
+/**
+ * OPT-17(c) DIVERGENCE (freshness): a reload of the gates dataset (after an Active toggle, a save, a reset, a delete, a Check List
+ * Settings write, a focus refetch) reuses the Portfolio Manager display names already resolved for this (country, technology)
+ * and asks the directory only for ids it has not seen. Before, every reload made a fresh Graph lookup. A display name or e-mail
+ * changed in Entra therefore stays as shown until the dataset's cache entry is dropped (a page reload, or about five minutes after
+ * leaving the screen). Set to `false` to restore the lookup on every reload (the `knownPeople` argument is then ignored).
+ */
+export const GATES_REUSE_PEOPLE = true;
+
 /* The screen's project states are the one shared `Project States` read (`listProjectStates`, `data/generalData.ts`),
  * viewed by `adminStates` (`data/projectStates.ts`, D159). */
 
@@ -543,16 +561,42 @@ function toPerson(r: { aaduserid: string; id?: string; displayname?: string; mai
 async function resolvePeople(ids: readonly string[]): Promise<Record<string, PersonRef>> {
   const distinct = [...new Set(ids.filter(Boolean))];
   const out: Record<string, PersonRef> = {};
-  for (const part of chunk(distinct, PEOPLE_CHUNK)) {
-    const rows = await fetchAll("resolve portfolio managers", (o) => AadusersService.getAll(o), {
+  // OPT-17(b): the chunks are independent, so they go out together (PEOPLE_CHUNK_FAN_OUT at a time) and are folded in chunk order,
+  // as the sequential loop did. A failing chunk still rejects the whole call (the caller reports it as the non-fatal `peopleError`).
+  const batches = await mapLimit(chunk(distinct, PEOPLE_CHUNK), (part) => fetchAll(
+    "resolve portfolio managers", (o) => AadusersService.getAll(o), {
       select: PEOPLE_SELECT,
       filter: or(...part.map((id) => eq("id", id))),
-    });
+    }), PEOPLE_CHUNK_FAN_OUT);
+  for (const rows of batches) {
     for (const r of rows) {
       const p = toPerson(r);
       out[p.entraId.toLowerCase()] = p;
     }
   }
+  return out;
+}
+
+/**
+ * `resolvePeople` for the ids not already in `known` (keyed by lower-case Entra id). The result holds the known entries for the ids
+ * asked about (so people no longer referenced are dropped) plus the freshly resolved ones. Ids are de-duplicated case-insensitively.
+ */
+async function resolveUnknownPeople(
+  ids: readonly string[], known: Record<string, PersonRef> | undefined,
+): Promise<Record<string, PersonRef>> {
+  const out: Record<string, PersonRef> = {};
+  const missing: string[] = [];
+  const seen = new Set<string>();
+  for (const id of ids) {
+    const key = id.toLowerCase();
+    if (!id || seen.has(key)) continue;
+    seen.add(key);
+    const hit = known?.[key];
+    // Reuse only a person that was resolved WITH a name: a blank row from a transient directory answer must be asked again.
+    if (hit && hit.name) out[key] = hit;
+    else missing.push(id);
+  }
+  if (missing.length > 0) Object.assign(out, await resolvePeople(missing));
   return out;
 }
 
@@ -586,7 +630,10 @@ async function searchPeople(term: string, limit = 25): Promise<PersonRef[]> {
  * The gate half (generated tables) must succeed; the checklist half is captured into
  * `checklistError` so a missing table degrades the screen instead of blanking it.
  */
-async function loadDataset(countryId: string, techCode: number): Promise<GatesDataset> {
+async function loadDataset(
+  countryId: string, techCode: number, knownPeople?: Record<string, PersonRef>,
+): Promise<GatesDataset> {
+  const known = GATES_REUSE_PEOPLE ? knownPeople : undefined;
   // the template read and the checklist chain are independent — run them in parallel.
   type ChecklistHalf = Pick<GatesDataset, "checklistHeaderId" | "checklists" | "approvals" | "checklistError">;
   const checklistHalf = async (): Promise<ChecklistHalf> => {
@@ -600,19 +647,36 @@ async function loadDataset(countryId: string, techCode: number): Promise<GatesDa
       return { checklistHeaderId: null, checklists: [], approvals: [], checklistError: describeTableFailure(error) };
     }
   };
+  const templatesRead = listGateTemplates(countryId, techCode);
+  // OPT-17(b): the templates' Portfolio Managers are resolved as soon as the template read returns, beside the checklist chain,
+  // not after it. The outcome is captured (never thrown here) so a failure stays the non-fatal `peopleError` below; a failing
+  // template read is reported by the `Promise.all` below, so this branch swallows it.
+  type Resolved = { ok: true; asked: Set<string>; people: Record<string, PersonRef> } | { ok: false; error: unknown };
+  const templatePeople: Promise<Resolved | null> = templatesRead.then(async (templates): Promise<Resolved> => {
+    const ids = templates.map((t) => t.pmId ?? "").filter(Boolean);
+    try {
+      return { ok: true, asked: new Set(ids.map((id) => id.toLowerCase())), people: await resolveUnknownPeople(ids, known) };
+    } catch (error) {
+      return { ok: false, error };
+    }
+  }, () => null);
   const [templates, { checklistHeaderId, checklists, approvals, checklistError }] = await Promise.all([
-    listGateTemplates(countryId, techCode),
+    templatesRead,
     checklistHalf(),
   ]);
 
   let people: Record<string, PersonRef> = {};
   let peopleError: string | null = null;
   try {
-    people = await resolvePeople([
-      ...templates.map((t) => t.pmId ?? ""),
-      ...approvals.map((a) => a.pmId ?? ""),
-    ]);
+    const first = await templatePeople;
+    if (!first) throw new Error("gate templates were not read"); // unreachable: a failed template read threw above
+    if (!first.ok) throw first.error;
+    // Only the approvals' Portfolio Managers the templates did not already cover are left to resolve (none, typically).
+    const rest = approvals.map((a) => a.pmId ?? "").filter((id) => id && !first.asked.has(id.toLowerCase()));
+    people = { ...first.people, ...(await resolveUnknownPeople(rest, known)) };
   } catch (error) {
+    // Old behaviour kept: any failed chunk leaves no names at all and reports its message.
+    people = {};
     peopleError = error instanceof Error ? error.message : String(error);
   }
 

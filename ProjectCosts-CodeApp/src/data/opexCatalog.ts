@@ -61,7 +61,8 @@ export async function loadOpexAccounts(): Promise<OpexAccount[]> {
  * row. `subaccountsForMode` filters the Other-OPEX gallery on this name.
  */
 export async function loadOpexSubaccounts(
-  accounts?: readonly OpexAccount[],
+  // B2 (OPT-06): a promise is accepted so the caller can start this read beside the accounts read it already has in flight.
+  accounts?: readonly OpexAccount[] | Promise<readonly OpexAccount[]>,
 ): Promise<OpexSubaccount[]> {
   const [rows, accountList] = await Promise.all([
     fetchAll(

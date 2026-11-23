@@ -38,7 +38,6 @@ vi.mock("@/app/useCurrentUser", async (importOriginal) => ({
 
 const api = vi.hoisted(() => ({
   loadTabs: vi.fn(),
-  loadClusters: vi.fn(),
   loadTasks: vi.fn(),
   loadLockedTaskIds: vi.fn(),
   createTask: vi.fn(),
@@ -49,6 +48,13 @@ const api = vi.hoisted(() => ({
 vi.mock("@/data/adminDefaultChecklists", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/data/adminDefaultChecklists")>()),
   ...api,
+}));
+
+/** OPT-07d: the clusters are a view of the ONE shared `Project States` read (D159), so that read is the mock boundary now (was `loadClusters`). */
+const states = vi.hoisted(() => ({ list: vi.fn() }));
+vi.mock("@/data/generalData", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/data/generalData")>()),
+  listProjectStates: states.list,
 }));
 
 /** Edit / toggle / status are WritePlans run by `executePlan` (through `runPlan`); `PlanError` and the rest stay real. */
@@ -135,7 +141,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   access.admin = true;
   api.loadTabs.mockResolvedValue(FIXTURE_TABS);
-  api.loadClusters.mockResolvedValue(FIXTURE_CLUSTERS);
+  states.list.mockResolvedValue(FIXTURE_CLUSTERS.map((c) => ({
+    id: c.id, name: c.name, order: c.order ?? 0, isVisibleOnChecklist: true, clusterDescription: null,
+    active: true, orderRaw: c.order, businessUnitId: null,
+  })));
   api.loadTasks.mockImplementation(async (tabId: string) => FIXTURE_TASKS.filter((t) => t.tabId === tabId));
   api.loadLockedTaskIds.mockResolvedValue(FIXTURE_LOCKED);
   api.createTask.mockResolvedValue("new-id");
@@ -710,7 +719,7 @@ describe("CheckListSettingsScreen — reusable components: visual unifications",
   });
 
   it("UT-ADCHK-933 the cluster load-error Retry is small too", async () => {
-    api.loadClusters.mockRejectedValue(new DataError("Load checklist clusters", "nope"));
+    states.list.mockRejectedValue(new DataError("list project states", "nope"));
     renderScreen();
     const clustersRetry = await screen.findByRole("button", { name: "Retry loading clusters" });
     const small = reference(<Button size="small" data-testid="ref-small">Retry</Button>, "ref-small");

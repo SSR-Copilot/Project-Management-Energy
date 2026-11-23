@@ -64,6 +64,8 @@ import {
   isBlank, langRoot, decimalSeparator, pfxRound, type Lang,
 } from "@/domain/powerFxNumeric";
 import { addDays, addMonths, addYears } from "@/domain/dates";
+import { startsWithStandard } from "@/domain/costStandards";
+import { numberFormat } from "@/domain/locale";
 import { forLanguage } from "@/features/pm/generators/rules";
 import { CHOICE_FINANCE, ES, ES_FINANCE } from "@/data/dataverseNames";
 import { bind, dateOnly, owningBusinessUnitBind as ownerBind } from "@/data/odata";
@@ -2053,7 +2055,7 @@ export function rehydrateForEdit(
   const shows = showsGermanFitBlock(country, label, tech);
   return {
     price: (shows ? contract.biddingPrice : contract.tariffPrice) ?? 0,
-    isStandardContract: contract.description.toLowerCase().startsWith("standard"),
+    isStandardContract: startsWithStandard(contract.description),
     showsGermanFitBlock: shows,
   };
 }
@@ -2371,7 +2373,7 @@ export const fmtPrice = (v: number | null | undefined, lang: Lang = "en-US"): st
   v === null || v === undefined || Number.isNaN(v) ? "" : forLanguage(pfxRound(v, 2).toFixed(2), lang);
 
 export const fmtMwh = (v: number | null | undefined): string =>
-  v === null || v === undefined || Number.isNaN(v) ? "" : new Intl.NumberFormat("en-GB").format(v);
+  v === null || v === undefined || Number.isNaN(v) ? "" : numberFormat("en-GB").format(v);
 
 /** `Text(date, "dd.mm.yyyy")` — the card and balancing-grid dates (L1678-1681, L3358). Local parts. */
 export const fmtCardDate = (d: Date | null): string => (d ? dd(d) : "");
@@ -2382,7 +2384,7 @@ export const fmtCardDate = (d: Date | null): string => (d ? dd(d) : "");
  */
 export const fmtTariffCell = (v: number | null, lang: Lang = "en-US"): string =>
   v === null || Number.isNaN(v) ? ""
-    : forLanguage(new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v), lang);
+    : forLanguage(numberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v), lang);
 
 /** `If(Int(x) = x, Text(x, "#"), Text(x, "#0.0#"))` — the Site Quality cells (L2165-2170). */
 export function fmtSiteQualityCell(v: number | null, lang: Lang = "en-US"): string {
@@ -2412,7 +2414,7 @@ export function fmtHedgeCell(c: Pick<StoredRevenueContract, "hedgeType" | "hedge
   }
   if (type === "fixed") {
     const v = c.fixedContractedMwhPa;
-    return `${v === null ? "" : forLanguage(new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(v), lang)} MWh`;
+    return `${v === null ? "" : forLanguage(numberFormat("en-US", { maximumFractionDigits: 0 }).format(v), lang)} MWh`;
   }
   return "";
 }

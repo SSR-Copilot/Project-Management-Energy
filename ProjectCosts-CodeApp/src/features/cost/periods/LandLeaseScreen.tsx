@@ -37,7 +37,7 @@
  * the canvas never singularises, blanked a stored `0`, and modelled `Locations` as a synthetic
  * group with `Add Period` disabled when it is an ordinary sub-account.
  */
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import {
   Button, Dropdown, MessageBar, MessageBarBody, Option, Switch, Text, Tooltip,
   makeStyles, mergeClasses, tokens,
@@ -48,6 +48,8 @@ import {
 } from "@fluentui/react-icons";
 import { ConfirmDialog, CostField, DateInput, EmptyState, FormPanel, LoadingOverlay, PanelButtons, WriteStatus, useCommandRowStyles, useStandardValueClass } from "@/components";
 import { useSession } from "@/app/SessionContext";
+import { dateOnly } from "@/domain/dates";
+import { collator } from "@/domain/locale";
 import { costWriteStatusLabel, writeCommandsDisabled } from "@/domain/writeGuard";
 import { useProjectExtras } from "@/features/cost/contracts/hooks";
 import { useCostWriteInFlight, useWriteFailureReport } from "@/features/cost/costing/useCostWriteFlight";
@@ -88,6 +90,10 @@ import {
   type LeaseCostRow, type LeasePeriodRow, type LeaseProjectContext, type LeaseSubaccountCard,
 } from "./landLeaseRules";
 import { canvasScrollbar, scrollButton } from "./canvasScrollbar";
+import { useStableCallback } from "@/components/useStableCallback";
+
+/** OPT-29 (B8): `localeCompare(b, undefined, { sensitivity: "accent" })`, pooled once (UT-COLLATOR-OPT-001). */
+const ACCENT_COLLATOR = collator(undefined, { sensitivity: "accent" });
 
 /**
  * `colDistributionFrequency` — `App.Formulas` in `App.pa.yaml`. An app-side table, not an
@@ -949,6 +955,8 @@ export default function LandLeaseScreen() {
     technology: ctx.technology,
     countryName: ctx.countryName,
     locale,
+    // OPT-28: the field errors of this render's `errors` memo, not a second `leaseFieldErrors` pass.
+    errors,
   });
 
   /**
@@ -1051,6 +1059,31 @@ export default function LandLeaseScreen() {
     }
   };
 
+  /*
+   * OPT-26 (D160): the cards are memoised, so everything they receive keeps its identity while a panel keystroke re-renders this
+   * screen: the permissions are rebuilt only when one of the four answers changes, the three handlers keep one identity and call
+   * the LATEST closure when invoked, and the "has a catalogue" test reads a Set built once per catalogue.
+   */
+  const canEditRecord = selectedPeriod
+    ? serverEnforcedProvider.forRecord(LEASE_ENTITY_SET.period, selectedPeriod.id).canWrite
+    : serverEnforcedProvider.forTable(LEASE_ENTITY_SET.period).canWrite;
+  const canDeleteRecord = selectedPeriod
+    ? serverEnforcedProvider.forRecord(LEASE_ENTITY_SET.period, selectedPeriod.id).canDelete
+    : serverEnforcedProvider.forTable(LEASE_ENTITY_SET.period).canDelete;
+  const canCreateCost = serverEnforcedProvider.forTable(LEASE_ENTITY_SET.cost).canCreate;
+  const canCreatePeriod = serverEnforcedProvider.forTable(LEASE_ENTITY_SET.period).canCreate;
+  const permissions = useMemo(
+    () => ({ canCreateCost, canCreatePeriod, canEditRecord, canDeleteRecord }),
+    [canCreateCost, canCreatePeriod, canEditRecord, canDeleteRecord],
+  );
+  const onToggleCard = useStableCallback((subaccountId: string) => toggleCard(subaccountId));
+  const onSelectRow = useStableCallback((row: { periodId: string; costId: string | null; subaccountId: string }) =>
+    setSelection((s) => toggleLeaseSelection(s, row)));
+  const onCardCommand = useStableCallback((card: LeaseSubaccountCard, key: string) => onCommand(card, key));
+  const assumptionSubaccountIds = useMemo(
+    () => new Set((assumptions.data ?? []).map((a) => a.subaccountId)), [assumptions.data],
+  );
+
   /* ── render ───────────────────────────────────────────────────────────── */
 
   /*
@@ -1070,16 +1103,6 @@ export default function LandLeaseScreen() {
     );
   }
 
-  const permissions = {
-    canCreateCost: serverEnforcedProvider.forTable(LEASE_ENTITY_SET.cost).canCreate,
-    canCreatePeriod: serverEnforcedProvider.forTable(LEASE_ENTITY_SET.period).canCreate,
-    canEditRecord: selectedPeriod
-      ? serverEnforcedProvider.forRecord(LEASE_ENTITY_SET.period, selectedPeriod.id).canWrite
-      : serverEnforcedProvider.forTable(LEASE_ENTITY_SET.period).canWrite,
-    canDeleteRecord: selectedPeriod
-      ? serverEnforcedProvider.forRecord(LEASE_ENTITY_SET.period, selectedPeriod.id).canDelete
-      : serverEnforcedProvider.forTable(LEASE_ENTITY_SET.period).canDelete,
-  };
 
   return (
     <div className={styles.page} aria-busy={isLoading || undefined}>
@@ -1116,13 +1139,11 @@ export default function LandLeaseScreen() {
             selectedCost={selectedCost}
             selectedContract={selectedContract}
             costs={costs}
-            hasMatchingAssumption={
-              (assumptions.data ?? []).some((a) => a.subaccountId === card.id)
-            }
+            hasMatchingAssumption={assumptionSubaccountIds.has(card.id)}
             permissions={permissions}
-            onToggle={() => toggleCard(card.id)}
-            onSelectRow={(row) => setSelection((s) => toggleLeaseSelection(s, row))}
-            onCommand={(key) => onCommand(card, key)}
+            onToggle={onToggleCard}
+            onSelectRow={onSelectRow}
+            onCommand={onCardCommand}
             writeDisabled={writeDisabled}
           />
         ))}
@@ -1232,7 +1253,7 @@ export default function LandLeaseScreen() {
 
 /* ══════════════════════════════════════════════════════════════════ the card ══ */
 
-function SubaccountCard({
+const SubaccountCard = memo(function SubaccountCard({
   card, columns, contracts, costById, ctx, selection, selectedPeriod, selectedCost,
   selectedContract, costs, hasMatchingAssumption, permissions,
   onToggle, onSelectRow, onCommand, writeDisabled,
@@ -1252,9 +1273,9 @@ function SubaccountCard({
     canCreateCost: boolean; canCreatePeriod: boolean;
     canEditRecord: boolean; canDeleteRecord: boolean;
   };
-  onToggle: () => void;
+  onToggle: (subaccountId: string) => void;
   onSelectRow: (row: { periodId: string; costId: string | null; subaccountId: string }) => void;
-  onCommand: (key: string) => void;
+  onCommand: (card: LeaseSubaccountCard, key: string) => void;
   /** D58 — `writeCommandsDisabled`: a load or a write is running, so no new write may start. */
   writeDisabled: boolean;
 }) {
@@ -1268,12 +1289,17 @@ function SubaccountCard({
    * `subaccountPeriodRows` compares code units, which put every capitalised name first. The
    * rows are re-ordered here for display, start date still breaking a tie.
    */
-  const rows = [...subaccountPeriodRows(contracts, card.id)].sort((a, b) =>
-    a.name.localeCompare(b.name, undefined, { sensitivity: "accent" })
-    || (a.startDate ?? "").localeCompare(b.startDate ?? ""));
+  const open = !card.isFolded;
+  // OPT-26 (D160): a folded card draws neither the rows nor the command bar, so it computes neither; an open card
+  // recomputes them only when its own data changes.
+  const rows = useMemo(() => open
+    ? [...subaccountPeriodRows(contracts, card.id)].sort((a, b) =>
+      ACCENT_COLLATOR.compare(a.name, b.name)
+      || (a.startDate ?? "").localeCompare(b.startDate ?? ""))
+    : [], [open, contracts, card.id]);
   const isSelectedCard = selection.subaccountId === card.id;
 
-  const commands = guardLeaseCommands(leaseCommands({
+  const commands = useMemo(() => open ? guardLeaseCommands(leaseCommands({
     subaccountId: card.id,
     isSelectedCard,
     selectedPeriod: isSelectedCard ? selectedPeriod : null,
@@ -1282,9 +1308,10 @@ function SubaccountCard({
     costsInSubaccount: costs.filter((c) => c.subaccountId === card.id),
     hasMatchingAssumption,
     permissions,
-  }), writeDisabled);
+  }), writeDisabled) : [], [
+    open, card.id, isSelectedCard, selectedPeriod, selectedCost, selectedContract, costs, hasMatchingAssumption, permissions, writeDisabled,
+  ]);
   const icons = { Add: <AddRegular />, Edit: <EditRegular />, Delete: <DeleteRegular /> };
-  const open = !card.isFolded;
   // `con_…_CostsTableHeader_1.Width: =OTP.X + OTP.Width` — the radio lane plus every column.
   const tableWidth = SELECT_COLUMN_WIDTH + columns.reduce((sum, c) => sum + c.width, 0);
   // `gal_…_CardBody_Costs_1.Height: =Max(AllItemsCount * 30 + 10, 50)` (LL:923).
@@ -1296,7 +1323,7 @@ function SubaccountCard({
         type="button"
         className={styles.cardHeader}
         aria-expanded={open}
-        onClick={onToggle}
+        onClick={() => onToggle(card.id)}
         aria-label={card.name}
         data-testid={`leasecard-${card.name}`}
       >
@@ -1318,7 +1345,7 @@ function SubaccountCard({
                 )}
                 icon={icons[c.icon]}
                 disabled={!c.enabled}
-                onClick={() => onCommand(c.key)}
+                onClick={() => onCommand(card, c.key)}
                 aria-label={c.label}
                 data-testid={`lease-${c.key}`}
               >
@@ -1432,7 +1459,7 @@ function SubaccountCard({
       ) : null}
     </section>
   );
-}
+});
 
 /* ═════════════════════════════════════════════════════════════════ the panel ══ */
 
@@ -2059,8 +2086,7 @@ function PaymentBlock({
 /** A `Date` from `ProjectContext` as the ISO day the rules expect, or null. */
 function isoDay(value: Date | undefined): string | null {
   if (!value || Number.isNaN(value.getTime())) return null;
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${value.getFullYear()}-${p(value.getMonth() + 1)}-${p(value.getDate())}`;
+  return dateOnly(value);
 }
 
 /** `txt_…_InflationProfile_1.Value` is a one-decimal string; blank stays blank. */

@@ -58,7 +58,7 @@ vi.mock("./hooks", () => ({
   useProjectReader: () => state.readProject,
   useGeneralDataWrites: () => ({
     run: state.run, progress: null, error: null, success: null, clear: () => {},
-    cancelDraftGateApprovalIfRunning: state.cancelDraftGateApproval,
+    cancelDraftGateApprovalIfRunning: state.cancelDraftGateApproval, reloadAll: async () => [],
   }),
 }));
 

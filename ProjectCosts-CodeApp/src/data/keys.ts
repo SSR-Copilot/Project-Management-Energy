@@ -16,6 +16,11 @@ export const qk = {
   environmentVariables: ["environmentVariables"] as const,
 
   project: (projectId: string) => ["project", projectId] as const,
+  /**
+   * OPT-01 (B5b): the session project of a PM route (`/project/*`), which reads the project row only. A CHILD of `project`, so a
+   * `qk.project(id)` invalidation (every PM save) still reaches it, while a PM load and a Cost load never share one cached shape.
+   */
+  projectPm: (projectId: string) => ["project", projectId, "pm"] as const,
   projectCountry: (countryId: string) => ["projectCountry", countryId] as const,
 
   capexAccounts: ["capexAccounts"] as const,
@@ -35,7 +40,6 @@ export const qk = {
   adminCapexHasContracts: (id: string) => ["adminCapexAccounts", "has-contracts", id] as const,
   /** Admin Default Checklists: tabs, clusters, a tab's tasks and the approval locks. */
   adminChecklistTabs: ["adminChecklistTabs"] as const,
-  adminChecklistClusters: ["adminChecklistClusters"] as const,
   /** Prefix of every tab's task list. */
   adminChecklistTasksAll: ["adminChecklistTasks"] as const,
   adminChecklistTasks: (tabId: string | null) => ["adminChecklistTasks", tabId ?? ""] as const,
@@ -171,11 +175,20 @@ export const qk = {
   bopStandardAssumptionsAll: ["bopStandardAssumptions"] as const,
 } as const;
 
-/** Everything that a contract save can affect. */
+/** Everything that a contract DELETE can affect: the list, its payment targets and its DevCo links. */
 export function contractInvalidations(projectId: string) {
   return [
     qk.contracts(projectId),
     qk.paymentTargets(projectId),
     qk.devCoLinks(projectId),
   ];
+}
+
+/**
+ * Everything that a contract SAVE can affect (B2, OPT-12): the list and the DevCo links it replaces. A save writes the contract
+ * row and its DevCo links; it never writes or removes a payment target (those have their own save and delete, and go with a
+ * deleted contract), so the payment targets are not re-read.
+ */
+export function contractSaveInvalidations(projectId: string) {
+  return [qk.contracts(projectId), qk.devCoLinks(projectId)];
 }

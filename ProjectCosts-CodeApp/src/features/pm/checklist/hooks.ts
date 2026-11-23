@@ -50,6 +50,7 @@ import {
 import {
   countClusterChecklistRows, listChecklistApprovalSettings, listChecklistGates, listChecklistProjectStates,
   listChecklistTrackings, listClusterChecklist, listClusterCopyProbe, listClusterTemplates, listHistory, loadChecklistProject,
+  readClusterTask, readClusterTracking,
   type HistoryEntry,
 } from "@/data/checklist";
 import {
@@ -80,7 +81,9 @@ async function waitForClusterTransition(projectId: string, clusterStateId: strin
   while (Date.now() < deadline) {
     await new Promise<void>((resolve) => { setTimeout(resolve, TRANSITION_POLL_MS); });
     try {
-      if (clusterTransitionDone(await listChecklistTrackings(projectId), clusterStateId)) return true;
+      // OPT-24 (S4-12): one cluster's tracking (top 1, three columns) per poll, not every tracking of the project (up to 20 polls).
+      const tracking = await readClusterTracking(projectId, clusterStateId);
+      if (clusterTransitionDone(tracking ? [tracking] : [], clusterStateId)) return true;
     } catch {
       // keep waiting
     }
@@ -512,7 +515,8 @@ export function useChecklistWrites(projectId: string | undefined) {
         progress: MSG.pleaseWait, errorText: MSG.projectStatusError, ...endOf(after),
         plan: async () => {
           // C6: a fresh read of the task; one whose approval was requested (or completed) meanwhile is not requested again.
-          const fresh = (await listClusterChecklist(id, req.currentStateId)).find((r) => r.id === req.row.id);
+          // OPT-24 (S4-12): the one task by id (same filter: project, cluster, active), not the whole cluster to `.find` it.
+          const fresh = await readClusterTask(id, req.currentStateId, req.row.id);
           const stale = fresh ? staleTaskRequestRefusal(fresh) : null;
           if (stale) return refusePlan(stale);
           return planChecklistApprovalRequestPatch({

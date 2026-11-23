@@ -23,6 +23,10 @@ import { emptyPlan, guardedUpdate, refusePlan, type PlannedWrite, type WritePlan
 import { isDirty } from "@/domain/form";
 import { nextOrder as sharedNextOrder } from "@/domain/reorder";
 import { OUT_OF_SCOPE_MESSAGE } from "./messages";
+import { collator } from "@/domain/locale";
+
+/** OPT-29 (B8): `localeCompare(b, undefined, { sensitivity: "base" })`, pooled once (UT-COLLATOR-OPT-001). */
+const BASE_COLLATOR = collator(undefined, { sensitivity: "base" });
 
 /* ═══════════════════════════════════════════════════════════════ texts ══ */
 
@@ -137,7 +141,7 @@ export function yesNo(value: boolean | null | undefined): "Yes" | "No" {
  */
 export function sortTabs<T extends Pick<ChecklistTab, "order" | "name">>(tabs: readonly T[]): T[] {
   return [...tabs].sort((a, b) => {
-    const byName = a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+    const byName = BASE_COLLATOR.compare(a.name, b.name);
     if (byName !== 0) return byName;
     return tabSortKey(a.order) - tabSortKey(b.order);
   });

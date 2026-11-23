@@ -18,7 +18,8 @@
  *  - permit Save / Delete: one create / update / delete of `vsb_permits`; the delete goes through
  *    `executePlan`, which checks the SDK result (rule 14);
  *  - acquisition Save / Clear & Save: one update of `vsb_aquisitionstatuses`.
- * Every write refreshes the screen's queries (`qk.planningAll`), the canvas reloads.
+ * Every write refreshes the queries that read the table it wrote (OPT-13, `reload.ts`; the canvas reloads them all).
+ * The hook's own `qk.planningAll` list is the fallback of a job that names none.
  *
  * SERVER AUTOMATION (`ProjectDocs/migration-plans/04-flow-inventory.md`, verified 19 Oct 2026, and a
  * search of every workflow JSON and `SdkMessageProcessingStep` in the extract): NO flow is triggered
@@ -30,7 +31,7 @@
  * PERMISSIONS: the canvas `DataSourceInfo` / `RecordInfo` checks have no SDK equivalent (D1); they
  * pass and Dataverse refuses what the user may not do (`PLANNING_CAN_EDIT`).
  */
-import { useQuery } from "@tanstack/react-query";
+import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ES } from "@/data/dataverseNames";
 import { qk } from "@/data/keys";
 import type { ScreenData } from "@/data/notConnected";
@@ -76,26 +77,37 @@ async function seed(plan: ReturnType<typeof planEnsurePlanning>): Promise<boolea
   return true;
 }
 
+/** The project read, shared by the screen's query and by the seed paths that need the project's business unit. */
+const planningProjectQuery = (projectId: string) => queryOptions({
+  queryKey: qk.planning(projectId, "project"),
+  queryFn: () => loadPlanningProject(projectId),
+});
+
 /** `gblRecordSelectedProject`, re-read on every visit as `OnVisible` does. */
 export function usePlanningProject(projectId: string | undefined): ScreenData<PlanningProject | null> {
-  const q = useQuery({
-    queryKey: qk.planning(projectId ?? "", "project"),
-    queryFn: () => loadPlanningProject(projectId!),
-    enabled: Boolean(projectId),
-  });
+  const q = useQuery({ ...planningProjectQuery(projectId ?? ""), enabled: Boolean(projectId) });
   return out(q, null);
 }
 
-/** `gblRecordProjectPlanning`, created when the project has none (`planEnsurePlanning`). */
-export function useProjectPlanning(project: PlanningProject | null): ScreenData<PlanningRecord | null> {
+/**
+ * `gblRecordProjectPlanning`, created when the project has none (`planEnsurePlanning`).
+ *
+ * OPT-16: keyed on the project id, so the row read starts WITH the project read instead of after it (the old chain was
+ * project -> row -> permits). The project object is needed only by the seed (its Owning Business Unit), and only when the row is
+ * missing: the seed takes it from the shared project query (`fetchQuery`: the in-flight read, or the cached one), so it is still
+ * gated on a loaded project: no project, no seed, as before.
+ */
+export function useProjectPlanning(projectId: string | undefined): ScreenData<PlanningRecord | null> {
+  const qc = useQueryClient();
   const q = useQuery({
-    queryKey: qk.planning(project?.id ?? "", "row"),
+    queryKey: qk.planning(projectId ?? "", "row"),
     queryFn: async () => {
-      const row = await loadProjectPlanning(project!.id);
+      const row = await loadProjectPlanning(projectId!);
       if (row) return row;
-      return (await seed(planEnsurePlanning(project, null))) ? loadProjectPlanning(project!.id) : null;
+      const project = await qc.fetchQuery(planningProjectQuery(projectId!));
+      return (await seed(planEnsurePlanning(project, null))) ? loadProjectPlanning(projectId!) : null;
     },
-    enabled: Boolean(project?.id),
+    enabled: Boolean(projectId),
   });
   return out(q, null);
 }
@@ -118,15 +130,20 @@ export function useAquisitionTypes(): ScreenData<AquisitionTypeRow[]> {
 
 /** `colAquisitionStatusesUnderLaw` / `…InRem`, seeded for every type that has no row (`planAquisitionSeed`). */
 export function useAquisitionStatuses(
-  project: PlanningProject | null, types: AquisitionTypeRow[], typesReady: boolean,
+  projectId: string | undefined, types: AquisitionTypeRow[], typesReady: boolean,
 ): ScreenData<AquisitionStatusRow[]> {
+  const qc = useQueryClient();
   const q = useQuery({
-    queryKey: qk.planning(project?.id ?? "", "aquisition"),
+    queryKey: qk.planning(projectId ?? "", "aquisition"),
     queryFn: async () => {
-      const rows = await listAquisitionStatuses(project!.id, types);
-      return (await seed(planAquisitionSeed(types, rows, project))) ? listAquisitionStatuses(project!.id, types) : rows;
+      const rows = await listAquisitionStatuses(projectId!, types);
+      // OPT-16: keyed on the project id (the read waits for the types, not for the project). The project is fetched only when
+      // a type has no row yet (the seed's Owning Business Unit); with every row present no project is needed.
+      if (planAquisitionSeed(types, rows, { id: projectId! } as PlanningProject).writes.length === 0) return rows;
+      const project = await qc.fetchQuery(planningProjectQuery(projectId!));
+      return (await seed(planAquisitionSeed(types, rows, project))) ? listAquisitionStatuses(projectId!, types) : rows;
     },
-    enabled: Boolean(project?.id) && typesReady,
+    enabled: Boolean(projectId) && typesReady,
   });
   return out(q, NONE as AquisitionStatusRow[]);
 }

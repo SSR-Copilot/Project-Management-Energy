@@ -18,7 +18,9 @@ import { ensureInitialized } from "@/platform/powerClient";
 import { trace } from "@/platform/telemetry";
 import { bootTarget, needsLaunchParams, type BootTarget } from "./bootPlan";
 import { generatorsPerf } from "@/data/generatorsPerfFlags";
-import { loadGeneralDataScreen, loadGeneratorsScreen, loadProjectOverviewScreen } from "./screenLoaders";
+import {
+  COST_SCREEN_LOADERS, PM_SCREEN_LOADERS, loadGeneralDataScreen, loadGeneratorsScreen, loadProjectOverviewScreen,
+} from "./screenLoaders";
 import { sessionProjectQueryOptions, sessionQueryOptions } from "./SessionContext";
 import { startupFlags } from "./startupFlags";
 
@@ -34,13 +36,24 @@ const quietly = (what: string, work: () => Promise<unknown>): Promise<void> =>
   Promise.resolve().then(work).then(() => undefined, (error: unknown) => trace("warning", `boot prefetch: ${what} failed`, { error }));
 
 export async function prefetchTarget(qc: QueryClient, target: BootTarget): Promise<void> {
+  /*
+   * OPT-03: every target that names a project also starts the session's project read, the one the route's gate waits on, under the
+   * key and scope the SessionProvider reads (a Project Management route reads the row only, the Cost routes the full load). Before,
+   * only General Data did. It is a prefetch like the rest: the same key, a failure is traced and the gate's own read retries.
+   */
+  if (target.kind === "pm-screen" || target.kind === "cost") {
+    await quietly("session project", () => qc.prefetchQuery(sessionProjectQueryOptions(target.projectId, target.kind === "cost" ? "full" : "pm")));
+    return;
+  }
+
   if (target.kind === "generators") {
+    const session = quietly("session project", () => qc.prefetchQuery(sessionProjectQueryOptions(target.projectId, "pm")));
     // D141 (`GENERATORS_PERF.prefetch`): the reads that need only the project id; the rest wait for them inside the screen.
-    if (!generatorsPerf().prefetch) return;
-    await quietly("generators", async () => {
+    if (!generatorsPerf().prefetch) { await session; return; }
+    await Promise.all([session, quietly("generators", async () => {
       const q = await import("@/features/pm/generators/queries");
       await q.prefetchGenerators(qc, target.projectId);
-    });
+    })]);
     return;
   }
 
@@ -70,7 +83,7 @@ export async function prefetchTarget(qc: QueryClient, target: BootTarget): Promi
       const row = qc.prefetchQuery(q.generalDataProjectQueryOptions(projectId));
       await Promise.all([
         // The header's project (the session's own read), the lists and the children: none needs the row.
-        qc.prefetchQuery(sessionProjectQueryOptions(projectId)),
+        qc.prefetchQuery(sessionProjectQueryOptions(projectId, "pm")),
         qc.prefetchQuery(q.generalDataCountriesQueryOptions()),
         qc.prefetchQuery(q.generalDataProjectStatesQueryOptions()),
         qc.prefetchQuery(q.shareholdersQueryOptions(projectId)),
@@ -90,11 +103,14 @@ export async function prefetchTarget(qc: QueryClient, target: BootTarget): Promi
 }
 
 function preloadChunk(target: BootTarget): void {
-  const load = target.kind === "projects" ? loadProjectOverviewScreen
-    : target.kind === "general-data" ? loadGeneralDataScreen
-      : target.kind === "generators" && generatorsPerf().prefetch ? loadGeneratorsScreen : undefined;
+  const loads = target.kind === "projects" ? [loadProjectOverviewScreen]
+    : target.kind === "general-data" ? [loadGeneralDataScreen]
+      : target.kind === "generators" ? (generatorsPerf().prefetch ? [loadGeneratorsScreen] : [])
+        // OPT-03: the Cost screen or the other Project Management screen the link opens.
+        : target.kind === "cost" ? COST_SCREEN_LOADERS[target.path] ?? []
+          : target.kind === "pm-screen" ? PM_SCREEN_LOADERS[target.slug] ? [PM_SCREEN_LOADERS[target.slug]!] : [] : [];
   // A chunk that cannot be fetched is the router's problem when it needs it (it shows its error then).
-  load?.().catch(() => undefined);
+  for (const load of loads) load().catch(() => undefined);
 }
 
 /**

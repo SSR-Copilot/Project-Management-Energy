@@ -31,7 +31,7 @@
  *   `Cost App - Other opex -  Tab selected.png`
  *   `Cost App - Add & Edit ContractPeriod Panel - Almost same for Landlease and other Opex also.png`
  */
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import {
   Button, Dropdown, Input, Option, Switch, Text, Tooltip,
   makeStyles, mergeClasses, tokens,
@@ -42,11 +42,12 @@ import {
 } from "@fluentui/react-icons";
 import { ConfirmDialog, CostField, DateInput, EmptyState, FormPanel, LoadingOverlay, PanelButtons, WriteStatus, useCommandRowStyles, useStandardValueClass } from "@/components";
 import { useSession } from "@/app/SessionContext";
+import { dateOnly } from "@/domain/dates";
 import { costWriteStatusLabel, writeCommandsDisabled } from "@/domain/writeGuard";
 import { useCostWriteInFlight, useWriteFailureReport } from "@/features/cost/costing/useCostWriteFlight";
 import { useProjectExtras } from "@/features/cost/contracts/hooks";
 import {
-  useAddStandardContract, useCostBook, useCountryInflation, useCountryInflationAreas,
+  useAddStandardContract, useCostBook, useCountryInflation,
   useOpexAssumptionScopes, useOpexCatalog, useOpexDeviceTypes,
 } from "@/features/cost/costing/useCostBook";
 import type { CostPeriod } from "@/features/cost/costing/model";
@@ -58,11 +59,11 @@ import {
   addPeriodRecordType, alignWithProjectDurationDefault, areaFieldVisible,
   areaWithRegion, formatOneDecimalText, formatTwoDecimalsText, opexDecimalText, opexNumberOrNull, panelDeviceLabel, canSaveOpexCost, chainHead, chainLastPeriod, childrenOf, costName, costsInScope,
   countryInflationPercent, defaultCurrencyCode,
-  defaultSubaccount, deleteDialogTextCanvasParity, deviceTypeList, durationBadge, externalContractDefault,
+  defaultSubaccount, deleteDialogTextCanvasParity, deviceTypeList, durationBadge, cardAlignWarnings, externalContractDefault,
   inflationProfileCountryText, inflationProfileDefault, inflationStartYearDefault,
   inheritStartDateStandard, italyZone, matchesStandardAssumption, nextPeriodDescriptionPanel,
   guardOpexCommands, omDurationBadge, opexColumns, opexCommands,
-  opexFormErrors, panelFieldModes, panelRateLabel, panelRequiredMarkers, panelTitle, planDeleteCost,
+  opexFormErrors, opexNumberErrors, panelFieldModes, panelRateLabel, panelRequiredMarkers, panelTitle, planDeleteCost,
   resetStartDateVisible, selectedAccount, showAtLeastOneFigureHint,
   showEurPerWtgField, showThresholdColumn, standardAssumptionFilter, startDateDefault,
   startDateFlagAfterPick, startDateFlagOnOpen, planFollowingPeriodStarts,
@@ -71,7 +72,9 @@ import {
   type OpexMode, type OpexProjectContext, type OpexSubaccount, type PanelContext,
   type RowSelection,
 } from "./opexRules";
+import { inflationAreasOf } from "./inflationAreas";
 import { canvasScrollbar } from "./canvasScrollbar";
+import { useStableCallback } from "@/components/useStableCallback";
 
 /* ═══════════════════════════════════════════════════════════ reference data ══ */
 
@@ -636,11 +639,7 @@ function toOpexCost(
   };
 }
 
-const iso = (date: Date | null): string => (date === null ? "" : [
-  date.getFullYear(),
-  String(date.getMonth() + 1).padStart(2, "0"),
-  String(date.getDate()).padStart(2, "0"),
-].join("-"));
+const iso = (date: Date | null): string => (date === null ? "" : dateOnly(date));
 
 // `Value(txt_...)`: the box read in the locale the panel's checks use (German number audit, 6 Nov 2026).
 const numberOrNull = (value: string): number | null => opexNumberOrNull(value);
@@ -765,18 +764,20 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
   // D58: while `isLoading` (TanStack's first load) there is no `book` yet, so the cards render
   // with an empty body; no masking is needed (Land Lease masks, because its load includes extras).
   // D123: re-read on every visit, as `OnVisible`'s `ClearCollect(colOpexProjectCosts, …)` (`:118-124`).
-  const { data: book, isLoading: bookLoading, error, save } = useCostBook(undefined, { everyVisit: true });
+  // B2 (OPT-04): this screen reads only the O&M / Other OPEX periods from the book, so it asks for the OPEX scope: no chart of
+  // accounts and no Land Lease book (the Land Lease screen has its own `useLeaseBook`).
+  const { data: book, isLoading: bookLoading, error, save } = useCostBook(undefined, { everyVisit: true, scope: "opex" });
   const extras = useProjectExtras(projectId);
   const addStandard = useAddStandardContract();
   /** CA-15 — a Cost write of this project still running, from any screen or an earlier visit. */
   const writeInFlight = useCostWriteInFlight(projectId);
   /** CA-15 — the banner while this screen is mounted, the error toast once it has been left. */
   const reportFailure = useWriteFailureReport(mode === "om" ? "O&M" : "Other OPEX");
-  const areas = useCountryInflationAreas(extras.data?.countryId);
   /** `colOpexAccounts` / `colOpexSubaccounts` — real rows, not the constants this file carried. */
   const catalog = useOpexCatalog();
   /** `colDeviceTypesInProject` — `[generators, pvModules]` for `deviceTypeList` to order. */
-  const deviceTypes = useOpexDeviceTypes(projectId);
+  // B2 (OPT-26): only O&M reads the device types; Other OPEX does not run the query.
+  const deviceTypes = useOpexDeviceTypes(projectId, mode === "om");
   /**
    * Run 3 (FT-BR-OPEX-011/095): the canvas fills `colOpexSubaccounts` and `colDeviceTypesInProject`
    * in `OnVisible` before the screen draws (`LoadingSpinner =LoadingSpinner.Data`), so the empty
@@ -786,6 +787,8 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
   const isLoading = bookLoading || catalog.isLoading || (mode === "om" && deviceTypes.isLoading);
   /** `Country Inflation Profiles` for the project's country — every year, every Area. */
   const countryInflation = useCountryInflation(extras.data?.countryId);
+  /** The `Inflation Country Area` options, derived from the rows above (B2, OPT-06): one read of the table, not two. */
+  const areaOptions = useMemo(() => inflationAreasOf(countryInflation.data), [countryInflation.data]);
   /** The catalogue behind `Add Standard Contract`, for the command's gate. */
   const assumptionScopes = useOpexAssumptionScopes(
     extras.data?.countryId, extras.data?.technology,
@@ -1266,6 +1269,29 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
     setDeleting(null);
   };
 
+  /*
+   * OPT-26 (D160): the cards are memoised, so what they receive must keep its identity while a panel keystroke re-renders this
+   * screen. The three handlers keep one identity and call the LATEST closure when invoked (as the Generators sections do).
+   */
+  const onToggleCard = useStableCallback((id: string) => toggleCard(id));
+  const onSelectRow = useStableCallback((cardId: string, row: OpexCost) =>
+    setSelection((current) => toggleRowSelection({ current, row, cardScopeId: cardId })));
+  const onCardCommand = useStableCallback((card: OpexCard, key: OpexCommandKey) => onCommand(card, key));
+  /** `Filter('OPEX & Land Lease Standard Assumptions', …)` per card, evaluated when the catalogue or the cards change. */
+  const standardByCard = useMemo(() => {
+    const scopes = assumptionScopes.data ?? [];
+    return new Map(cards.map((card) => {
+      const filter = standardAssumptionFilter(mode, {
+        countryId: projectContext.countryId, technology: projectContext.technology, subaccountId: card.subaccount.id,
+      });
+      return [card.id, scopes.some((a) => matchesStandardAssumption(a, filter))] as const;
+    }));
+  }, [assumptionScopes.data, cards, mode, projectContext.countryId, projectContext.technology]);
+  /** The open panel's card rows (sorted once per panel, not once per keystroke). */
+  const panelCardCosts = useMemo(
+    () => (panel ? costsInScope(allCosts, mode, panel.card.id) : []), [allCosts, mode, panel],
+  );
+
   /* ── render ───────────────────────────────────────────────────────────── */
 
   /*
@@ -1334,32 +1360,10 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
              * each card tests its own scope, so `Add Standard Contract` arrives DISABLED where
              * there is no catalogue instead of failing at the server with an inline error.
              */
-            hasStandardAssumption={(assumptionScopes.data ?? []).some((a) =>
-              matchesStandardAssumption(
-                {
-                  ...a,
-                  // `matchesStandardAssumption` reads only these four; the rest of `OpexAssumption`
-                  // is not fetched, because nothing here needs an assumption's figures.
-                  id: a.id, period: 0, description: "",
-                  durationYears: null, durationMonths: null,
-                  currencyId: null, fixCosts: null, percentOfRevenues: null,
-                  eurPerMwh: null, eurPerMw: null, eurPerWtg: null,
-                  aggregation: null, distributionFrequency: null,
-                  threshold: false, thresholdType: null, thresholdIndividual: null,
-                  useInflationProfile: false, useCountryInflationProfile: false,
-                  inflationProfile: null, inflationCountryArea: null,
-                  alignWithProjectDuration: false, externalContract: false,
-                },
-                standardAssumptionFilter(mode, {
-                  countryId: projectContext.countryId,
-                  technology: projectContext.technology,
-                  subaccountId: card.subaccount.id,
-                }),
-              ))}
-            onToggle={() => toggleCard(card.id)}
-            onSelectRow={(row) =>
-              setSelection((current) => toggleRowSelection({ current, row, cardScopeId: card.id }))}
-            onCommand={(key) => onCommand(card, key)}
+            hasStandardAssumption={standardByCard.get(card.id) ?? false}
+            onToggle={onToggleCard}
+            onSelectRow={onSelectRow}
+            onCommand={onCardCommand}
             writeDisabled={writeDisabled}
           />
         ))}
@@ -1372,9 +1376,9 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
           form={form}
           project={projectContext}
           areaRegion={areaRegion}
-          areaOptions={areas.data ?? []}
+          areaOptions={areaOptions}
           countryRows={countryInflation.data ?? []}
-          cardCosts={costsInScope(allCosts, mode, panel.card.id)}
+          cardCosts={panelCardCosts}
           busy={save.isPending}
           onChange={(patch) => setForm((f) => (f ? { ...f, ...patch } : f))}
           onStartDate={onStartDate}
@@ -1434,7 +1438,7 @@ function subaccountFor(
 /** The radio's lane: `Description.X = 40` on both canvas galleries. */
 const SELECT_COLUMN_WIDTH = 40;
 
-function OpexCardView({
+const OpexCardView = memo(function OpexCardView({
   card, mode, open, columns, allCosts, project, selection, selectedCost,
   hasStandardAssumption, onToggle, onSelectRow, onCommand, writeDisabled,
 }: {
@@ -1448,24 +1452,28 @@ function OpexCardView({
   selectedCost: OpexCost | null;
   /** `recCountryTechnologyRelatedStandardAssumption` — does this scope have a catalogue at all? */
   hasStandardAssumption: boolean;
-  onToggle: () => void;
-  onSelectRow: (row: OpexCost) => void;
-  onCommand: (key: OpexCommandKey) => void;
+  // OPT-26 (D160): stable handlers that take the card's id / the card itself, so this memoised component can skip a render.
+  onToggle: (cardId: string) => void;
+  onSelectRow: (cardId: string, row: OpexCost) => void;
+  onCommand: (card: OpexCard, key: OpexCommandKey) => void;
   /** D58 — `writeCommandsDisabled`: a load or a write is running, so no new write may start. */
   writeDisabled: boolean;
 }) {
   const styles = useStyles();
   const commandRow = useCommandRowStyles();
   const standardClass = useStandardValueClass();
-  const cardCosts = costsInScope(allCosts, mode, card.id);
+  // OPT-26 (D160): derived from the card's own data, so a render with the same props reuses them.
+  const cardCosts = useMemo(() => costsInScope(allCosts, mode, card.id), [allCosts, mode, card.id]);
 
   // `con_AlignWithProjectDuration_Container` — the device card and the sub-account card use
   // DIFFERENT algorithms (`omDurationBadge` reproduces defect O-4).
-  const badge = mode === "om"
-    ? omDurationBadge(cardCosts, project)
-    : durationBadge(cardCosts, project);
+  const badge = useMemo(
+    () => (mode === "om" ? omDurationBadge(cardCosts, project) : durationBadge(cardCosts, project)),
+    [mode, cardCosts, project],
+  );
 
-  const gates = guardOpexCommands(opexCommands({
+  // Folded cards draw neither the command bar nor the rows, so their gates and row warnings are not computed.
+  const gates = useMemo(() => (open ? guardOpexCommands(opexCommands({
     mode,
     cardScopeId: card.id,
     selectedScopeId: selection.scopeId,
@@ -1477,7 +1485,13 @@ function OpexCardView({
     // `DataSourceInfo`/`RecordInfo` have no Code-App equivalent; the server refuses what the user
     // may not do. The canvas O&M bar carries no `RecordInfo` check at all (defect O-1).
     permissions: { canCreate: true, canEditRecord: true, canDeleteRecord: true },
-  }), writeDisabled);
+  }), writeDisabled) : null), [
+    open, mode, card.id, selection.scopeId, selection.candidateDescription, selectedCost, allCosts, cardCosts,
+    hasStandardAssumption, writeDisabled,
+  ]);
+  const warnings = useMemo(
+    () => (open ? cardAlignWarnings(mode, cardCosts, project) : undefined), [open, mode, cardCosts, project],
+  );
 
   const icons = { Add: <AddRegular />, Edit: <EditRegular />, Delete: <DeleteRegular /> };
 
@@ -1487,7 +1501,7 @@ function OpexCardView({
         type="button"
         className={mergeClasses(styles.cardHeader, open && styles.cardHeaderOpen)}
         aria-expanded={open}
-        onClick={onToggle}
+        onClick={() => onToggle(card.id)}
         aria-labelledby={`opex-card-title-${card.id}`}
         data-testid={`opex-card-${card.id}`}
         // `lbl_…_SubaccountsCardHeader_SubaccountName_1.Tooltip: =ThisItem.Name` (`:4849`), the
@@ -1520,11 +1534,11 @@ function OpexCardView({
                 key={key}
                 appearance="transparent"
                 className={mergeClasses(
-                  commandRow.command, styles.toolbarCommand, !gates[key] && styles.toolbarCommandDisabled,
+                  commandRow.command, styles.toolbarCommand, !gates?.[key] && styles.toolbarCommandDisabled,
                 )}
                 icon={icons[OPEX_COMMAND_ICONS[key]]}
-                disabled={!gates[key]}
-                onClick={() => onCommand(key)}
+                disabled={!gates?.[key]}
+                onClick={() => onCommand(card, key)}
                 aria-label={OPEX_COMMAND_LABELS[key]}
                 data-testid={`opex-${key}`}
               >
@@ -1569,7 +1583,7 @@ function OpexCardView({
               <tbody>
                 {cardCosts.map((cost) => {
                   const row = toOpexRow({
-                    cost, mode, selectedId: selection.selectedId, project, cardCosts,
+                    cost, mode, selectedId: selection.selectedId, project, cardCosts, warnings,
                   });
                   return (
                     <tr
@@ -1579,7 +1593,7 @@ function OpexCardView({
                         standardClass(row.standard),
                         row.selected && styles.rowSelected,
                       )}
-                      onClick={() => onSelectRow(cost)}
+                      onClick={() => onSelectRow(card.id, cost)}
                       // `btn_…_TransparentButton_1.Tooltip: =ThisItem.Description` (`:4668`), the
                       // O&M row button, `Width: Parent.Width-Self.X`: the hover spans the row.
                       title={mode === "om" ? row.cells.description : undefined}
@@ -1663,7 +1677,7 @@ function OpexCardView({
       ) : null}
     </section>
   );
-}
+});
 
 /* ══════════════════════════════════════════════════════════════ the panel ══ */
 
@@ -1713,13 +1727,13 @@ function OpexPanel({
   const required = panelRequiredMarkers(ctx, {
     useCountryInflationProfile: form.useCountryInflationProfile,
   });
-  const errors = opexFormErrors(form, {
-    selected, costsInScope: cardCosts, countryName: project.countryName,
-  });
+  // OPT-28 (D160): the numeric boxes are validated ONCE per render and shared by the error list and the Save gate.
+  const gate = {
+    selected, costsInScope: cardCosts, countryName: project.countryName, numberErrors: opexNumberErrors(form),
+  };
+  const errors = opexFormErrors(form, gate);
   const errorFor = (field: string) => errors.find((e) => e.field === field)?.message;
-  const canSave = canSaveOpexCost(form, {
-    selected, costsInScope: cardCosts, countryName: project.countryName,
-  });
+  const canSave = canSaveOpexCost(form, gate);
 
   const currencyCode = currencyCodeOf(form.currencyId);
   const disabled = (m: FieldMode) => m !== "edit";

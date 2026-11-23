@@ -32,15 +32,12 @@ import {
   type RevenueAssumptionRow, type StandardAssumptionFlags,
 } from "@/features/pm/milestones/rules";
 import { fetchAll, fetchPage } from "./client";
-import { and, chunk, eq, guid, idIn, lookupEq, numberOf, or, startsWith } from "./odata";
+import { and, chunk, eq, guid, idIn, lookupEq, or, startsWith } from "./odata";
+import { rowStr as str, rowNum as num, rowBool as bool, formattedColumn as formatted } from "./rowValues";
 
 /** `<col>@OData.Community.Display.V1.FormattedValue` — a lookup's name or a choice's label. */
-const formatted = (col: string): string => `${col}@OData.Community.Display.V1.FormattedValue`;
 
 type Raw = Record<string, unknown>;
-const str = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
-const num = (v: unknown): number | null => numberOf(v) ?? null;
-const bool = (v: unknown): boolean | null => (typeof v === "boolean" ? v : null);
 
 /* ═══════════════════════════════════════════════════════════════ the project ══ */
 
@@ -85,8 +82,16 @@ const PROJECT_SELECT = [
  * `OnVisible`: `Set(gblRecordSelectedProject, LookUp(Projects, Project = …))` (Y:51-57), plus
  * `gblRecordSelectedProjectCountry.'Business Unit'` — the owner the save re-stamps (Y:417) —
  * from `LookUp(Countries, Country = project.Country)` (App Loading Screen Y:109-113).
+ *
+ * OPT-07a: `businessUnitOf` lets the caller answer the country's business unit from a list it already holds (the cached General
+ * Data countries, `CountryRef.businessUnitId`), so a load is one request instead of two. It returns the business unit id, `null`
+ * for a country without one, or `undefined` when it does not know (the list failed or lacks the country): the loader then reads
+ * the country row itself, as before. Without the option the loader is unchanged.
  */
-export async function loadMilestoneProject(projectId: string): Promise<MilestoneProject | null> {
+export async function loadMilestoneProject(
+  projectId: string,
+  options: { businessUnitOf?: (countryId: string) => Promise<string | null | undefined> } = {},
+): Promise<MilestoneProject | null> {
   const rows = await fetchPage(
     "load the project's milestones",
     (o) => Vsb_projectsService.getAll(o),
@@ -97,7 +102,9 @@ export async function loadMilestoneProject(projectId: string): Promise<Milestone
 
   const countryId = str(r._vsb_country_value);
   let countryBusinessUnitId: string | null = null;
-  if (countryId) {
+  const known = countryId && options.businessUnitOf ? await options.businessUnitOf(countryId) : undefined;
+  if (known !== undefined) countryBusinessUnitId = known;
+  else if (countryId) {
     const countries = await fetchPage(
       "load the project's country",
       (o) => Vsb_countriesService.getAll(o),
@@ -275,17 +282,36 @@ export async function listProjectGeneratorsForRepricing(projectId: string): Prom
 /* ══════════════════════════════════════════════════════ Fabric recalculation ══ */
 
 /**
- * `Icon3.Visible` (Y:4180-4191): `!IsEmpty(Filter('Fabric Sync Jobs', 'Regarding Object' = project,
- * 'Job Type'.Name = "Project Milestones changed", 'Job Status' in ['In Progress', Importing]))`.
- * The job type is resolved by name first, then the jobs are filtered by its id.
+ * OPT-07e: the id of the "Project Milestones changed" Fabric job type, remembered for `JOB_TYPE_MEMO_MS`. The job type is static
+ * configuration, but its NAME was resolved with one read before every recalculation check (on every screen visit, every window
+ * focus and every save). Only a found id is remembered (an empty answer is asked again), and a failed read is never remembered.
+ * Switch: `JOB_TYPE_MEMO_MS = 0` reads it every time, as before.
  */
-export async function isMilestoneRecalculationRunning(projectId: string): Promise<boolean> {
+export const JOB_TYPE_MEMO_MS = 30 * 60_000;
+let jobTypeMemo: { at: number; ids: string[] } | null = null;
+/** TEST SEAM: forgets the remembered job type id. */
+export const resetMilestoneJobTypeMemo = (): void => { jobTypeMemo = null; };
+
+async function milestoneJobTypeIds(): Promise<string[]> {
+  if (jobTypeMemo && Date.now() - jobTypeMemo.at < JOB_TYPE_MEMO_MS) return jobTypeMemo.ids;
   const types = await fetchPage(
     "find the milestone Fabric job type",
     (o) => Vsb_fabricjobtypesService.getAll(o),
     { select: ["vsb_fabricjobtypeid"], filter: eq("vsb_name", FABRIC_JOB_TYPE_MILESTONES) },
   );
-  const typeFilter = or(...types.map((t) => lookupEq("vsb_jobtypeid", t.vsb_fabricjobtypeid)));
+  const ids = types.map((t) => t.vsb_fabricjobtypeid);
+  if (ids.length > 0 && JOB_TYPE_MEMO_MS > 0) jobTypeMemo = { at: Date.now(), ids };
+  return ids;
+}
+
+/**
+ * `Icon3.Visible` (Y:4180-4191): `!IsEmpty(Filter('Fabric Sync Jobs', 'Regarding Object' = project,
+ * 'Job Type'.Name = "Project Milestones changed", 'Job Status' in ['In Progress', Importing]))`.
+ * The job type is resolved by name first, then the jobs are filtered by its id.
+ */
+export async function isMilestoneRecalculationRunning(projectId: string): Promise<boolean> {
+  const typeIds = await milestoneJobTypeIds();
+  const typeFilter = or(...typeIds.map((id) => lookupEq("vsb_jobtypeid", id)));
   if (!typeFilter) return false;
   const jobs = await fetchPage(
     "check for a running milestone recalculation",

@@ -8,7 +8,7 @@
  */
 import { describe, expect, it } from "vitest";
 import {
-  CASCADE_DELETE_CONCURRENCY, createGate, DELETE_CONCURRENCY, forEachLimit, LEAF_DELETE_CONCURRENCY, mapLimit, WRITE_CONCURRENCY,
+  CASCADE_DELETE_CONCURRENCY, createGate, DELETE_CONCURRENCY, forEachLimit, LEAF_DELETE_CONCURRENCY, mapLimit, mapLimitFirstFailure, WRITE_CONCURRENCY,
 } from "./concurrency";
 
 /** Resolves on the next microtask, so tasks actually overlap. */
@@ -180,5 +180,44 @@ describe("createGate", () => {
       await Promise.all(Array.from({ length: 40 }, () => gate(tick)));
       expect(gate.peak()).toBe(limit);
     }
+  });
+});
+
+describe("mapLimitFirstFailure (OPT-10, OPT-11)", () => {
+  it("UT-CONC-017 returns results in input order and respects the limit", async () => {
+    let inFlight = 0;
+    let peak = 0;
+    const out = await mapLimitFirstFailure([3, 2, 1, 0, 5, 4], async (ms, i) => {
+      inFlight += 1; peak = Math.max(peak, inFlight);
+      await new Promise((r) => setTimeout(r, ms));
+      inFlight -= 1;
+      return i;
+    }, 3);
+    expect(out).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(peak).toBe(3);
+    expect(await mapLimitFirstFailure([], async () => 1)).toEqual([]);
+  });
+
+  it("UT-CONC-018 throws the error of the LOWEST failing INDEX even when a later one fails first in time", async () => {
+    await expect(mapLimitFirstFailure([1, 2, 3], async (n) => {
+      // index 0 fails late, index 1 fails at once: the sequential loop would have stopped at index 0.
+      await new Promise((r) => setTimeout(r, n === 1 ? 20 : 0));
+      if (n === 1) throw new Error("index 0");
+      if (n === 2) throw new Error("index 1");
+      return n;
+    }, 3)).rejects.toThrow("index 0");
+  });
+
+  it("UT-CONC-019 starts nothing after the first failure it sees and waits for the tasks in flight", async () => {
+    const started: number[] = [];
+    let finished = 0;
+    await expect(mapLimitFirstFailure(Array.from({ length: 10 }, (_, i) => i), async (n) => {
+      started.push(n);
+      await tick();
+      if (n === 1) throw new Error("boom");
+      finished += 1;
+    }, 2)).rejects.toThrow("boom");
+    expect(started.length).toBeLessThan(10);
+    expect(finished).toBe(started.length - 1);
   });
 });

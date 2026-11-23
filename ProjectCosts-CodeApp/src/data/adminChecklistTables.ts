@@ -32,10 +32,14 @@ import { Vsb_checklistcountryandtechnologiesService } from "@/generated/services
 import { Vsb_checklistdefaultapprovalsesService } from "@/generated/services/Vsb_checklistdefaultapprovalsesService";
 import { Vsb_projectdefaultchecklistsesService } from "@/generated/services/Vsb_projectdefaultchecklistsesService";
 import { fetchAll, guardedCall, guardedResult, updateRecordIfExists, type FetchAllOptions } from "./client";
+import { mapLimit } from "./concurrency";
 import { CHECKLIST_ENTITY_SETS } from "./dataverseNames";
 import { and, bindPath, chunk, eq, isNull, lookupEq, lookupIn, ne, or } from "./odata";
 
 /* ═══════════════════════════════════════════════════════════════ tables ══ */
+
+/** OPT-17(a): independent chunk reads in flight at once (as `READ_FAN_OUT` in `adminCapexAccounts.ts`). */
+const READ_FAN_OUT = 4;
 
 /** Global choice `vsb_approvalmode`. Only "Only Notifications" does NOT lock a task. */
 export const APPROVAL_MODE = { formal: 952850000, local: 952850001, onlyNotifications: 952850002 } as const;
@@ -61,9 +65,18 @@ export const APPROVAL_COLUMNS = [
 ] as const;
 
 /* ════════════════════════════════════════════════════════════════ models ══ */
+// OPT-08(c): the narrow column list for Check List Settings' "locked by a Project Gate" read is `LOCK_COLUMNS` below.
 // Row types are the generated models. Notes that still apply: the header `vsb_order` is a TEXT
 // column (sorted numerically by the screen); the technology column is `vsb_technology`, NOT
 // `…code`; the approvals JSON columns are `…approvers`, not `…approvals` (max 1000 chars).
+
+/**
+ * OPT-08(c): the only columns Check List Settings' "locked by a Project Gate" read keeps (`loadLockedTaskIds` uses `checklistId` and
+ * `mode`; the id is the row key). The default superset above also pulls three JSON columns of up to 1000 characters per row.
+ */
+export const LOCK_COLUMNS = [
+  "vsb_checklistdefaultapprovalsid", "_vsb_projectdefaultchecklistid_value", "vsb_approvalmodecode",
+] as const;
 
 export interface DefaultChecklist {
   id: string;
@@ -275,10 +288,15 @@ export function createChecklistTablesRepository(): ChecklistTablesRepository {
       );
       let rows: ChecklistApprovalRow[];
       if (options.checklistIds) {
-        rows = [];
-        for (const ids of chunk(options.checklistIds)) {
-          rows.push(...await approvals.list({ select, filter: filterFor(ids) }, options.operation));
-        }
+        // OPT-17(a): the chunk reads are independent, so they go out together (at most READ_FAN_OUT at a time) instead of one
+        // after another; `mapLimit` returns the chunks IN INPUT ORDER, so the concatenated rows are identical to the old loop.
+        // The first failing chunk still rejects the whole read.
+        const batches = await mapLimit(
+          chunk(options.checklistIds),
+          (ids) => approvals.list({ select, filter: filterFor(ids) }, options.operation),
+          READ_FAN_OUT,
+        );
+        rows = batches.flat();
       } else {
         rows = await approvals.list({ select, filter: filterFor() }, options.operation);
       }

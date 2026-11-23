@@ -217,6 +217,9 @@ async function loadCostsForContracts(contractIds: readonly string[]): Promise<Ex
         {
           select: ["vsb_capexcostid", "_vsb_contract_value", "vsb_year", "vsb_month", "vsb_cost"],
           filter: and(lookupIn("vsb_contract", ids), ACTIVE),
+          // B2 (OPT-08a): the only change to this tuned read (D51): five narrow columns at the platform's page ceiling, so a
+          // big category's cost rows come in one request per chunk instead of one per 500 rows. Same rows, same order.
+          maxPageSize: 5000,
         },
       ),
     ),

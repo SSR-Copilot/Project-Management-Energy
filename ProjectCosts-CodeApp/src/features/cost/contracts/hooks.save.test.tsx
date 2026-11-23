@@ -53,8 +53,10 @@ describe("useSaveContract", () => {
     });
     expect(caught).toBeInstanceOf(ContractLinksError);
     expect((caught as ContractLinksError).contractId).toBe("c-new");
-    // The three contract caches (contracts, payment targets, DevCo links) were invalidated although the save failed.
-    expect(invalidate).toHaveBeenCalledTimes(3);
+    // B2 (OPT-12): the two caches a save can change (contracts, DevCo links) were invalidated although the save failed; the
+    // payment targets were not (it was three before: a save never writes or removes a payment target).
+    expect(invalidate).toHaveBeenCalledTimes(2);
+    expect(invalidate.mock.calls.map(([f]) => f?.queryKey?.[0]).sort()).toEqual(["contracts", "devCoLinks"]);
   });
 
   it("UT-CONTR-171 a failed contract write also refreshes the lists, and never touches the links", async () => {
@@ -65,7 +67,8 @@ describe("useSaveContract", () => {
       await result.current.mutateAsync({ write: write(), accounts: [] }).catch(() => undefined);
     });
     expect(repo.replaceDevCoLinks).not.toHaveBeenCalled();
-    expect(invalidate).toHaveBeenCalledTimes(3);
+    // B2 (OPT-12): 3 before; no payment-target refetch after a save.
+    expect(invalidate).toHaveBeenCalledTimes(2);
   });
 
   it("UT-CONTR-172 a Project Rights contract writes no links (canvas :3744-3801), a Development one passes the id and mode", async () => {
@@ -92,7 +95,9 @@ describe("the delete hooks", () => {
     const { wrapper, invalidate } = setup();
     const { result } = renderHook(() => useDeleteContract(PROJECT), { wrapper });
     await act(async () => { await result.current.mutateAsync("c-1").catch(() => undefined); });
+    // A DELETE still refreshes all three: the contract's payment targets go with it (OPT-12 changes the save only).
     expect(invalidate).toHaveBeenCalledTimes(3);
+    expect(invalidate.mock.calls.map(([f]) => f?.queryKey?.[0]).sort()).toEqual(["contracts", "devCoLinks", "paymentTargets"]);
   });
 
   it("UT-CONTR-174 a failed payment-target delete refreshes the payment targets", async () => {

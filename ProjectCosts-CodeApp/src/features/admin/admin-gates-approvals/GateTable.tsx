@@ -19,7 +19,7 @@
  * `canEdit` (admin access): without it the status pills, Add Task and Delete are disabled; Edit
  * stays enabled so the approvers can still be read in the panel.
  */
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import {
   Button, makeStyles, mergeClasses, Table, TableBody, TableCell, TableHeader,
   TableHeaderCell, TableRow, Text, Tooltip, tokens,
@@ -29,8 +29,8 @@ import { DisabledReason, ExpandToggle, ExpandToggleSpacer, RowActions, StatusPil
 import { palette, space } from "@/theme/tokens";
 import type { GatesDataset } from "@/data/adminGatesApprovals";
 import {
-  canAddTask, isGateToggleLocked, LABELS, NO_PERMISSION_MESSAGE, parsePeople, participantCell, pmCell,
-  taskNotificationsCell, tasksOfGate, type GateRow, type ParticipantCell, type TaskRow,
+  buildTaskIndex, createPeopleParser, isGateToggleLocked, LABELS, NO_PERMISSION_MESSAGE, participantCell, pmCell,
+  taskNotificationsCell, type GateRow, type ParticipantCell, type TaskRow,
 } from "./rules";
 
 /**
@@ -203,16 +203,21 @@ export function GateTable(props: GateTableProps) {
   const styles = useStyles();
   const { rows, dataset, canEdit, collapsed, isPending } = props;
   const tasksAvailable = !dataset.checklistError;
+  // OPT-27(a): the task rows, the Add Task gate and the parsed participant lists are derived once per dataset, not per row per render.
+  const { taskIndex, parsePeople } = useMemo(
+    () => ({ taskIndex: buildTaskIndex(dataset), parsePeople: createPeopleParser() }),
+    [dataset],
+  );
 
   const body: ReactNode[] = [];
   for (const row of rows) {
-    const tasks = tasksOfGate(dataset, row.state);
+    const tasks = taskIndex.tasksOf(row.state);
     const isCollapsed = collapsed.has(row.order);
     const t = row.template;
     const contributors = parsePeople(t?.contributors);
     const approvers = parsePeople(t?.approvals);
     const notifications = parsePeople(t?.notifications);
-    const addEnabled = tasksAvailable && canAddTask(dataset, row.state);
+    const addEnabled = tasksAvailable && taskIndex.canAdd(row.state);
 
     /** The gate row's stable id: its `Project States` row (a placeholder has no template id). */
     const gid = row.state.id;

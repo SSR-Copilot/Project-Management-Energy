@@ -725,6 +725,8 @@ export function planChecklistMaterialisation(
   const plan = emptyPlan();
   const creates: PlannedWrite[] = [];
   const bulkRows: { id: string; data: Record<string, unknown> }[] = [];
+  // OPT-30 (S4-11): the bulk rows (and their ids) exist only for the bulk path; the shipped single-create path never built a use for them.
+  const bulkPath = opts.bulk === true && Boolean(ctx.owningBusinessUnitId);
   for (const t of templates) {
     const data: Record<string, unknown> = {
       [CHECKLIST_COL.name]: t.name,
@@ -747,12 +749,12 @@ export function planChecklistMaterialisation(
       op: "create", entitySet: ES.projectChecklists, data,
       reason: `Checklist task “${t.name}” created from the default template`,
     });
-    bulkRows.push({ id: (opts.newId ?? newRowId)(), data });
+    if (bulkPath) bulkRows.push({ id: (opts.newId ?? newRowId)(), data });
   }
   // D138 (B1), behind `CHECKLIST_BULK.materialise`: the same rows as ONE `CreateMultiple` step. Only for a project with an
   // Owning Business Unit (the bulk backend refuses a create without the bind, where the single creates would have gone out without it:
   // such a project keeps the single creates, so nothing changes for it).
-  if (opts.bulk === true && ctx.owningBusinessUnitId && bulkRows.length > 0) {
+  if (bulkPath && bulkRows.length > 0) {
     plan.writes.push(createMany(
       ES.projectChecklists, bulkRows, `${bulkRows.length} checklist task(s) created from the default templates`,
     ));

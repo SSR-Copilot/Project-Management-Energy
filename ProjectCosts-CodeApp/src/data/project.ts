@@ -15,6 +15,7 @@ import { Vsb_projectstatesService } from "@/generated/services/Vsb_projectstates
 import { EnvironmentvariablevaluesService } from "@/generated/services/EnvironmentvariablevaluesService";
 import { EnvironmentvariabledefinitionsService } from "@/generated/services/EnvironmentvariabledefinitionsService";
 import { unwrap } from "@/platform/errors";
+import { trace } from "@/platform/telemetry";
 import { fetchAll } from "./client";
 import { ACTIVE, and, or, eq, guid } from "./odata";
 import type { ProjectContext } from "@/features/cost/contracts/rules";
@@ -128,7 +129,37 @@ function optionSetNumber(value: unknown): number | undefined {
   return undefined;
 }
 
-export async function loadProject(projectId: string): Promise<ProjectContext | undefined> {
+/**
+ * OPT-01 (B5b), the reversible switch. OLD `false`: every route's session load read the project row, then its country, cluster
+ * state and area (4 requests, 2 round trips deep). NEW `true`: a Project Management route (`scope: "pm"`) reads the project row
+ * only (1 request) and takes the cluster-state NAME from the row's own formatted-value annotation. `/costs/*` always keeps the
+ * full load. `false` restores the full load for every route.
+ */
+export const PM_ROW_ONLY_PROJECT_LOAD = true;
+/** The switch as an object, so a test can turn it off without re-importing the module (like `startupFlags`). */
+export const projectLoadSwitch = { pmRowOnly: PM_ROW_ONLY_PROJECT_LOAD };
+
+/**
+ * Which part of the project a caller needs. `"full"` (the Cost routes) adds the country, the area and the cluster state's `Order`.
+ * `"pm"` is what the Project Management header and gate read: name, code, approval state, cluster-state name (see `ProjectContext`).
+ */
+export type ProjectLoadScope = "full" | "pm";
+
+/**
+ * One row of the shared `'Project States'` list (`data/projectStates.ts`), as the session loader needs it. `orderRaw` is the stored
+ * `vsb_order` or null: NOT the list's `order`, which maps null to 0, so a state with no `Order` still reads as "no order".
+ */
+export type ProjectStateLookup = (stateId: string) => Promise<{ name: string; orderRaw: number | null } | undefined>;
+
+export interface LoadProjectOptions {
+  scope?: ProjectLoadScope;
+  /** OPT-07d: answers the cluster-state lookup from the shared list. Absent, or a state it does not hold: the single-row read. */
+  stateLookup?: ProjectStateLookup;
+}
+
+const CLUSTER_STATE_NAME = "_vsb_clusterstate_value@OData.Community.Display.V1.FormattedValue";
+
+export async function loadProject(projectId: string, options: LoadProjectOptions = {}): Promise<ProjectContext | undefined> {
   const rows = await fetchAll(
     "load project",
     (o) => Vsb_projectsService.getAll(o),
@@ -181,12 +212,33 @@ export async function loadProject(projectId: string): Promise<ProjectContext | u
   const countryId = row._vsb_country_value;
   const clusterStateId = row._vsb_clusterstate_value;
   const countryAreaId = row._vsb_countryarea_value;
-  const [{ isoCurrencyCode, countryName } = {}, { clusterStateOrder, clusterStateName } = {}, areaStateProvince] =
-    await Promise.all([
+  let isoCurrencyCode: string | undefined;
+  let countryName: string | undefined;
+  let clusterStateOrder: number | undefined;
+  let clusterStateName: string | undefined;
+  let areaStateProvince: string | undefined;
+  if (options.scope === "pm" && projectLoadSwitch.pmRowOnly) {
+    /*
+     * OPT-01: a Project Management route needs only the header's state NAME, which the row already carries as the lookup's
+     * formatted-value annotation (every read sends `odata.include-annotations=*`, D119 F6). A row that has a cluster state but
+     * no annotation falls back to the lookup, so the header never shows a blank or wrong state. Country, area and the state's
+     * `Order` are Cost-only (no Project Management consumer reads them) and are left out.
+     */
+    const annotated = (row as unknown as Record<string, unknown>)[CLUSTER_STATE_NAME];
+    clusterStateName = typeof annotated === "string" && annotated !== "" ? annotated : undefined;
+    if (!clusterStateName && clusterStateId) clusterStateName = (await loadClusterState(clusterStateId, options.stateLookup))?.clusterStateName;
+  } else {
+    const [country, state, area] = await Promise.all([
       countryId ? loadCountry(countryId) : undefined,
-      clusterStateId ? loadClusterState(clusterStateId) : undefined,
+      clusterStateId ? loadClusterState(clusterStateId, options.stateLookup) : undefined,
       countryAreaId ? loadCountryAreaName(countryAreaId) : undefined,
     ]);
+    isoCurrencyCode = country?.isoCurrencyCode;
+    countryName = country?.countryName;
+    clusterStateOrder = state?.clusterStateOrder;
+    clusterStateName = state?.clusterStateName;
+    areaStateProvince = area;
+  }
 
   return {
     projectId: row.vsb_projectid,
@@ -212,6 +264,9 @@ export async function loadProject(projectId: string): Promise<ProjectContext | u
     clusterStateOrder,
     ...(clusterStateName ? { clusterStateName } : {}),
     totalCapacity: row.vsb_totalcapacity ?? undefined,
+    // OPT-02 (B8): the two facts `loadProjectExtras` re-read from this same row, in BOTH scopes (they are row columns, no request).
+    countryId,
+    technology: typeof row.vsb_technology === "number" ? row.vsb_technology : undefined,
     owningBusinessUnitId: row._owningbusinessunit_value,
     isoCurrencyCode,
     countryName,
@@ -298,7 +353,26 @@ async function loadCountryAreaName(countryAreaId: string): Promise<string | unde
  */
 async function loadClusterState(
   clusterStateId: string,
+  stateLookup?: ProjectStateLookup,
 ): Promise<{ clusterStateOrder?: number; clusterStateName?: string } | undefined> {
+  /*
+   * OPT-07d: the shared 10-row `'Project States'` entry (30 min) answers when it can. Same result as the single-row read below:
+   * the list holds inactive rows too (as a GET by id does), `orderRaw` is the stored `Order` or null (never the list's 0), and a
+   * blank name is left out. A state the list does not hold, or a list that cannot be read, falls back to the single-row read.
+   */
+  if (stateLookup) {
+    try {
+      const state = await stateLookup(clusterStateId);
+      if (state) {
+        return {
+          ...(typeof state.orderRaw === "number" && Number.isFinite(state.orderRaw) ? { clusterStateOrder: state.orderRaw } : {}),
+          ...(state.name ? { clusterStateName: state.name } : {}),
+        };
+      }
+    } catch (error) {
+      trace("warning", "project state list unavailable; reading the project's cluster state on its own", { error });
+    }
+  }
   const result = await Vsb_projectstatesService.get(clusterStateId, {
     select: ["vsb_projectstateid", "vsb_order", "vsb_name"],
   });

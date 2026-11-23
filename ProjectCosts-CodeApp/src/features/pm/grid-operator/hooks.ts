@@ -30,6 +30,7 @@ import type { ScreenData } from "@/data/notConnected";
 import { usePlanWrite } from "@/data/usePlanWrite";
 import { loadPlanningProject } from "@/data/planning";
 import { loadGridOperator } from "@/data/gridOperator";
+import { gridOperatorReloadKeys } from "./reload";
 import type { GridOperatorProject, GridOperatorRecord } from "./rules";
 
 /** The entity sets this screen reads and writes. */
@@ -64,7 +65,8 @@ export function useGridOperator(projectId: string | undefined): ScreenData<GridO
 /** Runs the Save job from `rules.ts` and re-reads the row. */
 export function useGridOperatorWrites(projectId: string | undefined) {
   return usePlanWrite({
-    invalidate: [qk.gridOperatorAll(projectId ?? "")],
+    // OPT-13: only the query that reads `vsb_gridoperators` (see `reload.ts`); the project is not re-read.
+    invalidate: gridOperatorReloadKeys(projectId),
     action: "change this project's grid operator data",
   });
 }

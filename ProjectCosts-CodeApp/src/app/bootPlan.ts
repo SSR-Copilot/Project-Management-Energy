@@ -6,8 +6,9 @@
  * (`Landing` and the route table in `routes.tsx`), but a wrong answer costs nothing but a wasted
  * prefetch: the screen that really mounts reads its own queries and retries a failed one.
  */
-import { launchPmPath } from "./deepLinks";
+import { COST_PATHS, launchCostPath, launchPmPath, type CostPath } from "./deepLinks";
 import { readProjectLink } from "@/platform/powerClient";
+import type { ProjectLoadScope } from "@/data/project";
 
 export type BootTarget =
   /** The Main Project Overview, with the criteria its URL carries (a `?…` string, or ""). */
@@ -16,7 +17,17 @@ export type BootTarget =
   | { kind: "general-data"; projectId: string }
   /** `/project/generators?projectId=…` — the Generators screen of an existing project (D141). */
   | { kind: "generators"; projectId: string }
+  /** OPT-03: `/project/<slug>?projectId=…` for a Project Management screen the targets above do not name (its slug is the route's). */
+  | { kind: "pm-screen"; projectId: string; slug: PmBootSlug }
+  /** OPT-03: a Cost screen of an existing project, from `/costs/…?projectId=…` or the bare root with a project id. */
+  | { kind: "cost"; projectId: string; path: CostPath }
   | { kind: "none" };
+
+/** The PM routes (`routes.tsx`) other than General Data and Generators, which have targets of their own. */
+export const PM_BOOT_SLUGS = [
+  "milestones", "production", "checklist", "team", "planning", "grid-operator", "revenues", "finance",
+] as const;
+export type PmBootSlug = (typeof PM_BOOT_SLUGS)[number];
 
 export interface BootInput {
   /** `window.location.hash`, e.g. `#/projects?p=2`, or "". */
@@ -52,9 +63,10 @@ export function bootTarget(input: BootInput): BootTarget {
     const link = readProjectLink(input.launchParams, input.windowSearch, search);
     if (link.status === "invalid") return { kind: "none" };
     if (link.status === "missing") return { kind: "projects", search: "" };
+    // OPT-03: a valid project id with no PM launch leads to the Cost module (`Landing`), so its screen and session project start now.
     return launchPmPath(input.launchParams, input.windowSearch) === "/project/general"
       ? { kind: "general-data", projectId: link.projectId }
-      : { kind: "none" };
+      : { kind: "cost", projectId: link.projectId, path: launchCostPath(input.launchParams, input.windowSearch) };
   }
 
   if (path === "/projects") return { kind: "projects", search };
@@ -71,5 +83,27 @@ export function bootTarget(input: BootInput): BootTarget {
     return link.status === "valid" ? { kind: "generators", projectId: link.projectId } : { kind: "none" };
   }
 
+  const slug = path.startsWith("/project/") ? path.slice("/project/".length) : "";
+  if ((PM_BOOT_SLUGS as readonly string[]).includes(slug)) {
+    // A PM route reads the project from the ROUTE only, as above; none is the locked New Project mode (no reads).
+    const link = readProjectLink({}, undefined, search);
+    return link.status === "valid" ? { kind: "pm-screen", projectId: link.projectId, slug: slug as PmBootSlug } : { kind: "none" };
+  }
+
+  if ((COST_PATHS as readonly string[]).includes(path)) {
+    // The cost routes read the project from the route, then the launch parameters, then the player URL (`SessionContext`).
+    const link = readProjectLink(input.launchParams, input.windowSearch, search);
+    return link.status === "valid" ? { kind: "cost", projectId: link.projectId, path: path as CostPath } : { kind: "none" };
+  }
+
   return { kind: "none" };
+}
+
+/**
+ * OPT-01 (B5b): which part of the project the route needs. A Project Management route (`/project/*`) reads the row only; the Cost
+ * routes and everything else keep the full load. `"/"` is a PM route when the launch says so (`Edit Project`: `pmScreen` +
+ * `projectId`), because `Landing` then redirects to a PM screen.
+ */
+export function sessionProjectScope(pathname: string, launchesPmScreen: boolean): ProjectLoadScope {
+  return pathname.startsWith("/project/") || (pathname === "/" && launchesPmScreen) ? "pm" : "full";
 }

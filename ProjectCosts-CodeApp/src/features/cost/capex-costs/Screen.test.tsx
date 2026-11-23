@@ -155,9 +155,12 @@ vi.mock("@/app/SessionContext", () => ({
 let onAction: GridCallback = () => {};
 /** CA-16 — the `writeActionsDisabled` the grid was last rendered with. */
 let gridWriteActionsDisabled: boolean | undefined;
+/** OPT-25 - the `accounts` prop of every grid render (identity is what a memoised grid can rely on). */
+const gridAccountsSeen: (unknown[] | undefined)[] = [];
 vi.mock("./PcfGrid", () => ({
-  PcfGrid: (props: { onAction: GridCallback; writeActionsDisabled?: boolean; standardOptions?: { id: string; subaccountId: string }[] }) => {
+  PcfGrid: (props: { onAction: GridCallback; writeActionsDisabled?: boolean; standardOptions?: { id: string; subaccountId: string }[]; accounts?: unknown[] }) => {
     onAction = props.onAction;
+    gridAccountsSeen.push(props.accounts);
     gridStandardOptions = props.standardOptions ?? [];
     gridWriteActionsDisabled = props.writeActionsDisabled;
     return <div data-testid="pcf-grid" />;
@@ -253,6 +256,7 @@ beforeEach(() => {
   totalsLoading = false;
   writeInFlight = false;
   gridWriteActionsDisabled = undefined;
+  gridAccountsSeen.length = 0;
   capexWriteOptions = undefined;
   vi.clearAllMocks();
   document.querySelectorAll('[data-testid="open-add"]').forEach((n) => n.remove());
@@ -1505,5 +1509,16 @@ describe("confirmation dialog dimensions", () => {
     expect(screen.getByText(MSG.deleteTitle)).toBeInTheDocument();
     expect(surface().style.height).toBe("");
     expect(band().style.height).toBe("");
+  });
+});
+
+describe("grid inputs stay put while the panel is typed in (OPT-25)", () => {
+  it("UT-CAPEX-OPT-001 a panel keystroke re-renders the screen but hands the grid the SAME accounts array", () => {
+    mountAndOpen();
+    const before = gridAccountsSeen.length;
+    touchPanel(); touchPanel(); touchPanel();
+    // Old: a fresh `accountsInCategory(...)` array on every one of these renders (so the grid's `gridRows` memo was dead).
+    expect(gridAccountsSeen.length).toBeGreaterThan(before);
+    expect(new Set(gridAccountsSeen).size).toBe(1);
   });
 });

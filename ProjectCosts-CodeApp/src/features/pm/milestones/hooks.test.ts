@@ -48,7 +48,8 @@ describe("loadRevenueSeed (Fabric SQL connected, 28 Oct 2026)", () => {
   it("UT-MSTONE-SEED-001 a Draft project with no contract seeds one from the Fabric rows, EUR and the first subaccount", async () => {
     const seed = await loadRevenueSeed(PROJECT, PROJECT.dates);
     expect(m.listRevenueAssumptions).toHaveBeenCalledWith("Germany");
-    expect(m.findCurrency).toHaveBeenCalledWith("EUR");
+    // OPT-07b (S3-09): the seed asks for EUR with the server-side code filter (BEFORE: `findCurrency("EUR")`, the whole table).
+    expect(m.findCurrency).toHaveBeenCalledWith("EUR", { onlyThisCode: true });
     expect(seed.fabricFailed).toBe(false);
     expect(seed.draft?.derived.description).toBe("Standard EEG Germany");
     expect(seed.draft?.derived.price).toBe(80);

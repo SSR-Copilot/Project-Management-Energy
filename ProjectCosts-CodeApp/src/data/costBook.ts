@@ -29,8 +29,7 @@
  *
  *     **The Land Lease queries are NOT here.** `./landLease.ts` is the app's single Land Lease
  *     reader — the Land Lease screen needs the raw rows, not this flattening — and
- *     `loadLandLeasePeriods` / `loadLandLeaseContracts` / `loadLandLeaseCostFlags` below all read
- *     through it. That is deliberate: this file used to issue a SECOND, narrower set of Land
+ *     `loadLandLeasePeriods` below reads through it. That is deliberate: this file used to issue a SECOND, narrower set of Land
  *     Lease queries with its own mapping, and that second mapping was the lossy one (see
  *     `mapLandLeasePeriodRow`).
  *
@@ -56,7 +55,6 @@
  *     which left the WTG picker with no options and `canSaveLandLease`'s PV/Wind allocation
  *     clause satisfiable only by "allocate to all".
  */
-import { Vsb_capexaccountlistsService } from "@/generated/services/Vsb_capexaccountlistsService";
 import { Vsb_capexprojectcontractsService } from "@/generated/services/Vsb_capexprojectcontractsService";
 import { Vsb_capexcostsService } from "@/generated/services/Vsb_capexcostsService";
 import { Vsb_spvdevcomappingcapexdevexesService } from "@/generated/services/Vsb_spvdevcomappingcapexdevexesService";
@@ -65,8 +63,6 @@ import { Vsb_opexprojectcostsService } from "@/generated/services/Vsb_opexprojec
 import { Vsb_devicetypesinprojectsService } from "@/generated/services/Vsb_devicetypesinprojectsService";
 import { Vsb_projectstatesService } from "@/generated/services/Vsb_projectstatesService";
 import { Vsb_milestonesstandardassumptionsesService } from "@/generated/services/Vsb_milestonesstandardassumptionsesService";
-import { Vsb_countryinflationprofilesService } from "@/generated/services/Vsb_countryinflationprofilesService";
-import { TransactioncurrenciesService } from "@/generated/services/TransactioncurrenciesService";
 import {
   CATEGORIES, type CostAccount, type CostBook, type CostLine, type CostPeriod,
   type Payment, type PeriodMode,
@@ -80,6 +76,8 @@ import type {
 } from "@/features/cost/periods/landLeaseRules";
 import { loadLeaseBook } from "./landLease";
 import { fetchAll } from "./client";
+import { loadCapexChartRows } from "./capexChart";
+import { loadAllCurrencies } from "./currencies";
 import { ACTIVE, and, chunk, eq, idIn, lookupEq, lookupIn, money, numberOf } from "./odata";
 import { CHOICE_COST } from "./dataverseNames";
 import {
@@ -207,47 +205,6 @@ const CAPEX_ROOT_NUMBER = "00001";
  * See `CostPeriod`'s five money fields: the canvas writes `Value(txt.Value)` and `Value("")` is
  * `Blank()`, so an unset column is unset and coalescing it to `0` invents a stored figure.
  */
-/**
- * The Land Lease `Allocation` / `OTP` columns, read off `Vsb_landleaseprojectcosts` (the
- * "Land Lease Project Cost" header a period's `Project Cost` lookup points at).
- *
- * `LandLeaseCostScreenCode.txt` (~6,132 ln): each period row looks up its header —
- * `LookUp(colLandLeaseProjectCosts, 'Land Lease Project Cost' = ThisItem.'Project Cost'.'Land
- * Lease Project Cost')` — and reads two things off it:
- *
- *   Allocation  :1058  `If(varLandLeaseCost.AllWTGAllocated, "Yes", "No")`
- *   OTP         :1010  `If(Not(IsBlank(Due Date One-Time Payment)) &&
- *                           Not(IsBlank(Amount One-Time Payment)), "Yes", "No")`
- *
- * so this is keyed by `vsb_landleaseprojectcostid` — the same id a period's
- * `_vsb_projectcost_value` carries — for `toPeriodRow` (by way of `CostPeriod.allWtgAllocated`
- * / `hasOneTimePayment`) to join against once a period is loaded.
- *
- * `loadLandLeasePeriods` now performs that join itself, off a header query that reads the same
- * columns plus the ones the periods need (currency, inflation, Secured). This stays as the
- * standalone read for a caller that wants only the flags — `costRepository.getLandLeaseCostFlags`
- * — and as the place the two Yes/No rules are written down once.
- */
-export interface LandLeaseCostFlags {
-  allWtgAllocated: boolean;
-  hasOneTimePayment: boolean;
-}
-
-export async function loadLandLeaseCostFlags(
-  projectId: string,
-): Promise<Map<string, LandLeaseCostFlags>> {
-  // Through the one Land Lease reader (`./landLease.ts`), like every other Land Lease read here.
-  const { costs } = await loadLeaseBook(projectId);
-  const out = new Map<string, LandLeaseCostFlags>();
-  for (const c of costs) {
-    out.set(c.id, {
-      allWtgAllocated: c.allWtgAllocated,
-      hasOneTimePayment: c.dueDateOneTimePayment != null && c.amountOneTimePayment != null,
-    });
-  }
-  return out;
-}
-
 /* ═══════════════════════════════════════════════════════════════ periods ══ */
 
 /** A device-type / sub-account / location name the loader could not resolve. Visible, not lost. */
@@ -279,24 +236,6 @@ export const LAND_LEASE_SECURED = { yes: 952850000, no: 952850001 } as const;
  */
 function byCanvasOrder(a: CostPeriod, b: CostPeriod): number {
   return a.description.localeCompare(b.description) || a.startDate.localeCompare(b.startDate);
-}
-
-/**
- * `transactioncurrencyid` -> `currencyname`, for the two period tables' `vsb_currency` lookup.
- *
- * A second narrow query rather than `$expand` — the SDK ceiling documented on `loadProjectStates`.
- * Returns an empty Map when nothing references a currency, so a project with no periods pays
- * nothing. Deliberately UNFILTERED by `statecode`: a period that points at a currency somebody
- * has since deactivated should still show the name it was saved with, not an empty cell.
- */
-async function loadCurrencyNames(ids: readonly string[]): Promise<Map<string, string>> {
-  if (ids.length === 0) return new Map();
-  const rows = await fetchAll(
-    "list transaction currencies for periods",
-    (o) => TransactioncurrenciesService.getAll(o),
-    { select: ["transactioncurrencyid", "currencyname"] },
-  );
-  return new Map(rows.map((r) => [r.transactioncurrencyid, r.currencyname ?? ""]));
 }
 
 interface OpexCostRow {
@@ -520,6 +459,21 @@ export function mapLandLeasePeriodRow(
 
 /** O&M and Other OPEX — both `vsb_opexprojectcosts`, split by whether a device type is set. */
 async function loadOpexPeriods(projectId: string): Promise<CostPeriod[]> {
+  /*
+   * B2 (OPT-06): the sub-account names and the currency names do not depend on the cost rows, so their reads START WITH the
+   * rows (t = 0) instead of after them; only the device names need the rows' ids and stay second. Two waves, not three.
+   * They are speculative when the project has no OPEX rows (nothing is rendered from them then), so a failure of an unused
+   * read is swallowed here and only surfaces when its answer is awaited below, exactly as before.
+   */
+  const subaccountsRead = fetchAll(
+    "list OPEX subaccounts",
+    (o) => Vsb_opexsubaccountsService.getAll(o),
+    { select: ["vsb_opexsubaccountid", "vsb_name"], filter: ACTIVE },
+  );
+  const currenciesRead = loadAllCurrencies();
+  subaccountsRead.catch(() => undefined);
+  currenciesRead.catch(() => undefined);
+
   const costRows = await fetchAll(
     "list OPEX project costs",
     (o) => Vsb_opexprojectcostsService.getAll(o),
@@ -541,17 +495,10 @@ async function loadOpexPeriods(projectId: string): Promise<CostPeriod[]> {
   );
   if (costRows.length === 0) return [];
 
-  const currencyIds = [...new Set(
-    costRows.map((r) => r._vsb_currency_value).filter((v): v is string => Boolean(v)),
-  )];
-  const [subaccounts, currencyName] = await Promise.all([
-    fetchAll(
-      "list OPEX subaccounts",
-      (o) => Vsb_opexsubaccountsService.getAll(o),
-      { select: ["vsb_opexsubaccountid", "vsb_name"], filter: ACTIVE },
-    ),
-    loadCurrencyNames(currencyIds),
-  ]);
+  const [subaccounts, currencies] = await Promise.all([subaccountsRead, currenciesRead]);
+  // `transactioncurrencyid` -> `currencyname`, UNFILTERED by `statecode`: a period that points at a currency somebody has
+  // since deactivated still shows the name it was saved with, not an empty cell.
+  const currencyName = new Map(currencies.map((c) => [c.id, c.name]));
   const subaccountName = new Map(subaccounts.map((s) => [s.vsb_opexsubaccountid, s.vsb_name ?? ""]));
 
   const deviceIds = [...new Set(
@@ -641,66 +588,6 @@ async function loadLandLeasePeriods(
   return { periods, extraGroups };
 }
 
-/**
- * Every Land Lease CONTRACT on the project — one entry per `vsb_landleaseprojectcosts` header.
- *
- * A sub-account card lists periods from every contract under it (the canvas gallery is a flat
- * `Filter(colLandLeasePeriods, 'Project Cost' in <the sub-account's costs>)`), and a header with
- * NO periods yet is invisible in that list — measured on Project New Data, 16 Sep, 19 of its 27
- * headers have no period row at all. The screen needs them anyway, to offer "Add Period" on a
- * contract type that was created and never filled in, so they are returned separately rather
- * than faked as periods.
- */
-export interface LandLeaseContract {
-  id: string;
-  group: string;
-  name: string;
-  standard: boolean;
-  secured: boolean;
-  allWtgAllocated: boolean;
-  hasOneTimePayment: boolean;
-}
-
-export async function loadLandLeaseContracts(projectId: string): Promise<LandLeaseContract[]> {
-  // Through the one Land Lease reader, for the reason `loadLandLeasePeriods` gives.
-  const book = await loadLeaseBook(projectId);
-  const subaccountName = new Map(book.subaccounts.map((s) => [s.id, s.name]));
-  return book.costs.map((h) => ({
-    id: h.id,
-    group: subaccountName.get(h.subaccountId ?? "") || UNASSIGNED.land,
-    name: h.description,
-    standard: h.isStandardContract,
-    secured: h.secured === LAND_LEASE_SECURED.yes,
-    allWtgAllocated: h.allWtgAllocated,
-    hasOneTimePayment:
-      h.dueDateOneTimePayment != null && h.amountOneTimePayment != null,
-  }));
-}
-
-/**
- * The `Inflation Country Area` choices for a project's country.
- *
- * `Distinct(Filter('Country Inflation Profiles', Country.Country = gblSelectedProject.Country
- * .Country).Area, Area)` — `OpexCostScreenCode.txt:7622`, the dropdown that feeds the
- * `vsb_inflationcountryarea` TEXT column. Sorted so the list is stable between renders; the
- * canvas' `Distinct` has no order of its own.
- */
-export async function loadCountryInflationAreas(
-  countryId: string | undefined,
-): Promise<string[]> {
-  if (!countryId) return [];
-  const rows = await fetchAll(
-    "list country inflation areas",
-    (o) => Vsb_countryinflationprofilesService.getAll(o),
-    {
-      select: ["vsb_countryinflationprofileid", "vsb_area"],
-      filter: and(lookupEq("vsb_country", countryId), ACTIVE),
-    },
-  );
-  return [...new Set(rows.map((r) => r.vsb_area ?? "").filter(Boolean))]
-    .sort((a, b) => a.localeCompare(b));
-}
-
 /** Every O&M / Other OPEX / Land Lease period on the project, plus Land Lease's extra groups. */
 async function loadPeriods(
   projectId: string,
@@ -751,17 +638,8 @@ const EXCLUDED_CATEGORY_NAME = "Overleveraging";
  * and default to `CATEGORIES`: wiring is a one-line change in `Screen.tsx`.
  */
 export async function loadCapexCategories(): Promise<string[]> {
-  const rows = await fetchAll(
-    "list CAPEX account categories",
-    (o) => Vsb_capexaccountlistsService.getAll(o),
-    {
-      select: [
-        "vsb_capexaccountlistid", "vsb_number", "vsb_name", "vsb_order",
-        "_vsb_parentaccount_value",
-      ],
-      filter: ACTIVE,
-    },
-  );
+  // B2 (OPT-07c): the one shared chart read (`./capexChart`), not a read of its own.
+  const rows = await loadCapexChartRows();
   const rootId = rows.find((r) => r.vsb_number === CAPEX_ROOT_NUMBER)?.vsb_capexaccountlistid;
   if (!rootId) return [];
   return rows
@@ -774,17 +652,8 @@ export async function loadCapexCategories(): Promise<string[]> {
 }
 
 export async function loadCostAccounts(): Promise<CostAccount[]> {
-  const rows = await fetchAll(
-    "list CAPEX accounts for the cost book",
-    (o) => Vsb_capexaccountlistsService.getAll(o),
-    {
-      select: [
-        "vsb_capexaccountlistid", "vsb_number", "vsb_name", "vsb_order",
-        "_vsb_parentaccount_value",
-      ],
-      filter: ACTIVE,
-    },
-  );
+  // B2 (OPT-07c): the one shared chart read (`./capexChart`), not a read of its own.
+  const rows = await loadCapexChartRows();
 
   interface Node { id: string; number: string; name: string; order: number }
   const childrenOf = new Map<string, Node[]>();
@@ -1022,7 +891,17 @@ export function contractLabel(
 export async function loadCostLines(
   projectId: string,
   accountIds: readonly string[],
-  payerDefaults: ReadonlyMap<string, "DevCo" | "SPV"> = new Map(),
+  /**
+   * The default payer per sub-account. B2 (OPT-05): a promise is accepted and awaited only after the contracts and payments
+   * are in, because it is used only in the final map, so its read can run beside the whole chain instead of ahead of it.
+   */
+  payerDefaultsRead: ReadonlyMap<string, "DevCo" | "SPV"> | Promise<ReadonlyMap<string, "DevCo" | "SPV">> = new Map(),
+  /**
+   * Where the `Project States` rows come from when a contract references one. Default: the table's own read. B2 (OPT-07d):
+   * `useCostBook` passes the shared `Project States` cache entry (`data/projectStates.ts`, `costStates`: the same ACTIVE rows
+   * in the same `Order`), so a warm cache costs no request at all.
+   */
+  loadStates: () => Promise<ProjectState[]> = loadProjectStates,
 ): Promise<CostLine[]> {
   if (accountIds.length === 0) return [];
   const contractBatches = await Promise.all(
@@ -1058,9 +937,10 @@ export async function loadCostLines(
   const hasLinkedCluster = contracts.some((c) => c._vsb_linkedcluster_value);
   const [payments, projectStates] = await Promise.all([
     loadPayments(contracts.map((c) => c.vsb_capexprojectcontractid)),
-    hasLinkedCluster ? loadProjectStates() : Promise.resolve<ProjectState[]>([]),
+    hasLinkedCluster ? loadStates() : Promise.resolve<ProjectState[]>([]),
   ]);
   const stateById = new Map(projectStates.map((s) => [s.id, s]));
+  const payerDefaults = await payerDefaultsRead;
 
   return contracts.map((c) => {
     /*
@@ -1162,6 +1042,10 @@ async function loadPayments(contractIds: string[]): Promise<Map<string, Payment[
             "vsb_cost", "vsb_costpaid",
           ],
           filter: and(lookupIn("vsb_contract", ids), ACTIVE),
+          // B2 (OPT-08a): six narrow columns, so the platform's page ceiling (5000) is safe and a large category's cost rows
+          // (the project docs record 579 on Wirmighausen, tens of thousands elsewhere) arrive in one request per chunk instead
+          // of one per 500 rows. Same rows and order; only the number of round trips changes (as `loadContractCostSums`).
+          maxPageSize: 5000,
         },
       ),
     ),
@@ -1224,24 +1108,66 @@ export async function standardContractExists(
   return rows.length > 0;
 }
 
-export async function loadCostBook(projectId: string, category?: number): Promise<CostBook> {
-  const accounts = await loadCostAccounts();
-  const scoped =
-    category === undefined ? [] : accounts.filter((a) => a.category === category);
-  const payerDefaults = scoped.length > 0 ? await loadPayerDefaults() : new Map();
-  const lines = await loadCostLines(projectId, scoped.map((a) => a.id), payerDefaults);
-  // Periods are what the O&M / Land Lease / Other OPEX screens want and DEVEX/CAPEX never
-  // does — `category === undefined` is exactly how those screens call `useCostBook()` (see
-  // `useCostBook`'s own doc comment), so a CAPEX tab's book load skips these queries entirely.
-  const { periods, extraGroups } =
-    category === undefined
-      ? await loadPeriods(projectId)
-      : { periods: [], extraGroups: { om: [], land: [], other: [] } };
+/**
+ * How much of the book a call needs (B2, OPT-04).
+ *
+ *   "all"   the original behaviour: with no category, the chart of accounts AND every period of the three period screens
+ *           (O&M, Other OPEX, Land Lease). Still the default, so nothing that did not ask changes.
+ *   "opex"  only the O&M / Other OPEX periods (`vsb_opexprojectcosts`). No chart of accounts, no Land Lease book: the OPEX
+ *           screen reads nothing else from the book (`OpexScreen` takes `book.periods` filtered by mode; Land Lease has its
+ *           own `useLeaseBook`). The shape is the same `CostBook` with `accounts`, `lines` and the `land` period group empty.
+ *           Only meaningful with no category.
+ */
+export type CostBookScope = "all" | "opex";
+
+export interface LoadCostBookOptions {
+  scope?: CostBookScope;
+  /** See `loadCostLines`: the `Project States` source (OPT-07d). */
+  loadStates?: () => Promise<ProjectState[]>;
+}
+
+export async function loadCostBook(
+  projectId: string,
+  category?: number,
+  options: LoadCostBookOptions = {},
+): Promise<CostBook> {
+  const emptyGroups = { om: [], land: [], other: [] } as CostBook["extraGroups"];
+
+  if (category === undefined && options.scope === "opex") {
+    // B2 (OPT-04): the OPEX screen's book. The OPEX rows start at t = 0 with their two reference reads (`loadOpexPeriods`).
+    return { accounts: [], lines: [], periods: await loadOpexPeriods(projectId), extraGroups: emptyGroups };
+  }
+
+  if (category === undefined) {
+    // Periods are what the O&M / Land Lease / Other OPEX screens want and DEVEX/CAPEX never does — `category === undefined`
+    // is how those screens called `useCostBook()` before the scope existed. B2 (OPT-05): the chart and the periods are
+    // independent, so they start together (they used to be awaited one after the other).
+    const [accounts, { periods, extraGroups }] = await Promise.all([loadCostAccounts(), loadPeriods(projectId)]);
+    return { accounts, lines: [], periods, extraGroups };
+  }
+
+  // A DEVEX/CAPEX tab. B2 (OPT-05): the payer defaults depend on neither the chart nor the contracts (`loadCostLines` uses them
+  // only in its last map), so their read starts WITH the chart. A Summary tab (`category < 0`, no accounts by construction)
+  // never asks. A real category starts the read before the chart answers, so a category that turns out to hold no accounts
+  // sends ONE request the old code did not (small table, in parallel, result unused: UT-COSTWAVE-OPT-006). A failing read
+  // nobody awaits is swallowed here and surfaces only where it is awaited, as before.
+  const accountsRead = loadCostAccounts();
+  const payerRead = category >= 0 ? loadPayerDefaults() : undefined;
+  payerRead?.catch(() => undefined);
+  const accounts = await accountsRead;
+  const scoped = accounts.filter((a) => a.category === category);
+  const noDefaults = new Map<string, "DevCo" | "SPV">();
+  const wantDefaults = scoped.length > 0 && payerRead;
+  // `loadCostLines` takes the payer read as a promise and awaits it after the contracts and payments, so it overlaps the chain.
+  const lines = await loadCostLines(
+    projectId, scoped.map((a) => a.id), wantDefaults ? payerRead : noDefaults, options.loadStates,
+  );
+  const payerDefaults = wantDefaults ? await payerRead : noDefaults;
   // The mapping default rides on the sub-account, for a NEW contract's Cost Paid By (CAPEX-064).
   const withDefaults = payerDefaults.size === 0
     ? accounts
     : accounts.map((a) => (payerDefaults.has(a.id) ? { ...a, defaultPayer: payerDefaults.get(a.id) as "SPV" | "DevCo" } : a));
-  return { accounts: withDefaults, lines, periods, extraGroups };
+  return { accounts: withDefaults, lines, periods: [], extraGroups: emptyGroups };
 }
 
 /* ══════════════════════════════════════════════════════ the Summary tab ══ */

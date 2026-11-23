@@ -1,3 +1,4 @@
+import { dateOnly } from "@/domain/dates";
 import { numberFormat } from "@/domain/locale";
 
 export const CATEGORIES = [
@@ -334,5 +335,5 @@ export function periodEnd(p: Pick<CostPeriod, "startDate" | "years" | "months">)
   start.setDate(1); start.setMonth(start.getMonth() + (p.years ?? 0) * 12 + (p.months ?? 0));
   const last = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
   start.setDate(Math.min(day, last)); start.setDate(start.getDate() - 1);
-  return `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${String(start.getDate()).padStart(2, "0")}`;
+  return dateOnly(start);
 }

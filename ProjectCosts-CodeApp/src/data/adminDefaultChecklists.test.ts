@@ -88,7 +88,7 @@ import { HEADER_COLUMNS } from "./adminChecklistTables";
 import { CHECKLIST_ENTITY_SETS } from "@/data/dataverseNames";
 import {
   RenumberAfterDeleteError, TaskCreatedIdUnknownError, TaskStatusNotSetError,
-  buildCreatePayload, buildEditPayload, createTask, loadClusters, loadLockedTaskIds, loadTabs,
+  buildCreatePayload, buildEditPayload, createTask, loadLockedTaskIds, loadTabs,
   loadTasks, softDeleteTask, writeOrders,
   type ChecklistTab, type TaskForm,
 } from "./adminDefaultChecklists";
@@ -127,11 +127,11 @@ beforeEach(() => {
 describe("Reads", () => {
   it("UT-ADCHK-001 Every read passes a non-empty select", async () => {
     await loadTabs();
-    await loadClusters();
     await loadTasks(TAB.id);
     await loadLockedTaskIds();
     const allReads = calls.filter((c) => c.op === "read");
-    expect(allReads).toHaveLength(4);
+    // OPT-07d: the clusters are no longer read here (a view of the shared Project States read), so 3 reads, not 4.
+    expect(allReads).toHaveLength(3);
     for (const read of allReads) {
       const select = read.options?.select as string[] | undefined;
       expect(Array.isArray(select)).toBe(true);
@@ -151,13 +151,8 @@ describe("Reads", () => {
     expect(tabs).toEqual([{ id: "t1", name: "A", order: "10", owningBusinessUnitId: "bu" }]);
   });
 
-  it("UT-ADCHK-003 Clusters filter on vsb_isvisibleonchecklist", async () => {
-    const clusters = await loadClusters();
-    const opts = reads("vsb_projectstates")[0]?.options;
-    expect(opts?.filter).toBe("vsb_isvisibleonchecklist eq true");
-    expect(opts?.orderBy).toEqual(["vsb_order asc"]);
-    expect(clusters).toEqual([{ id: "c1", name: "Draft", order: 0 }]);
-  });
+  // UT-ADCHK-003 (the clusters' own read: `vsb_isvisibleonchecklist eq true`, `vsb_order asc`) was retired with OPT-07d: the clusters are a view
+  // of the shared Project States read, pinned against the old read in `adminDefaultChecklists.opt.test.ts` (UT-ADCHK-OPT-001..003).
 
   it("UT-ADCHK-004 One task query per tab, null-safe To Delete clause, rows mapped", async () => {
     rowsByTable[ES_TASKS] = [

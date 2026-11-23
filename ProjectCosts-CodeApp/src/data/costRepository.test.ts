@@ -58,7 +58,6 @@ describe("costRepository", () => {
     for (const op of [
       "listContracts", "listPaymentTargets", "listDevCoLinks", "listCapexAccounts",
       "listDevCoCapexContracts", "listCapexCostRows", "getCostBook", "getCapexTotals",
-      "getLandLeaseCostFlags", "getLandLeaseContracts", "getCountryInflationAreas",
       "findBopStandardAssumption", "saveContract", "deleteContract", "replaceDevCoLinks",
       "savePaymentTarget", "deletePaymentTarget", "setCostPaid", "saveCostLine", "deleteCostLine",
       // The three period screens' writes. `addStandardContract` is separate from `savePeriod`

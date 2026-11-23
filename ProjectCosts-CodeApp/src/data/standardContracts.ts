@@ -7,20 +7,27 @@
 import { Vsb_devexcapexstandardassumptionsesService } from "@/generated/services/Vsb_devexcapexstandardassumptionsesService";
 import { Vsb_generatortypeinprojectsService } from "@/generated/services/Vsb_generatortypeinprojectsService";
 import { fetchAll } from "./client";
-import { ACTIVE, and, lookupEq, numberOf } from "./odata";
+import { ACTIVE, and, chunk, lookupEq, lookupIn, numberOf } from "./odata";
 import type { DevexCapexAssumption } from "@/features/cost/capex-costs/standardContracts";
 
 /**
  * Every standard assumption for the sub-accounts of one category.
  *
  * Not filtered by country/technology here — `buildStandardOptions` does that narrowing, and
- * doing it client-side means one query per category tab rather than one per sub-account.
+ * doing it client-side means one query per category tab rather than one per sub-account. (B2, OPT-08b: it IS filtered by the
+ * category's sub-accounts on the server.)
  */
 export async function loadStandardAssumptions(
   subaccountIds: readonly string[],
 ): Promise<DevexCapexAssumption[]> {
   if (subaccountIds.length === 0) return [];
-  const rows = await fetchAll(
+  const wanted = new Set(subaccountIds);
+  // B2 (OPT-08b): the read is narrowed on the SERVER to this category's sub-accounts (`lookupIn`, in chunks of 40 ids, one
+  // request each, in parallel) instead of reading the whole active table of every category and filtering it here. A row has
+  // one sub-account, so the chunks do not overlap. The JS narrowing below stays (a belt for any row the filter let through),
+  // so the rows returned are exactly the ones the whole-table read kept; for one chunk (a category holds well under 40
+  // sub-accounts) their order is the server's order as before.
+  const batches = await Promise.all(chunk([...wanted]).map((ids) => fetchAll(
     "list CAPEX standard assumptions",
     (o) => Vsb_devexcapexstandardassumptionsesService.getAll(o),
     {
@@ -30,10 +37,10 @@ export async function loadStandardAssumptions(
         "vsb_distributionfrequency", "vsb_applyvat", "vsb_depreciation",
         "vsb_cluster1", "vsb_cluster2", "vsb_cluster3", "vsb_cluster4", "vsb_cluster5",
       ],
-      filter: ACTIVE,
+      filter: and(lookupIn("vsb_subaccount", ids), ACTIVE),
     },
-  );
-  const wanted = new Set(subaccountIds);
+  )));
+  const rows = batches.flat();
   return rows
     .filter((r) => r._vsb_subaccount_value && wanted.has(r._vsb_subaccount_value))
     .map((r) => ({

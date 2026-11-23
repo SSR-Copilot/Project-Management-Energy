@@ -201,12 +201,5 @@ export function orZero(value: number | undefined | null): number {
  * depend on `RoundDown`: the payment count is `RoundDown(span / freq, 0) + 1` and the equal
  * amount is `RoundDown(total / n, 0)`, so substituting `Math.round` changes every figure.
  */
-export const roundDown = (x: number, places = 0): number => {
-  const m = 10 ** places;
-  return (x < 0 ? Math.ceil(x * m) : Math.floor(x * m)) / m;
-};
-
-export const roundUp = (x: number, places = 0): number => {
-  const m = 10 ** places;
-  return (x < 0 ? Math.floor(x * m) : Math.ceil(x * m)) / m;
-};
+// OPT-33 (B8): one definition, in `powerFxNumeric.ts` (the bodies were byte-identical; UT-NUMERIC-OPT-001). Re-exported so every importer is unchanged.
+export { roundDown, roundUp } from "./powerFxNumeric";

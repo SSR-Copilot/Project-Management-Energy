@@ -55,7 +55,8 @@ describe("boot plan: the Generators route", () => {
     expect(bootTarget(input("#/project/generators?projectId=not-a-guid"))).toEqual({ kind: "none" });
     // The other Project Management screens are unchanged.
     expect(bootTarget(input(`#/project/general?projectId=${ID}`))).toEqual({ kind: "general-data", projectId: ID });
-    expect(bootTarget(input(`#/project/milestones?projectId=${ID}`))).toEqual({ kind: "none" });
+    // OPT-03 (B5b): the other PM screens are `pm-screen` targets now (they were `none`).
+    expect(bootTarget(input(`#/project/milestones?projectId=${ID}`))).toEqual({ kind: "pm-screen", projectId: ID, slug: "milestones" });
   });
 });
 

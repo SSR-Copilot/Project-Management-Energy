@@ -60,7 +60,7 @@ describe("trimReload: which keys are only marked stale", () => {
 });
 
 /** The screen's mounted queries as they are during a Generators save, with spies that record what is fetched. */
-function mountedScreen() {
+function mountedScreen(sessionKey: readonly unknown[] = qk.project(PROJECT)) {
   const fetched: string[] = [];
   const qc = new QueryClient({ defaultOptions: { mutations: { retry: false }, queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
@@ -74,7 +74,7 @@ function mountedScreen() {
     useQuery({ queryKey: qk.generators(PROJECT, "project"), queryFn: async () => { fetched.push("generators project"); return 1; }, staleTime: 60_000 });
     useQuery({ queryKey: qk.generators(PROJECT, "types"), queryFn: async () => { fetched.push("generators types"); return 1; }, staleTime: 60_000 });
     useQuery({ queryKey: qk.generators(PROJECT, "pv"), queryFn: async () => { fetched.push("generators pv"); return 1; }, staleTime: 60_000 });
-    useQuery({ queryKey: qk.project(PROJECT), queryFn: sessionRead, staleTime: 5 * 60_000 });
+    useQuery({ queryKey: sessionKey, queryFn: sessionRead, staleTime: 5 * 60_000 });
     return writes;
   }, { wrapper });
   // The Milestones and General Data copies are warmed (prefetched) but have no observer on this screen.
@@ -153,6 +153,41 @@ describe("trimReload: what a save refetches (real useGeneratorWrites, real Query
     view.unmount();
     await waitFor(() => expect(sessionRead).toHaveBeenCalledTimes(2));
     expect(qc.getQueryState(qk.project(PROJECT))!.isInvalidated).toBe(false);
+    sessionObserver.unmount();
+  });
+
+  it("UT-GENWAVE-OPT-901 PM route: the live session entry is qk.projectPm; a save marks it stale by prefix and leaving the screen refetches it exactly once", async () => {
+    const { qc, view, sessionRead } = mountedScreen(qk.projectPm(PROJECT));
+    await waitFor(() => expect(sessionRead).toHaveBeenCalledTimes(1));
+    // The session's observer (SessionProvider) outlives the screen: keep one on the PM-scoped key, as the app does on PM routes.
+    const sessionObserver = renderHook(() => useQuery({ queryKey: qk.projectPm(PROJECT), queryFn: sessionRead, staleTime: 5 * 60_000 }), {
+      wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>,
+    });
+    // The exact key has no entry: the old exact-key lookup could never see this one.
+    expect(qc.getQueryState(qk.project(PROJECT))).toBeUndefined();
+    h.queue = [done];
+    await act(async () => { await view.result.current.run(withReload({ progress: "go", plan: plan("one") }, PROJECT, "toggleStatus")); });
+    await settle(view);
+    expect(sessionRead).toHaveBeenCalledTimes(1);
+    expect(qc.getQueryState(qk.projectPm(PROJECT))!.isInvalidated).toBe(true);
+    view.unmount();
+    await waitFor(() => expect(sessionRead).toHaveBeenCalledTimes(2));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(sessionRead).toHaveBeenCalledTimes(2);
+    expect(qc.getQueryState(qk.projectPm(PROJECT))!.isInvalidated).toBe(false);
+    sessionObserver.unmount();
+  });
+
+  it("UT-GENWAVE-OPT-902 PM route with NO save: leaving the screen refetches nothing", async () => {
+    const { qc, view, sessionRead } = mountedScreen(qk.projectPm(PROJECT));
+    await waitFor(() => expect(sessionRead).toHaveBeenCalledTimes(1));
+    const sessionObserver = renderHook(() => useQuery({ queryKey: qk.projectPm(PROJECT), queryFn: sessionRead, staleTime: 5 * 60_000 }), {
+      wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>,
+    });
+    expect(qc.getQueryState(qk.projectPm(PROJECT))!.isInvalidated).toBe(false);
+    view.unmount();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(sessionRead).toHaveBeenCalledTimes(1);
     sessionObserver.unmount();
   });
 

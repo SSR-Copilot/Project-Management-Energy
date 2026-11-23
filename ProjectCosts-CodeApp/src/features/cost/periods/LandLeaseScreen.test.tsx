@@ -48,12 +48,26 @@ vi.mock("@/app/SessionContext", () => ({
   }),
 }));
 
+// One identity per value, as the TanStack query result has in the app (OPT-26: a fresh object per render would rebuild `ctx`).
+let extrasValue: { data: { countryId: string; technology: number | undefined }; isLoading: boolean } | undefined;
 vi.mock("@/features/cost/contracts/hooks", () => ({
-  useProjectExtras: () => ({
-    data: { countryId: "33333333-3333-3333-3333-333333333333", technology },
-    isLoading: false,
-  }),
+  useProjectExtras: () => {
+    if (extrasValue?.data.technology !== technology) {
+      extrasValue = { data: { countryId: "33333333-3333-3333-3333-333333333333", technology }, isLoading: false };
+    }
+    return extrasValue;
+  },
 }));
+/** OPT-26 - how often the screen asks the rules for a card's derived values (the card-level recompute counters). */
+const ruleCalls = { leaseCommands: 0, subaccountPeriodRows: 0 };
+vi.mock("./landLeaseRules", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./landLeaseRules")>();
+  return {
+    ...actual,
+    leaseCommands: (...a: Parameters<typeof actual.leaseCommands>) => { ruleCalls.leaseCommands++; return actual.leaseCommands(...a); },
+    subaccountPeriodRows: (...a: Parameters<typeof actual.subaccountPeriodRows>) => { ruleCalls.subaccountPeriodRows++; return actual.subaccountPeriodRows(...a); },
+  };
+});
 
 vi.mock("@/features/cost/costing/useCostBook", () => ({
   useLeaseBook: () => ({ data: book, isLoading: loading, error: loadError }),
@@ -153,6 +167,7 @@ const openCard = (name: string) => fireEvent.click(screen.getByText(name));
 describe("LandLeaseScreen", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    Object.assign(ruleCalls, { leaseCommands: 0, subaccountPeriodRows: 0 });
     loading = false;
     loadError = null;
     writeInFlight = false;
@@ -169,6 +184,26 @@ describe("LandLeaseScreen", () => {
       ],
       allocations: [],
     };
+  });
+
+  it("UT-LLUI-OPT-001 typing in the panel does not recompute any card (the cards are memoised on stable props)", () => {
+    render(<Harness><LandLeaseScreen /></Harness>);
+    openCard("Locations");
+    fireEvent.click(within(card("Locations")).getByTestId("lease-newLandLeaseContractKey"));
+    const description = document.querySelector('input[maxlength="55"]') as HTMLInputElement;
+    const before = { ...ruleCalls };
+    for (const text of ["P", "Pa", "Par", "Parc", "Parcel"]) fireEvent.change(description, { target: { value: text } });
+    // OLD (measured before the memo): each keystroke re-sorted the rows and re-ran the command gates of every open card.
+    // NEW: none of a card's props changed, so nothing is recomputed.
+    expect(ruleCalls).toEqual(before);
+    expect(before.subaccountPeriodRows).toBeGreaterThan(0); // the open card really was live
+  });
+
+  it("UT-LLUI-OPT-002 folded cards compute neither rows nor command gates; only the open card does", () => {
+    render(<Harness><LandLeaseScreen /></Harness>);
+    expect(ruleCalls).toEqual({ leaseCommands: 0, subaccountPeriodRows: 0 }); // nine folded cards
+    openCard("Locations");
+    expect(ruleCalls).toEqual({ leaseCommands: 1, subaccountPeriodRows: 1 });
   });
 
   it("UT-LLUI-001 renders the nine sub-account cards, all folded", () => {

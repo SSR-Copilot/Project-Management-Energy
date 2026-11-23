@@ -81,6 +81,48 @@ export async function mapLimit<T, R>(
   return results;
 }
 
+/**
+ * `mapLimit` that reports the failure of the LOWEST INPUT INDEX, where `mapLimit` reports the first one in time (OPT-10, OPT-11).
+ *
+ * A sequential loop stops at the first write that fails, and that write is the first failing one in input order. Run side by side,
+ * a later task can fail before an earlier one does. So the pool still stops STARTING tasks after the first failure it sees, waits
+ * for the ones in flight, and throws the error of the lowest index among the failures. That is exact: tasks start in input order, so
+ * every index below a failing one has started, and the lowest failing index of the whole input is among the tasks that ran. Tasks
+ * after it that already started may have landed (they cannot be recalled), none starts later.
+ */
+export async function mapLimitFirstFailure<T, R>(
+  items: readonly T[],
+  fn: (item: T, index: number) => Promise<R>,
+  limit: number = WRITE_CONCURRENCY,
+): Promise<R[]> {
+  if (items.length === 0) return [];
+  const results = new Array<R>(items.length);
+  let next = 0;
+  let stopped = false;
+  let lowest = -1;
+  let lowestError: unknown;
+
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      if (stopped) return;
+      const index = next++;
+      if (index >= items.length) return;
+      try {
+        results[index] = await fn(items[index] as T, index);
+      } catch (error) {
+        stopped = true;
+        if (lowest === -1 || index < lowest) { lowest = index; lowestError = error; }
+        return;
+      }
+    }
+  };
+
+  const width = Math.max(1, Math.min(limit, items.length));
+  await Promise.all(Array.from({ length: width }, worker));
+  if (lowest !== -1) throw lowestError;
+  return results;
+}
+
 /** `mapLimit` for tasks whose results are not needed. */
 export async function forEachLimit<T>(
   items: readonly T[],

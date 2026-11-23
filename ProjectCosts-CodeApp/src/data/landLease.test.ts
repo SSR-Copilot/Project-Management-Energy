@@ -99,6 +99,7 @@ const {
   loadLeaseGenerators,
 } = await import("./landLease");
 const { LEASE_ENTITY_SET, LeaseStepsError } = await import("@/features/cost/periods/landLeaseRules");
+const { invalidateCurrencies } = await import("./currencies");
 
 /** Real VSBCloud_Dev ids — `guid()` rejects anything that is not a GUID. */
 const PROJECT_NEW_DATA = "910d8ed0-282a-ef11-840a-6045bd9e5ce7";
@@ -109,6 +110,8 @@ const EURO = "b8b1e37d-1f57-ea11-a811-000d3a4a9d2f";
 const GERMANY = "1cf4a2b6-d2d0-ee11-9079-000d3ab6fed7";
 
 beforeEach(() => {
+  // B2 (OPT-07b): the currency table is read through a short-lived shared read; each case starts with it empty.
+  invalidateCurrencies();
   rowsByLabel = {};
   queriedBy = {};
   writes = [];
@@ -158,7 +161,7 @@ describe("loadLeaseBook", () => {
       { vsb_landleaseallocationwtgid: "alloc-1", _vsb_projectcost_value: HDR_COST101,
         _vsb_generatorinproject_value: "gen-1" },
     ],
-    "list transaction currencies for Land Lease": [
+    "list transaction currencies (Cost reads)": [
       { transactioncurrencyid: EURO, currencyname: "Euro", isocurrencycode: "EUR" },
     ],
   });
@@ -309,12 +312,12 @@ describe("loadCurrencies / loadLeaseAssumptions", () => {
     // A contract pointing at a since-deactivated currency must still show the name it was saved
     // with — the same rule `costBook.loadCurrencyNames` states.
     rowsByLabel = {
-      "list transaction currencies for Land Lease": [
+      "list transaction currencies (Cost reads)": [
         { transactioncurrencyid: EURO, currencyname: "Euro", isocurrencycode: "EUR" },
       ],
     };
     await expect(loadCurrencies()).resolves.toEqual([{ id: EURO, name: "Euro", code: "EUR" }]);
-    expect((queriedBy["list transaction currencies for Land Lease"]![0] as { filter?: string })
+    expect((queriedBy["list transaction currencies (Cost reads)"]![0] as { filter?: string })
       .filter).toBeUndefined();
   });
 

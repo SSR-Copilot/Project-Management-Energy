@@ -58,6 +58,7 @@ import {
   generalDataProjectStatesQueryOptions, generalDataUtilizationsQueryOptions, shareholdersQueryOptions,
   stateTrackingsQueryOptions, REFERENCE_STALE,
 } from "./queries";
+import { generalDataReloadKeys } from "./reload";
 
 export type { AreaOption, MunicipalityRow, UtilizationOption } from "@/data/generalData";
 
@@ -215,13 +216,16 @@ export function useMilestoneDurations(countryId: string | null | undefined, tech
  * `CanEditSelectedProject` — W10).
  */
 export function useGeneralDataWrites(projectId: string | undefined) {
-  const id = projectId ?? "";
+  const qc = useQueryClient();
+  const keys = generalDataReloadKeys(projectId);
   const writes = usePlanWrite({
-    invalidate: [qk.generalDataProject(id), qk.shareholders(id), qk.stateTrackings(id), qk.project(id)],
+    invalidate: keys,
     action: "change this project's general data",
     errorText: projectSaveErrorText,
   });
-  return { ...writes, cancelDraftGateApprovalIfRunning };
+  /** OPT-13: the real reload of the screen's keys, for a first job that only marked them stale and then failed. */
+  const reloadAll = () => Promise.all(keys.map((queryKey) => qc.invalidateQueries({ queryKey })));
+  return { ...writes, cancelDraftGateApprovalIfRunning, reloadAll };
 }
 
 /**

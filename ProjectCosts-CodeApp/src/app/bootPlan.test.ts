@@ -30,15 +30,17 @@ describe("boot plan: which screen the URL opens (D119)", () => {
   });
 
   it("UT-BOOT-005 the bare root with a project id leaves the project list alone (the cost module opens)", () => {
-    expect(bootTarget(input("", { projectId: ID }))).toEqual({ kind: "none" });
-    expect(bootTarget(input("", {}, `?projectId=${ID}`))).toEqual({ kind: "none" });
+    // OPT-03 (B5b): the Cost module that opens is now itself the target (it was `none`), so its screen and project start early.
+    expect(bootTarget(input("", { projectId: ID }))).toEqual({ kind: "cost", projectId: ID, path: "/costs/capex" });
+    expect(bootTarget(input("", {}, `?projectId=${ID}`))).toEqual({ kind: "cost", projectId: ID, path: "/costs/capex" });
   });
 
   it("UT-BOOT-006 Edit Project (pmScreen=/project/general + projectId) opens General Data of that project", () => {
     expect(bootTarget(input("", { projectId: ID, pmScreen: "/project/general" })))
       .toEqual({ kind: "general-data", projectId: ID });
-    // An unknown pmScreen is not a PM launch: Landing falls through to the cost module.
-    expect(bootTarget(input("", { projectId: ID, pmScreen: "/project/finance" }))).toEqual({ kind: "none" });
+    // An unknown pmScreen is not a PM launch: Landing falls through to the cost module (OPT-03: a `cost` target, was `none`).
+    expect(bootTarget(input("", { projectId: ID, pmScreen: "/project/finance" })))
+      .toEqual({ kind: "cost", projectId: ID, path: "/costs/capex" });
   });
 
   it("UT-BOOT-007 an invalid project id prefetches nothing, so no wrong project is ever read", () => {
@@ -57,8 +59,35 @@ describe("boot plan: which screen the URL opens (D119)", () => {
   });
 
   it("UT-BOOT-010 every other route prefetches nothing", () => {
-    for (const hash of ["#/costs/capex", "#/project/team?projectId=" + ID, "#/admin/cost", "#/nowhere"]) {
+    // OPT-03 (B5b): `#/costs/capex?…` and `#/project/team?…` now have targets (UT-BOOT-OPT-001..); these have no project or no plan.
+    for (const hash of ["#/costs/capex", "#/project/team", "#/admin/cost", "#/nowhere", "#/costs", "#/project/unknown?projectId=" + ID]) {
       expect(bootTarget(input(hash))).toEqual({ kind: "none" });
+    }
+  });
+
+  it("UT-BOOT-OPT-001 a Cost route with a valid project id is a `cost` target for that screen (the route's id wins; an invalid one is none)", () => {
+    expect(bootTarget(input(`#/costs/capex?projectId=${ID}`))).toEqual({ kind: "cost", projectId: ID, path: "/costs/capex" });
+    expect(bootTarget(input(`#/costs/opex/om?projectId={${ID.toUpperCase()}}`))).toEqual({ kind: "cost", projectId: ID, path: "/costs/opex/om" });
+    expect(bootTarget(input(`#/costs/add-from-table?projectId=${ID}`))).toEqual({ kind: "cost", projectId: ID, path: "/costs/add-from-table" });
+    // Same sources as the SessionProvider on a cost route: the player URL's own search carries the id too.
+    expect(bootTarget(input("#/costs/contracts", {}, `?projectId=${ID}`))).toEqual({ kind: "cost", projectId: ID, path: "/costs/contracts" });
+    expect(bootTarget(input("#/costs/capex?projectId=nope"))).toEqual({ kind: "none" });
+  });
+
+  it("UT-BOOT-OPT-002 the bare root with a project id opens the Cost screen the costScreen launch parameter names", () => {
+    expect(bootTarget(input("", { projectId: ID, costScreen: "/costs/land-lease" })))
+      .toEqual({ kind: "cost", projectId: ID, path: "/costs/land-lease" });
+    // An unknown costScreen falls back to CAPEX, as `Landing` does.
+    expect(bootTarget(input("", { projectId: ID, costScreen: "/costs/nowhere" }))).toEqual({ kind: "cost", projectId: ID, path: "/costs/capex" });
+  });
+
+  it("UT-BOOT-OPT-003 each other Project Management screen with a project id in its ROUTE is a `pm-screen` target; none is the New Project mode", () => {
+    for (const slug of ["milestones", "production", "checklist", "team", "planning", "grid-operator", "revenues", "finance"]) {
+      expect(bootTarget(input(`#/project/${slug}?projectId=${ID}`))).toEqual({ kind: "pm-screen", projectId: ID, slug });
+      expect(bootTarget(input(`#/project/${slug}`))).toEqual({ kind: "none" });
+      expect(bootTarget(input(`#/project/${slug}?projectId=nope`))).toEqual({ kind: "none" });
+      // A PM route ignores launch parameters (UT-BOOT-009).
+      expect(bootTarget(input(`#/project/${slug}`, { projectId: ID }))).toEqual({ kind: "none" });
     }
   });
 });

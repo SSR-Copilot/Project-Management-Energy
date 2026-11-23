@@ -14,6 +14,7 @@
  * need nothing else first, and are prefetched too (`turbinesByProjectQueryOptions`, one read more).
  */
 import { queryOptions, type QueryClient } from "@tanstack/react-query";
+import { countriesQueryOptions } from "@/data/countries";
 import { qk } from "@/data/keys";
 import { generatorsPerf } from "@/data/generatorsPerfFlags";
 import {
@@ -30,7 +31,13 @@ export type SimpleFamilyKey = "storage" | "hydrogen" | "substation";
 /** `gblRecordSelectedProject` (+ its country) — re-read on every visit, as `OnVisible` does. */
 export const generatorsProjectQueryOptions = (projectId: string) => queryOptions({
   queryKey: qk.generators(projectId, "project"),
-  queryFn: () => loadGeneratorsProject(projectId),
+  // OPT-07a (S4-05, `GENERATORS_PERF.countryFromSharedList`): the country name / ISO currency come from the shared countries
+  // list. `fetchQuery` honours its 30-minute stale time (a fresh list is not read again, a stale one is), and the list is
+  // asked for beside the project read, not after it. DIVERGENCE: a country edit shows here up to 30 minutes late.
+  queryFn: ({ client }) => loadGeneratorsProject(
+    projectId,
+    generatorsPerf().countryFromSharedList ? () => client.fetchQuery(countriesQueryOptions) : undefined,
+  ),
 });
 
 /** `locProjectPlanning` — the height limitation. */

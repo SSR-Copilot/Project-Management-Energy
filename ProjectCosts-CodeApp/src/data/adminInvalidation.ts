@@ -18,6 +18,7 @@
  */
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
 import { qk, type SettingsScope } from "@/data/keys";
+import { invalidateCapexChart } from "@/data/capexChart";
 
 async function invalidateAll(client: QueryClient, keys: readonly QueryKey[]): Promise<void> {
   await Promise.allSettled(keys.map((queryKey) => client.invalidateQueries({ queryKey })));
@@ -53,6 +54,9 @@ export function capexAccountsWriteKeys(): QueryKey[] {
 }
 
 export function invalidateAfterCapexAccountsWrite(client: QueryClient): Promise<void> {
+  // B2 (OPT-07c): the Cost screens read the chart of accounts through one short-lived shared read (`data/capexChart.ts`), which is
+  // not a query-cache entry. Drop it BEFORE the keys below refetch, so the refetch reads the chart as the write left it.
+  invalidateCapexChart();
   return invalidateAll(client, capexAccountsWriteKeys());
 }
 

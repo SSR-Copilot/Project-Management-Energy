@@ -1,4 +1,5 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo } from "react";
+import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useSession } from "@/app/SessionContext";
 import { qk } from "@/data/keys";
 import { costRepository } from "@/data/costRepository";
@@ -7,8 +8,10 @@ import { loadActiveWtgCount, loadStandardAssumptions } from "@/data/standardCont
 import { deleteComment, loadComments, saveComment } from "@/data/comments";
 import { loadCapexCategories, loadMilestoneDurations, standardContractExists } from "@/data/costBook";
 import { costStates, projectStatesQueryOptions } from "@/data/projectStates";
+import type { CostBookScope } from "@/data/costBook";
 import type { PeriodWriteContext, StandardContractArgs } from "@/data/periodWrites";
 import { LeaseStepsError, type LeaseWrite } from "@/features/cost/periods/landLeaseRules";
+import type { OpexAccount, OpexSubaccount } from "@/features/cost/periods/opexRules";
 import { useProjectExtras } from "@/features/cost/contracts/hooks";
 import { useNotify, type Notify } from "@/components/useNotify";
 import {
@@ -24,6 +27,7 @@ import { applySavedSheetToBook } from "./savedSheetPatch";
 import { addCostSaveTimeline } from "./saveTimeline";
 import { beginBackgroundSave, type BackgroundSaveHandle } from "./backgroundSave";
 import { costWriteKey } from "@/domain/writeGuard";
+import { COMMENTS_KEY, capexWriteInvalidations, savedMonthsDeleteRows, type CapexWriteJob } from "./capexInvalidation";
 
 /**
  * Every field a save should compare — `id` decides create/update/delete, not equality.
@@ -68,11 +72,16 @@ function periodsEqual(a: CostPeriod, b: CostPeriod): boolean {
  * @param options.everyVisit re-read the book every time the screen opens, whatever its age (OPEX, D123:
  *   `OnVisible` runs `ClearCollect(colOpexProjectCosts, …)` on every visit; the app-wide 30 s cache showed
  *   the rows of the previous visit). Off by default, so the other Cost screens are unchanged.
+ * @param options.scope `"opex"` (B2, OPT-04): the OPEX screen's book, which reads only the O&M / Other OPEX periods: no chart
+ *   of accounts and no Land Lease book (see `CostBookScope`). Omitted = the full book, as before. The scoped book has its own
+ *   query key, `["cost-book", project, "none", "opex"]`, which every existing `["cost-book", project, "none"]` invalidation
+ *   still matches by prefix.
  */
-export function useCostBook(category?: number, options?: { everyVisit?: boolean }) {
+export function useCostBook(category?: number, options?: { everyVisit?: boolean; scope?: CostBookScope }) {
   const { projectId, project } = useSession();
   const queryClient = useQueryClient();
-  const queryKey = ["cost-book", projectId, category ?? "none"];
+  const scope = options?.scope;
+  const queryKey = ["cost-book", projectId, category ?? "none", ...(category === undefined && scope === "opex" ? ["opex"] : [])];
   const query = useQuery({
     queryKey, enabled: Boolean(projectId), retry: false,
     ...(options?.everyVisit ? { refetchOnMount: "always" as const } : {}),
@@ -81,7 +90,12 @@ export function useCostBook(category?: number, options?: { everyVisit?: boolean 
     // by an invalidation, which cancels and restarts a read in flight.
     queryFn: async () => {
       const pending = pendingDeletes.snapshot();
-      return excludePendingFromBook(await costRepository().getCostBook(projectId as string, category), pending);
+      return excludePendingFromBook(await costRepository().getCostBook(projectId as string, category, {
+        ...(scope ? { scope } : {}),
+        // B2 (OPT-07d): the `Project States` a linked contract needs come from the shared D159 cache entry (the same active
+        // rows in `Order`) instead of a read of their own; a warm cache costs no request.
+        loadStates: async () => costStates(await queryClient.ensureQueryData(projectStatesQueryOptions())),
+      }), pending);
     },
   });
   /**
@@ -113,7 +127,7 @@ export function useCostBook(category?: number, options?: { everyVisit?: boolean 
       const previous = query.data;
       if (!previous) throw new Error("The Cost book has not finished loading yet.");
 
-      const ctx = periodWriteContext(projectId, project);
+      const ctx = periodWriteContext(projectId, project, queryClient);
       const prevById = new Map(previous.periods.map((p) => [p.id, p]));
       const nextById = new Map(nextBook.periods.map((p) => [p.id, p]));
       // Keyed by the id the book came in with, because a create's id changes underneath us.
@@ -158,7 +172,6 @@ export function useCostBook(category?: number, options?: { everyVisit?: boolean 
       // invalidating it would just fetch back the pre-save state — see the doc comment above.
       if (touchedPeriods) {
         void queryClient.invalidateQueries({ queryKey });
-        void queryClient.invalidateQueries({ queryKey: ["land-lease-contracts", projectId] });
       }
     },
   });
@@ -175,11 +188,17 @@ export function useCostBook(category?: number, options?: { everyVisit?: boolean 
 function periodWriteContext(
   projectId: string,
   project: { owningBusinessUnitId?: string; projectName?: string } | undefined,
+  queryClient: QueryClient,
 ): PeriodWriteContext {
+  // OPT-11 (B3): the OPEX accounts and sub-accounts the screen already holds (`useOpexCatalog`, cached 30 minutes), so a save or an
+  // import does not read the same two tables again. Only when BOTH are cached; otherwise the write layer reads them as before.
+  const accounts = queryClient.getQueryData<OpexAccount[]>(["opex-accounts"]);
+  const subaccounts = queryClient.getQueryData<OpexSubaccount[]>(["opex-subaccounts"]);
   return {
     projectId,
     owningBusinessUnitId: project?.owningBusinessUnitId,
     projectName: project?.projectName,
+    ...(accounts && subaccounts ? { opexCatalog: { accounts, subaccounts } } : {}),
   };
 }
 
@@ -203,48 +222,17 @@ export function useAddStandardContract() {
     mutationKey: costWriteKey(projectId, "periods"), // CA-15
     mutationFn: (args: StandardContractArgs) => {
       if (!projectId) throw new Error("No project is selected.");
-      return costRepository().addStandardContract(periodWriteContext(projectId, project), args);
+      return costRepository().addStandardContract(periodWriteContext(projectId, project, queryClient), args);
     },
-    onSuccess: () => {
+    onSuccess: (_created, args) => {
       void queryClient.invalidateQueries({ queryKey: ["cost-book", projectId, "none"] });
-      void queryClient.invalidateQueries({ queryKey: ["land-lease-contracts", projectId] });
       // The O&M import ends with `Refresh(DeviceTypesInProjects)` and rebuilds `colDeviceTypesInProject`
-      // (`:3327-3407`), so the device cards are re-read as well (D123).
-      void queryClient.invalidateQueries({ queryKey: ["opex-device-types", projectId ?? "none"] });
+      // (`:3327-3407`), so the device cards are re-read as well (D123). B2 (OPT-26): only O&M reads them; an Other OPEX or Land
+      // Lease import leaves the device cards alone.
+      if (args.mode === "om") {
+        void queryClient.invalidateQueries({ queryKey: ["opex-device-types", projectId ?? "none"] });
+      }
     },
-  });
-}
-
-/**
- * Every Land Lease CONTRACT on the project, including the ones with no period rows yet.
- *
- * The book's `periods` cannot show those: a contract exists as a `vsb_landleaseprojectcosts`
- * header the moment "Add Contract Type" is saved, and its first period may never be filled in.
- * Measured on VSBCloud_Dev, 16 Sep, 19 of Project New Data's 27 headers are in that state.
- */
-export function useLandLeaseContracts() {
-  const { projectId } = useSession();
-  return useQuery({
-    queryKey: ["land-lease-contracts", projectId],
-    enabled: Boolean(projectId),
-    retry: false,
-    queryFn: () => costRepository().getLandLeaseContracts(projectId as string),
-  });
-}
-
-/**
- * The `Inflation Country Area` dropdown's options for a project's country.
- *
- * `Distinct(Filter('Country Inflation Profiles', Country.Country = gblSelectedProject.Country
- * .Country).Area, Area)` — `OpexCostScreenCode.txt:7622`. Reference data, so it is keyed on the
- * country alone and cached for the session.
- */
-export function useCountryInflationAreas(countryId: string | undefined) {
-  return useQuery({
-    queryKey: ["country-inflation-areas", countryId ?? "none"],
-    enabled: Boolean(countryId),
-    staleTime: 30 * 60 * 1000,
-    queryFn: () => costRepository().getCountryInflationAreas(countryId),
   });
 }
 
@@ -336,7 +324,6 @@ export function useLeaseWrites(projectId: string | undefined) {
       await Promise.all([
         client.invalidateQueries({ queryKey: leaseBookKey(projectId) }),
         client.invalidateQueries({ queryKey: ["cost-book", projectId, "none"] }),
-        client.invalidateQueries({ queryKey: ["land-lease-contracts", projectId] }),
       ]);
     },
     // A partly failed save has still written the steps that passed (the canvas reloads either way).
@@ -345,7 +332,6 @@ export function useLeaseWrites(projectId: string | undefined) {
       await Promise.all([
         client.invalidateQueries({ queryKey: leaseBookKey(projectId) }),
         client.invalidateQueries({ queryKey: ["cost-book", projectId, "none"] }),
-        client.invalidateQueries({ queryKey: ["land-lease-contracts", projectId] }),
       ]);
     },
   });
@@ -362,15 +348,20 @@ export function useLeaseWrites(projectId: string | undefined) {
  * exactly these shapes, so the constants were deletable the moment this landed.
  */
 export function useOpexCatalog() {
-  const accounts = useQuery({
+  const queryClient = useQueryClient();
+  const accountsOptions = {
     queryKey: ["opex-accounts"] as const,
     staleTime: 30 * 60 * 1000,
     queryFn: () => costRepository().listOpexAccounts(),
-  });
+  };
+  const accounts = useQuery(accountsOptions);
   const subaccounts = useQuery({
     queryKey: ["opex-subaccounts"] as const,
     staleTime: 30 * 60 * 1000,
-    queryFn: () => costRepository().listOpexSubaccounts(),
+    // B2 (OPT-06): the sub-accounts need the account NAMES, and the accounts query above reads them. Pass its PROMISE (the
+    // sub-account read starts at once, beside it), not nothing: with no argument `loadOpexSubaccounts` read the accounts a
+    // second time. `ensureQueryData` joins the accounts read already in flight, so the table is read once.
+    queryFn: () => costRepository().listOpexSubaccounts(queryClient.ensureQueryData(accountsOptions)),
   });
   return {
     accounts: accounts.data ?? [],
@@ -386,10 +377,11 @@ export function useOpexCatalog() {
  * text tells the user to "add a generator and refresh this page". The 5-minute cache kept a generator added on the
  * Generators screen off the O&M view; it now only spares a re-read on window focus.
  */
-export function useOpexDeviceTypes(projectId: string | undefined) {
+export function useOpexDeviceTypes(projectId: string | undefined, enabled = true) {
   return useQuery({
     queryKey: ["opex-device-types", projectId ?? "none"] as const,
-    enabled: Boolean(projectId),
+    // B2 (OPT-26): only the O&M cards read the device types, so Other OPEX passes `enabled = false` and skips 4-5 requests.
+    enabled: Boolean(projectId) && enabled,
     staleTime: 5 * 60 * 1000,
     refetchOnMount: "always",
     queryFn: () => costRepository().listOpexDeviceTypes(projectId as string),
@@ -458,16 +450,12 @@ export function useCapexWrites(
    * pushes every render's options into a pending mutation, so reading the render-time `category`
    * here refreshed the tab the user had since switched TO, and left the one written on stale.
    */
-  const invalidate = async (writtenOn: number | undefined) => {
-    await Promise.all([
-      client.invalidateQueries({ queryKey: ["cost-book", projectId, writtenOn ?? "none"] }),
-      client.invalidateQueries({ queryKey: ["capex-totals", projectId] }),
-      client.invalidateQueries({ queryKey: qk.devCoCapexContracts(projectId ?? "none") }),
-      client.invalidateQueries({ queryKey: qk.devCoCapexCosts(projectId ?? "none") }),
-      // Comments are refreshed after every Capex write: a contract delete removes its comments, which moves the grid's red dots.
-      // (A milestone relink no longer deletes payment-date comments, D90.)
-      client.invalidateQueries({ queryKey: ["capex-comments"] }),
-    ]);
+  const invalidate = async (writtenOn: number | undefined, job: CapexWriteJob = "failed") => {
+    // B2 (OPT-12): each job refreshes exactly the reads that show what it wrote (`capexInvalidation.ts`). The default is the
+    // full set, for a write that failed part-way.
+    await Promise.all(
+      capexWriteInvalidations(projectId, writtenOn, job).map((queryKey) => client.invalidateQueries({ queryKey })),
+    );
   };
 
   /** Runs at mutate time, from that render's options: the category the write is made on. */
@@ -482,7 +470,9 @@ export function useCapexWrites(
     mutationFn: (args: {
       lineId: string; year: number; month: number; paid: boolean; costId?: string; clearLinkedCluster?: boolean;
     }) => costRepository().setCostPaid(projectId as string, args),
-    onSuccess: (_data, _args, context) => invalidate(context.category),
+    // B2 (OPT-12): a paid flag (and a cluster-link clear) is shown by the cost book alone; the totals, the DevCo reads and the
+    // comment threads read neither, so they are no longer reloaded (and the spinner no longer waits for them).
+    onSuccess: (_data, _args, context) => invalidate(context.category, "paid"),
     onError: (error) => reportError(error),
   });
 
@@ -509,9 +499,11 @@ export function useCapexWrites(
      * (`CapexScreenCode.txt:17413`), and without a book patch a fire-and-forget refetch would show
      * the pre-save grid for a moment. The line below measures what that wait costs.
      */
-    onSuccess: async (_id, _args, context) => {
+    onSuccess: async (_id, args, context) => {
       const writesDone = performance.now();
-      await invalidate(context ? context.category : category);
+      // B2 (OPT-12): a save writes the contract and its month rows, never a comment (D90). The threads are re-read only when
+      // the save deleted a month row, which a payment-date comment may point at.
+      await invalidate(context ? context.category : category, savedMonthsDeleteRows(args.payments) ? "save-deleted" : "save");
       logAction(panelBusyLogLine(writesDone - (context?.startedAt ?? writesDone), performance.now() - writesDone));
     },
     // A failed save may have landed in part (D56 §2): reload so the grid, and the stored months
@@ -531,7 +523,7 @@ export function useCapexWrites(
     mutationFn: (line: CostLine) => costRepository().deleteCostLine(projectId as string, line),
     onSuccess: async (_data, _line, context) => {
       const deletesDone = performance.now();
-      await invalidate(context ? context.category : category);
+      await invalidate(context ? context.category : category, "delete");
       logAction(panelBusyLogLine(
         deletesDone - (context?.startedAt ?? deletesDone), performance.now() - deletesDone, "delete",
       ));
@@ -849,7 +841,9 @@ export function useMilestoneDurations(
  * both: react-query matches invalidations by prefix.
  */
 export function useCapexComments(contractIds: readonly string[]) {
-  const key = [...contractIds].sort().join(",");
+  // B2 (OPT-25): the key (a sorted, joined id list; about 20 KB at 500+ contracts) is rebuilt when the id list changes, not on
+  // every render. The CAPEX screen memoises its list on the book, so that is once per book; the panel passes one id.
+  const key = useMemo(() => [...contractIds].sort().join(","), [contractIds]);
   return useQuery({
     queryKey: ["capex-comments", key],
     enabled: contractIds.length > 0,
@@ -871,9 +865,10 @@ export function useCommentWrites() {
    * panel and left the dots showing the pre-save state until the next reload.
    */
   const invalidate = () => {
-    void client.invalidateQueries({ queryKey: ["capex-comments"] });
-    // A comment's resolved state can change the grid's red-dot flags.
-    void client.invalidateQueries({ queryKey: ["cost-book", projectId] });
+    // B2 (OPT-12): a comment save or delete writes only `vsb_capexcomments`. The dots and threads are built from this query
+    // (`gridCommentIndicators(commentThreads(comments), commentCosts(book.lines))`); the cost book has no comment field
+    // (`CostLine.comments` is always `[]`), so it is no longer reloaded (it was: accounts, payer defaults, contracts, payments).
+    void client.invalidateQueries({ queryKey: COMMENTS_KEY });
   };
   const mutationKey = costWriteKey(projectId, "capex-comments"); // CA-15
   const save = useMutation({

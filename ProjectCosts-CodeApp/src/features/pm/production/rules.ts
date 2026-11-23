@@ -301,9 +301,7 @@ export const MONTH_KEYS = [
  * patterns) with the separators swapped for a comma-decimal language.
  */
 export function pfxText(value: number | null | undefined, pattern: string, lang: Lang = "en-US"): string {
-  const en = textFormat(value, pattern);
-  if (decimalSeparator(lang) === ".") return en;
-  return en.replace(/[.,]/g, (c) => (c === "." ? "," : "."));
+  return textFormat(value, pattern, lang); // OPT-33 (B8): `textFormat` swaps the separators itself; identical to the old two-step (UT-PFXTEXT-OPT-005)
 }
 
 /** `Value(text)` — blank (null) for "" or a non-number, as `Value` returns blank / error ("7." is 7). */

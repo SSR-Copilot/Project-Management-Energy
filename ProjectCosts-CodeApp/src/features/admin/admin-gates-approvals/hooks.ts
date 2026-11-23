@@ -33,10 +33,17 @@ export function useProjectStates() {
   return useQuery({ ...projectStatesQueryOptions(), select: adminStates });
 }
 
+/**
+ * OPT-17(c) DIVERGENCE (freshness, reversible with `GATES_REUSE_PEOPLE` in `data/adminGatesApprovals.ts`): a reload (after a toggle,
+ * a save, a reset, a delete, a focus refetch) hands the previous dataset's `people` to the loader, which then asks the directory
+ * only for Portfolio Managers it has not resolved yet. A display name changed in Entra stays until the cache entry is dropped.
+ */
 export function useGatesDataset(countryId: string | undefined, technology: number | undefined) {
+  const qc = useQueryClient();
+  const key = countryId && technology !== undefined ? qk.adminGateDataset(countryId, technology) : qk.adminGateDatasetNone;
   return useQuery({
-    queryKey: countryId && technology !== undefined ? qk.adminGateDataset(countryId, technology) : qk.adminGateDatasetNone,
-    queryFn: () => repo.loadDataset(countryId as string, technology as number),
+    queryKey: key,
+    queryFn: () => repo.loadDataset(countryId as string, technology as number, qc.getQueryData<GatesDataset>(key)?.people),
     enabled: Boolean(countryId && technology !== undefined),
   });
 }

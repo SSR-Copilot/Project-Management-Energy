@@ -31,6 +31,7 @@ import {
   APPROVAL_COLUMNS, HEADER_COLUMNS, LOCKING_APPROVAL, NOT_TO_DELETE, TASK_COLUMNS,
   createChecklistTablesRepository, isLockingApproval, taskBinds,
 } from "./adminChecklistTables";
+import { createChecklistRepository, loadLockedTaskIds } from "./adminDefaultChecklists";
 import { OWNING_BU_BIND, owningBusinessUnitBind } from "@/data/odata";
 import { CHECKLIST_ENTITY_SETS } from "@/data/dataverseNames";
 
@@ -42,6 +43,10 @@ let throwOn: string | null;
 let fail: { op: string; status: number } | null;
 let createResult: unknown;
 let gone: Set<string>;
+/** OPT-17(a): when set, the reads of `hold.table` wait for `hold.until` before answering (to observe what starts together). */
+let hold: { table: string; until: (options: Record<string, unknown>) => Promise<void> } | null;
+/** OPT-08(c): when true the fake answers like Dataverse and keeps only the columns of `$select`. */
+let project: boolean;
 
 const fake: FakeClient = {
   retrieveMultipleRecordsAsync: (async (table: string, options?: Record<string, unknown>) => {
@@ -52,9 +57,13 @@ const fake: FakeClient = {
       return { success: true, data: gone.has(key[2]!) ? [] : [{ [key[1]!]: key[2] }] };
     }
     calls.push({ op: "read", table, options: options ?? {} });
+    if (hold && hold.table === table) await hold.until(options ?? {});
     if (throwOn === table) throw new Error(`Data source '${table}' is not registered`);
     if (fail?.op === "read") return { success: false, data: [], error: { message: "denied", status: fail.status } };
-    const tablePages = pages[table] ?? [[]];
+    const select = options?.["select"] as string[] | undefined;
+    const tablePages = (pages[table] ?? [[]]).map((page) => (project && select
+      ? page.map((row) => Object.fromEntries(Object.entries(row as Record<string, unknown>).filter(([k]) => select.includes(k))))
+      : page));
     const token = options?.["skipToken"] as string | undefined;
     const index = token ? Number(token.slice(1)) : 0;
     const next = index + 1 < tablePages.length ? `p${index + 1}` : undefined;
@@ -91,6 +100,8 @@ beforeEach(() => {
   fail = null;
   createResult = {};
   gone = new Set();
+  hold = null;
+  project = false;
 });
 
 describe("Shared reads and writes", () => {
@@ -272,5 +283,100 @@ describe("E9: checklist write operation label", () => {
     fail = { op: "update", status: 500 };
     const updated = await repo.updateDefaultChecklist(T1, { vsb_order: 2 }, "Update the checklist task").catch((e: unknown) => e);
     expect((updated as DataError).operation).toBe("Update the checklist task");
+  });
+});
+
+/* ═══════════ Optimization programme B7 (OPT-08 c, OPT-17 a) ═══════════ */
+
+const LOCK_COLUMNS_NEEDED = ["vsb_checklistdefaultapprovalsid", "_vsb_projectdefaultchecklistid_value", "vsb_approvalmodecode"];
+const JSON_COLUMNS = ["vsb_defaultapprovers", "vsb_defaultcontributors", "vsb_defaultnotifications"];
+const gid = (n: number) => `00000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
+
+/** A full approval row as Dataverse returns it with the superset select (three JSON columns of up to 1000 characters). */
+const fullApproval = (n: number, checklistId: string | null, mode: number | null) => ({
+  vsb_checklistdefaultapprovalsid: `ap-${n}`, vsb_name: `Approval ${n}`, vsb_approvalmodecode: mode, vsb_gateisactive: n % 2 === 0,
+  vsb_defaultapprovers: "x".repeat(900), vsb_defaultcontributors: "y".repeat(900), vsb_defaultnotifications: "z".repeat(900),
+  _vsb_projectdefaultchecklistid_value: checklistId, _vsb_portfoliomanagerid_value: gid(n),
+});
+
+describe("OPT-08(c) Check List Settings locks read only the columns it keeps", () => {
+  const MODES = [952850000, 952850001, 952850002, null] as const;
+  const fixture = () => Array.from({ length: 300 }, (_, i) => fullApproval(
+    i, i % 17 === 0 ? null : (i % 5 === 0 ? gid(i % 40).toUpperCase() : gid(i % 40)), MODES[i % 4]!));
+
+  it("UT-ADCHKTBL-OPT-001 the locks read selects 3 columns, none of the three JSON columns (old: all 9 APPROVAL_COLUMNS)", async () => {
+    project = true;
+    pages[CHECKLIST_ENTITY_SETS.approvals] = [fixture()];
+    await loadLockedTaskIds(createChecklistRepository(repo));
+    const select = reads(CHECKLIST_ENTITY_SETS.approvals)[0]?.options?.["select"] as string[];
+    expect([...select].sort()).toEqual([...LOCK_COLUMNS_NEEDED].sort());
+    for (const column of JSON_COLUMNS) expect(select).not.toContain(column);
+    expect(APPROVAL_COLUMNS.length).toBe(9);
+    // The server filter is unchanged.
+    expect(reads(CHECKLIST_ENTITY_SETS.approvals)[0]?.options?.["filter"]).toBe(LOCKING_APPROVAL);
+  });
+
+  it("UT-ADCHKTBL-OPT-002 the lock set equals the old one (full columns) on a 300-row fixture with null modes, null ids, mixed case and 2 pages", async () => {
+    project = true;
+    const rows = fixture();
+    pages[CHECKLIST_ENTITY_SETS.approvals] = [rows.slice(0, 150), rows.slice(150)];
+    // Oracle: the old read (superset select, projected by the same fake) folded the way `loadLockedTaskIds` does.
+    const oldRows = await repo.listChecklistApprovals({ lockingOnly: true, select: APPROVAL_COLUMNS });
+    const oldSet = new Set<string>();
+    for (const a of oldRows) if (a.checklistId && isLockingApproval(a)) oldSet.add(a.checklistId.toLowerCase());
+    calls = [];
+    const now = await loadLockedTaskIds(createChecklistRepository(repo));
+    expect([...now].sort()).toEqual([...oldSet].sort());
+    expect(now.size).toBeGreaterThan(5);
+    expect(reads(CHECKLIST_ENTITY_SETS.approvals)).toHaveLength(2);
+  });
+
+  it("UT-ADCHKTBL-OPT-003 the narrow rows are a fraction of the old payload (JSON text bytes dropped)", async () => {
+    project = true;
+    pages[CHECKLIST_ENTITY_SETS.approvals] = [fixture()];
+    await repo.listChecklistApprovals({ lockingOnly: true, select: APPROVAL_COLUMNS });
+    const wide = JSON.stringify(pages[CHECKLIST_ENTITY_SETS.approvals]![0]!.map((r) => Object.fromEntries(
+      Object.entries(r as Record<string, unknown>).filter(([k]) => (APPROVAL_COLUMNS as readonly string[]).includes(k)))));
+    const narrow = JSON.stringify(pages[CHECKLIST_ENTITY_SETS.approvals]![0]!.map((r) => Object.fromEntries(
+      Object.entries(r as Record<string, unknown>).filter(([k]) => LOCK_COLUMNS_NEEDED.includes(k)))));
+    expect(wide.length / narrow.length).toBeGreaterThan(5);
+  });
+});
+
+describe("OPT-17(a) the approvals read of a task list goes out in parallel chunks", () => {
+  const ids = Array.from({ length: 100 }, (_, i) => gid(i + 1)); // 40 + 40 + 20 ids = 3 chunks
+
+  it("UT-ADCHKTBL-OPT-004 all 3 chunk reads start before the first answers (old: one read in flight at a time)", async () => {
+    let release!: () => void;
+    const until = new Promise<void>((r) => { release = r; });
+    hold = { table: CHECKLIST_ENTITY_SETS.approvals, until: () => until };
+    const pending = repo.listChecklistApprovals({ checklistIds: ids });
+    await new Promise((r) => setTimeout(r, 10));
+    const startedBeforeAnswer = reads(CHECKLIST_ENTITY_SETS.approvals).length;
+    release();
+    await pending;
+    expect(startedBeforeAnswer).toBe(3);
+    expect(reads(CHECKLIST_ENTITY_SETS.approvals)).toHaveLength(3);
+  });
+
+  it("UT-ADCHKTBL-OPT-005 the rows come back in chunk order even when a later chunk answers first", async () => {
+    const chunkOf = (options: Record<string, unknown>) => {
+      const filter = String(options["filter"]);
+      return filter.includes(gid(1)) ? 0 : filter.includes(gid(41)) ? 1 : 2;
+    };
+    // Chunk 0 answers last, chunk 2 first.
+    hold = { table: CHECKLIST_ENTITY_SETS.approvals, until: (o) => new Promise((r) => setTimeout(r, (2 - chunkOf(o)) * 5 + 1)) };
+    // The fake answers one page for every read, so give each chunk its own row through the read order of `pages`.
+    pages[CHECKLIST_ENTITY_SETS.approvals] = [[{ vsb_checklistdefaultapprovalsid: "same", _vsb_projectdefaultchecklistid_value: "t" }]];
+    const rows = await repo.listChecklistApprovals({ checklistIds: ids });
+    expect(rows).toHaveLength(3); // one row per chunk read, none lost
+    expect(reads(CHECKLIST_ENTITY_SETS.approvals).map((c) => chunkOf(c.options ?? {}))).toEqual([0, 1, 2]);
+  });
+
+  it("UT-ADCHKTBL-OPT-006 a failing chunk rejects with its DataError (first failure, as before) and no chunk is silently dropped", async () => {
+    fail = { op: "read", status: 500 };
+    const error = await repo.listChecklistApprovals({ checklistIds: ids }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(DataError);
+    expect((error as DataError).status).toBe(500);
   });
 });

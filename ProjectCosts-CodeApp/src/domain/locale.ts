@@ -157,6 +157,24 @@ export function canvasNumberText(
   return en.replace(/[.,]/g, (c) => (c === "." ? decimalSeparator : groupSeparator));
 }
 
+const collators = new Map<string, Intl.Collator>();
+
+/**
+ * A shared `Intl.Collator` for a (locale, options) pair (OPT-29, B8). `a.localeCompare(b, locale, options)` is specified as
+ * `new Intl.Collator(locale, options).compare(a, b)`, and an engine builds a collator on every call that passes a locale or options
+ * (a sort of n rows makes about n log n of them). `collator(locale, options).compare` gives the same order from one pooled instance.
+ * Both arguments are strings here, as at every call site; `localeCompare` would throw on a missing receiver where `compare` would not.
+ */
+export function collator(locale: string | undefined, options?: Intl.CollatorOptions): Intl.Collator {
+  const key = `${locale}|${options === undefined ? "" : JSON.stringify(options)}`;
+  const cached = collators.get(key);
+  if (cached !== undefined) return cached;
+  const made = new Intl.Collator(locale, options);
+  if (collators.size >= MAX_CACHED_LOCALES) collators.clear();
+  collators.set(key, made);
+  return made;
+}
+
 const dateFormats = new Map<string, Intl.DateTimeFormat>();
 
 /**

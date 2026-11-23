@@ -55,7 +55,7 @@ import { ContractSaveError, ENTITY, OwnershipConflictError, type SaveContractInp
 import {
   CARD_TEXT, CONTRACT_TYPE, INCOMPLETE_CLOSED_WARNING, POPUP_BUTTONS, breadcrumbText, buildAccountTree,
   canSave, classifyAccounts, closeDialogText, closePrompt, currencyOf, deleteDescription, groupDevCoTags, initialForm,
-  isDirty, limitFlags, limitMessage, panelFixedValueCurrency, panelTitle, sortContracts, validateForm,
+  isDirty, limitFlags, limitMessage, panelFixedValueCurrency, panelTitle, sortContracts, validateForm, visibleSelectionCount,
   withoutAccounts,
   type ContractForm, type StandardContract,
 } from "./rules";
@@ -176,6 +176,21 @@ export default function ContractsSettingsScreen() {
   const limits = limitFlags(contracts);
   const tree = useMemo(() => buildAccountTree(capexQuery.data ?? []), [capexQuery.data]);
   const devCoRows = devCoQuery.data;
+  // OPT-27(c): the DevCo rows are indexed by contract once and each card's tag groups derived once per data change, not per card on
+  // every render (every keystroke in the open panel re-renders this screen).
+  const tagGroupsByContract = useMemo(() => {
+    const rowsByContract = new Map<string, NonNullable<typeof devCoRows>>();
+    for (const row of devCoRows ?? []) {
+      const own = rowsByContract.get(row.contractId);
+      if (own) own.push(row);
+      else rowsByContract.set(row.contractId, [row]);
+    }
+    return new Map(contracts.map((c) => [
+      c.id,
+      devCoQuery.isError ? "error" as const
+        : devCoRows && capexQuery.data ? groupDevCoTags(rowsByContract.get(c.id) ?? [], tree.accounts) : undefined,
+    ]));
+  }, [contracts, devCoRows, devCoQuery.isError, capexQuery.data, tree.accounts]);
 
   /* ───────────────────────────────────────────────────────── local UI state */
   const expanded = useToggleSet<string>();
@@ -197,13 +212,16 @@ export default function ContractsSettingsScreen() {
   const scopeChanged = panel !== null && !sameCountryTechnology(selection, panel.scope);
   // Only accounts shown in the tree count toward "at least one account"; links to inactive
   // CAPEX accounts stay in the selection (never deleted on save) but do not satisfy the rule.
-  const errors = panel ? validateForm(panel.form, lang, undefined, tree.leaves) : {};
+  // OPT-27(c): the selection count and the dirty flag are computed once and handed to the rules that need them (was twice each).
+  const selectionCount = panel ? visibleSelectionCount(panel.form.selectedAccountIds, tree.leaves) : 0;
+  const errors = panel ? validateForm(panel.form, lang, undefined, tree.leaves, selectionCount) : {};
   const dirty = panel ? isDirty(panel.form, panel.initial) : false;
   const linksIncomplete = panel?.linksIncomplete === true;
   // A retry after a partial save must be possible even when the form equals its loaded values.
   const saveEnabled = panel && !scopeChanged && canAdmin
     ? canSave({
       form: panel.form, initial: panel.initial, errors, linksAvailable, forceDirty: linksIncomplete, visible: tree.leaves,
+      dirty, selectionCount,
     })
     : false;
 
@@ -418,9 +436,7 @@ export default function ContractsSettingsScreen() {
         {() => (
           <div className={styles.list} data-testid="gal_AdminContracts_StandardAssumptions_Updated">
             {contracts.map((contract) => {
-              const own = devCoRows?.filter((r) => r.contractId === contract.id);
-              const tagGroups = devCoQuery.isError ? "error" as const
-                : own && capexQuery.data ? groupDevCoTags(own, tree.accounts) : undefined;
+              const tagGroups = tagGroupsByContract.get(contract.id);
               return (
                 <ContractCard
                   key={contract.id}

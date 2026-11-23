@@ -42,8 +42,9 @@
  */
 import { inRange, isDecimal, parseNumber, round } from "@/domain/numeric";
 import { canvasNumberText, localeInfo, rangeMessageFor } from "@/domain/locale";
-import { addMonths as addMonthsOnDate } from "@/domain/dates";
+import { addMonths as addMonthsOnDate, dateOnly } from "@/domain/dates";
 import { bind } from "@/data/odata";
+import { startsWithStandard } from "@/domain/costStandards";
 
 /* ═════════════════════════════════════════════════════════════════ option sets ══ */
 
@@ -669,11 +670,6 @@ function toDate(iso: string | Date | null | undefined): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-function toIso(d: Date): string {
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
-
 /**
  * Power Fx `DateAdd(d, n, TimeUnit.Months)` — clamped to the end of the target month, matching
  * `periodEnd` in `@/features/cost/costing/model` so both halves of the app agree.
@@ -681,14 +677,14 @@ function toIso(d: Date): string {
 export function addMonths(iso: string | Date, months: number): string {
   const d = toDate(iso);
   if (!d) return "";
-  return toIso(addMonthsOnDate(d, months));   // D159: the clamping is the shared `addMonths`; only the text in and out is local
+  return dateOnly(addMonthsOnDate(d, months));   // D159: the clamping is the shared `addMonths`; only the text in and out is local
 }
 
 export function addDays(iso: string | Date, days: number): string {
   const d = toDate(iso);
   if (!d) return "";
   d.setDate(d.getDate() + days);
-  return toIso(d);
+  return dateOnly(d);
 }
 
 /**
@@ -858,11 +854,15 @@ export function buildContracts(
   costs: readonly LeaseCostRow[],
   periods: readonly LeasePeriodRow[],
 ): LeaseContract[] {
+  // OPT-26 (D160): periods are grouped by contract once (their input order kept inside a group), not re-filtered per contract.
+  const byCost = new Map<string | null, LeasePeriodRow[]>();
+  for (const p of periods) {
+    const group = byCost.get(p.projectCostId);
+    if (group) group.push(p); else byCost.set(p.projectCostId, [p]);
+  }
   return costs.map((cost) => ({
     cost,
-    periods: periods
-      .filter((p) => p.projectCostId === cost.id)
-      .sort((a, b) => periodNumber(a.period) - periodNumber(b.period)),
+    periods: [...(byCost.get(cost.id) ?? [])].sort((a, b) => periodNumber(a.period) - periodNumber(b.period)),
   }));
 }
 
@@ -1036,16 +1036,14 @@ export interface LeaseGridRow {
  * `StartsWith(ThisItem.Name, "Standard")` (LL:992, LL:252, LL:341). Power Fx `StartsWith` is case
  * INSENSITIVE, so "standard x" and "STANDARD" count (FT-BR-LEASE-027).
  */
-export const isStandardPeriodName = (name: string): boolean =>
-  name.toLowerCase().startsWith("standard");
+export const isStandardPeriodName = (name: string): boolean => startsWithStandard(name);
 
 /**
  * `StartsWith(Lower(name), "standard")` — the DELETE gate lower-cases first (LL:361). Redundant
  * since `StartsWith` ignores case anyway, so it equals `isStandardPeriodName`; kept as the
  * canvas' own spelling of that gate.
  */
-export const isStandardPeriodNameLower = (name: string): boolean =>
-  name.toLowerCase().startsWith("standard");
+export const isStandardPeriodNameLower = (name: string): boolean => startsWithStandard(name);
 
 /** One rendered grid row, so the screen holds no formatting logic. */
 export function toLeaseGridRow(args: {
@@ -2569,6 +2567,8 @@ export interface LeaseSaveContext {
   technology: number | null;
   countryName: string | null;
   locale?: string;
+  /** OPT-28 (D160): the `leaseFieldErrors(form, locale)` the caller already computed for this form; omitted, it is derived here. */
+  errors?: Partial<Record<string, string>>;
 }
 
 /** Clause F/I's inner block, which the canvas repeats verbatim three times. */
@@ -2594,7 +2594,7 @@ export function canSaveLandLease(args: LeaseSaveContext): boolean {
   if (blankFor(LEASE_INPUT_MODE)(form.description)) return false;
 
   // B — every error label hidden.
-  if (Object.keys(leaseFieldErrors(form, locale)).length > 0) return false;
+  if (Object.keys(args.errors ?? leaseFieldErrors(form, locale)).length > 0) return false;
   if (hintVisible({
     form, selectedCost: args.selectedCost, selectedPeriod: args.selectedPeriod,
   })) return false;
@@ -2676,6 +2676,50 @@ export function bindParent(
       payload: { ...w.payload, ...lookup(LEASE_BIND.projectCost, id) },
     } as LeaseWrite;
   });
+}
+
+/**
+ * OPT-10 — splits a plan into TIERS: runs of consecutive writes that may be sent at the same time. Tier `n + 1` starts only
+ * after every write of tier `n` has landed, and no tier starts after a failed one.
+ *
+ * THE RULE (conservative; it keeps the legacy loop's "nothing after a failure is sent" everywhere except among allocation rows of one
+ * kind). Only the WTG ALLOCATION rows may share a tier: they are independent single-row creates, re-writes and deletes of a join table, and
+ * they are what makes a 40-WTG save or a contract delete slow. A write joins the current tier only when ALL of these hold; otherwise it opens
+ * the next tier:
+ *  - the tier and the write are on the allocation entity set (every write on any OTHER entity set, the header, the periods, is sent alone,
+ *    in planner order, exactly as the loop did: a period update is a barrier before the follower start-date updates of the D118 re-chain);
+ *  - the write has the SAME op (create / update / delete) as the tier, so a failed allocation create can never be followed by the delete
+ *    of the allocation it was to replace, and the planner's order creates → updates → deletes stands;
+ *  - it targets another row than the writes already in the tier (an update then a delete of one row stays in order);
+ *  - its `parentRef` is not the `ref` of a create in the tier (a bind waits for its create, whichever entity set that is on).
+ * Different entity sets are therefore always ordered (header → allocations → periods, and deletes children before the parent).
+ *
+ * Returns the indexes into `writes`, in planner order inside each tier.
+ */
+export function leaseWriteTiers(writes: readonly LeaseWrite[]): number[][] {
+  const tiers: number[][] = [];
+  let tierWrite: LeaseWrite | null = null; // the write that opened the current tier: its entity set and op are the tier's
+  let rowsInTier = new Set<string>();
+  let refsInTier = new Set<string>();
+  writes.forEach((w, index) => {
+    const row = w.op === "create" ? null : `${w.entitySet}|${w.id}`;
+    const needsLaterTier = tierWrite === null
+      || w.entitySet !== LEASE_ENTITY_SET.allocation
+      || w.entitySet !== tierWrite.entitySet
+      || w.op !== tierWrite.op
+      || (row !== null && rowsInTier.has(row))
+      || (w.op !== "delete" && w.parentRef !== undefined && refsInTier.has(w.parentRef));
+    if (needsLaterTier || tiers.length === 0) {
+      tiers.push([]);
+      tierWrite = w;
+      rowsInTier = new Set();
+      refsInTier = new Set();
+    }
+    tiers[tiers.length - 1]!.push(index);
+    if (row !== null) rowsInTier.add(row);
+    if (w.op === "create" && w.ref !== undefined) refsInTier.add(w.ref);
+  });
+  return tiers;
 }
 
 /** `"<NavProperty>@odata.bind": "/<entityset>(<guid>)"`, omitted entirely when the id is null. */

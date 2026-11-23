@@ -146,7 +146,8 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
     expect(screen.queryByRole("button", { name: "Spain" })).not.toBeInTheDocument();
     expect(screen.getByText("4 Approvers")).toBeInTheDocument();
     expect(screen.getByText("Grid connection request")).toBeInTheDocument();
-    expect(repo.loadDataset).toHaveBeenCalledWith(FIXTURE_COUNTRIES[1]!.id, 952850000);
+    // OPT-17(c): the loader gets the previous dataset's people as a third argument (none on the first load).
+    expect(repo.loadDataset).toHaveBeenCalledWith(FIXTURE_COUNTRIES[1]!.id, 952850000, undefined);
   });
 
   it("UT-ADGATE-902 selecting France → PV reloads for that context", async () => {
@@ -155,7 +156,7 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
     fireEvent.click(screen.getByRole("button", { name: "Expand France technologies" }));
     fireEvent.click(screen.getByRole("button", { name: "France PV" }));
     expect(await screen.findByText("Project Gates | France | PV")).toBeInTheDocument();
-    await waitFor(() => expect(repo.loadDataset).toHaveBeenCalledWith(FIXTURE_COUNTRIES[0]!.id, 952850001));
+    await waitFor(() => expect(repo.loadDataset).toHaveBeenCalledWith(FIXTURE_COUNTRIES[0]!.id, 952850001, undefined));
   });
 
   it("UT-ADGATE-903 opening a placeholder gate ('Edit Approvers', as the canvas) and cancelling writes nothing", async () => {

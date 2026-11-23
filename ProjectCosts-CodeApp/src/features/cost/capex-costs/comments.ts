@@ -268,10 +268,16 @@ export function threadLatestActivity(
  * oldest first, with the latest activity date/text bubbled up for the collapsed row.
  */
 export function commentThreads(comments: readonly CapexComment[]): CommentThread[] {
-  const roots = comments.filter((c) => c.parentId === null);
+  // OPT-25 (D160): replies are grouped by parent once (input order kept inside each group), not re-filtered per root.
+  const roots: CapexComment[] = [];
+  const repliesOf = new Map<string, CapexComment[]>();
+  for (const c of comments) {
+    if (c.parentId === null) { roots.push(c); continue; }
+    const group = repliesOf.get(c.parentId);
+    if (group) group.push(c); else repliesOf.set(c.parentId, [c]);
+  }
   const threads = roots.map((root) => {
-    const replies = comments
-      .filter((c) => c.parentId === root.id)
+    const replies = [...(repliesOf.get(root.id) ?? [])]
       .sort((a, b) => a.createdOn.localeCompare(b.createdOn));
     return {
       root, replies,
@@ -629,10 +635,26 @@ export function commentCosts(
     id: string;
     payments: readonly { id?: string; year: number; month: number }[];
   }[] | undefined,
+  /**
+   * OPT-25 (D160): when given, only payments whose id is in this set are projected. `gridCommentIndicators` looks a cost
+   * up by the id a comment thread references and nothing else, so the rest were allocated for nothing (one object per
+   * payment, tens of thousands on a large category). Omitted = every payment, as before.
+   */
+  referenced?: ReadonlySet<string>,
 ): { id: string; contractId: string; year: number; month: number }[] {
-  return (lines ?? []).flatMap((line) =>
-    line.payments
-      .filter((p): p is typeof p & { id: string } => Boolean(p.id))
-      .map((p) => ({ id: p.id, contractId: line.id, year: p.year, month: p.month })),
-  );
+  if (referenced?.size === 0) return [];
+  const out: { id: string; contractId: string; year: number; month: number }[] = [];
+  for (const line of lines ?? []) {
+    for (const p of line.payments) {
+      if (p.id && (!referenced || referenced.has(p.id))) out.push({ id: p.id, contractId: line.id, year: p.year, month: p.month });
+    }
+  }
+  return out;
+}
+
+/** The cost ids the comment threads link to (`relatedCostId`): the only costs `gridCommentIndicators` can look up. */
+export function referencedCostIds(threads: readonly CommentThread[]): Set<string> {
+  const ids = new Set<string>();
+  for (const t of threads) if (t.relatedCostId) ids.add(t.relatedCostId);
+  return ids;
 }

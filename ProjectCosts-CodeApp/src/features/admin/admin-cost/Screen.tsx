@@ -89,6 +89,8 @@ const useStyles = makeStyles({
 
 /** `cmp_Admin_ProjectGatest_Approvals_Header_1.Project` — `Name: "Costs"`, verbatim. */
 const PAGE_TITLE = "Costs";
+/** The three contract sections (Land Lease, O&M, Other OPEX); DEVEX/CAPEX has no contracts. */
+const CONTRACT_TYPES = [CONTRACT_TYPE.landLease, CONTRACT_TYPE.oAndM, CONTRACT_TYPE.other] as const;
 
 type DeleteKind = "devex" | "contract" | "period";
 type DeleteTarget = { cost: DevexCost } | { contract: ContractView; row: OpexPeriod };
@@ -166,6 +168,14 @@ export default function CostsSettingsScreen() {
   const currencyNames = useMemo(() => new Map(currencies.map((c) => [c.id, c.name])), [currencies]);
   const llNames = useMemo(() => new Map(landLeaseSubs.map((s) => [s.id, s.name])), [landLeaseSubs]);
   const opexNames = useMemo(() => new Map(opexSubs.map((s) => [s.id, s.name])), [opexSubs]);
+  // OPT-27(b): the contract groupings and the Add-contract menus are derived once per data change, for the three contract types,
+  // not on every render for every section (folded ones included).
+  const contractsByType = useMemo(() => new Map(CONTRACT_TYPES.map((t) => [
+    t, groupContracts(opexPeriods, t, t === CONTRACT_TYPE.landLease ? llNames : opexNames, inactiveRows),
+  ])), [opexPeriods, llNames, opexNames, inactiveRows]);
+  const menusByType = useMemo(() => new Map(CONTRACT_TYPES.map((t) => [
+    t, contractMenu(t, landLeaseSubs, opexSubs, opexPeriods),
+  ])), [landLeaseSubs, opexSubs, opexPeriods]);
 
   /* ─────────────────────────────────────────────── permissions ── */
   const canEditDevex = (c: DevexCost) => isAdmin && devexTable.forRecord(c.id).canWrite;
@@ -377,15 +387,14 @@ export default function CostsSettingsScreen() {
       );
     }
     const type = cat.contractType;
-    const names = type === CONTRACT_TYPE.landLease ? llNames : opexNames;
-    const contracts = groupContracts(opexPeriods, type, names, inactiveRows);
+    const contracts = contractsByType.get(type) ?? [];
     return (
       <>
         <CategoryCommandRow
           title={cat.title}
           sectionKey={cat.key}
           kind="contract"
-          menuItems={contractMenu(type, landLeaseSubs, opexSubs, opexPeriods)}
+          menuItems={menusByType.get(type)}
           canCreate={isAdmin && opexTable.canCreate && !opexQ.isLoading && !opexQ.error}
           onAddContract={(item) => onAddContract(type, item)}
         />
@@ -406,8 +415,9 @@ export default function CostsSettingsScreen() {
             canCreate={isAdmin && opexTable.canCreate}
             // DIVERGENCE: a row without a sub-account cannot be addressed as a contract, so Edit and
             // Delete are disabled on it (the canvas offers both on every row).
-            canEdit={(r) => canEditOpex(r) && Boolean(contracts.find((c) => c.periods.includes(r))?.subaccountId)}
-            canDelete={(r) => canDeleteOpex(r) && Boolean(contracts.find((c) => c.periods.includes(r))?.subaccountId)}
+            // OPT-27(b): the table passes the row's own contract, so no search over the contracts per row.
+            canEdit={(r, c) => canEditOpex(r) && Boolean(c.subaccountId)}
+            canDelete={(r, c) => canDeleteOpex(r) && Boolean(c.subaccountId)}
             onToggle={collapsed.toggle}
             onEdit={onEditRow}
             onDelete={(contract, row) => dialog.ask(deleteKind(contract, row), { contract, row })}

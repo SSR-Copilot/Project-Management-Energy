@@ -27,26 +27,21 @@ import {
   type Technology,
 } from "@/features/pm/revenues/rules";
 import { CHOICE_FINANCE } from "./dataverseNames";
+import { localDayOf } from "@/domain/dates";
 import { fetchAll, fetchPage } from "./client";
-import { ACTIVE, and, dateOnly, eq, geDate, guid, leDate, lookupEq, numberOf } from "./odata";
+import { ACTIVE, and, dateOnly, eq, geDate, guid, leDate, lookupEq } from "./odata";
+import { rowStr as str, rowNum as num } from "./rowValues";
 import { listProjectStates } from "./generalData";
 import { loadCountryInflation, loadCurrencies } from "./landLease";
 import { listRevenueAssumptions } from "./milestones";
 
 type Raw = Record<string, unknown>;
 const raw = <T,>(rows: T[]): Raw[] => rows as unknown as Raw[];
-const str = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
-const num = (v: unknown): number | null => numberOf(v) ?? null;
 const bool = (v: unknown): boolean => v === true || v === 1;
 const formatted = (r: Raw, col: string): string | null => str(r[`${col}@OData.Community.Display.V1.FormattedValue`]);
 
 /** A Date Only value (`yyyy-mm-dd…`) as a LOCAL calendar day (rule 18). Shared with `data/finance.ts`. */
-export function day(v: unknown): Date | null {
-  if (typeof v !== "string" || v.length < 10) return null;
-  const [y, m, d] = v.slice(0, 10).split("-").map(Number);
-  if (!y || !m || !d) return null;
-  return new Date(y, m - 1, d);
-}
+export const day = localDayOf; // OPT-31 (B8): the one definition is `domain/dates.localDayOf` (UT-DATES-OPT-004)
 
 /** `Switch(Technology, Wind, …, PV, …)` — the option-set value, decoded once. */
 export function toTechnology(v: unknown): Technology {

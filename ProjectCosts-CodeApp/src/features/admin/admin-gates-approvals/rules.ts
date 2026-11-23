@@ -258,16 +258,71 @@ const sameId = (a: string | null | undefined, b: string | null | undefined) =>
 export const isShownChecklist = (c: Pick<DefaultChecklist, "active" | "toDelete">) => c.active && !c.toDelete;
 
 /**
+ * OPT-27(a): everything the grid derives from `checklists` and `approvals`, built ONCE per dataset (one linear pass each) instead of
+ * `checklists.find(sameId)` per approval and `approvals.some(sameId)` per checklist for every gate row on every render.
+ * Semantics are those of the per-call functions it replaced (`tasksOfGate`, `taskCandidates`, `canAddTask` below delegate here):
+ *   - ids compare case-insensitively and an empty / null id matches nothing (`sameId`);
+ *   - a duplicated checklist id resolves to the FIRST checklist, as `Array.find` did;
+ *   - only `isShownChecklist` checklists take part;
+ *   - rows are sorted by the checklist's `Order` (blank last); ties keep the dataset order (stable sort).
+ * The returned arrays are shared between calls: callers must not mutate them.
+ */
+export interface TaskIndex {
+  /** `gal_…_ChecklistDefaultApprovals.Items`: approvals whose (shown) checklist belongs to this gate. */
+  tasksOf(state: ProjectState): TaskRow[];
+  /** `drp_…_State_1.Items` on create: this gate's shown checklist tasks that have no approval yet. */
+  candidatesOf(state: ProjectState): DefaultChecklist[];
+  /** Add Task is enabled while the gate has a candidate. */
+  canAdd(state: ProjectState): boolean;
+}
+
+export function buildTaskIndex(data: Pick<GatesDataset, "checklists" | "approvals">): TaskIndex {
+  const firstChecklistById = new Map<string, DefaultChecklist>();
+  for (const c of data.checklists) {
+    if (!c.id) continue;
+    const key = c.id.toLowerCase();
+    if (!firstChecklistById.has(key)) firstChecklistById.set(key, c);
+  }
+  const approvedChecklistIds = new Set<string>();
+  const tasksByState = new Map<string, TaskRow[]>();
+  for (const approval of data.approvals) {
+    if (!approval.checklistId) continue;
+    const key = approval.checklistId.toLowerCase();
+    approvedChecklistIds.add(key);
+    const checklist = firstChecklistById.get(key);
+    if (checklist && isShownChecklist(checklist) && checklist.stateId) {
+      const stateKey = checklist.stateId.toLowerCase();
+      const bucket = tasksByState.get(stateKey);
+      if (bucket) bucket.push({ approval, checklist });
+      else tasksByState.set(stateKey, [{ approval, checklist }]);
+    }
+  }
+  const candidatesByState = new Map<string, DefaultChecklist[]>();
+  for (const c of data.checklists) {
+    if (!isShownChecklist(c) || !c.stateId) continue;
+    if (c.id && approvedChecklistIds.has(c.id.toLowerCase())) continue;
+    const stateKey = c.stateId.toLowerCase();
+    const bucket = candidatesByState.get(stateKey);
+    if (bucket) bucket.push(c);
+    else candidatesByState.set(stateKey, [c]);
+  }
+  for (const bucket of tasksByState.values()) bucket.sort((a, b) => byOrder(a.checklist, b.checklist));
+  for (const bucket of candidatesByState.values()) bucket.sort(byOrder);
+  const NONE: never[] = [];
+  return {
+    tasksOf: (state) => (state.id ? tasksByState.get(state.id.toLowerCase()) ?? NONE : NONE),
+    candidatesOf: (state) => (state.id ? candidatesByState.get(state.id.toLowerCase()) ?? NONE : NONE),
+    canAdd: (state) => (state.id ? (candidatesByState.get(state.id.toLowerCase())?.length ?? 0) > 0 : false),
+  };
+}
+
+/**
  * `gal_Admin_ProjectGates_DefaultClusterApproval_Item_ChecklistDefaultApprovals.Items`: approvals
  * whose (shown) checklist belongs to this gate, sorted by the checklist's `Order`.
+ * (One call = one index build; the grid builds the index once per dataset, see `buildTaskIndex`.)
  */
 export function tasksOfGate(data: Pick<GatesDataset, "checklists" | "approvals">, state: ProjectState): TaskRow[] {
-  const out: TaskRow[] = [];
-  for (const approval of data.approvals) {
-    const checklist = data.checklists.find((c) => sameId(c.id, approval.checklistId));
-    if (checklist && isShownChecklist(checklist) && sameId(checklist.stateId, state.id)) out.push({ approval, checklist });
-  }
-  return out.sort((a, b) => byOrder(a.checklist, b.checklist));
+  return [...buildTaskIndex(data).tasksOf(state)];
 }
 
 /**
@@ -275,11 +330,7 @@ export function tasksOfGate(data: Pick<GatesDataset, "checklists" | "approvals">
  * checklist tasks that have NO approval yet. `DefaultSelectedItems` is the first of them.
  */
 export function taskCandidates(data: Pick<GatesDataset, "checklists" | "approvals">, state: ProjectState): DefaultChecklist[] {
-  return data.checklists
-    .filter(isShownChecklist)
-    .filter((c) => sameId(c.stateId, state.id))
-    .filter((c) => !data.approvals.some((a) => sameId(a.checklistId, c.id)))
-    .sort(byOrder);
+  return [...buildTaskIndex(data).candidatesOf(state)];
 }
 
 /**
@@ -289,7 +340,7 @@ export function taskCandidates(data: Pick<GatesDataset, "checklists" | "approval
  * equals this check over the dataset's approvals (D22).
  */
 export function canAddTask(data: Pick<GatesDataset, "checklists" | "approvals">, state: ProjectState): boolean {
-  return taskCandidates(data, state).length > 0;
+  return buildTaskIndex(data).canAdd(state);
 }
 
 /* ═══════════════════════════════════════════════════════ participant JSON ══ */
@@ -316,6 +367,25 @@ export function parsePeople(json: string | null | undefined): PersonRef[] {
     // Unreadable JSON is shown as an empty list.
     return [];
   }
+}
+
+/**
+ * OPT-27(a): `parsePeople` memoised by the stored text, so a grid parses each distinct participant JSON once per dataset instead of
+ * on every render (three per gate row and per task row). Create one per dataset (`useMemo` on the dataset); the returned arrays are
+ * shared between calls and must not be mutated. Null, undefined and "" never reach `parse`.
+ */
+export function createPeopleParser(parse: (json: string | null | undefined) => PersonRef[] = parsePeople) {
+  const cache = new Map<string, PersonRef[]>();
+  const empty: PersonRef[] = [];
+  return (json: string | null | undefined): PersonRef[] => {
+    if (!json) return empty;
+    let people = cache.get(json);
+    if (!people) {
+      people = parse(json);
+      cache.set(json, people);
+    }
+    return people;
+  };
 }
 
 /**

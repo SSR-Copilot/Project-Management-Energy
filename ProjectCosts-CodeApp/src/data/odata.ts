@@ -94,10 +94,9 @@ export function chunk<T>(items: readonly T[], size = CHUNK): T[][] {
  * 18 Sep in a UTC+5:30 browser is held as `2026-09-17T18:30:00Z`, so `toISOString().slice(0, 10)`
  * would silently store the 17th — the same off-by-one-day the timestamp above is showing.
  */
-export function dateOnly(value: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
-}
+// OPT-31 (B8): the body now lives in `domain/dates.ts` (CONVENTIONS rule 17's home for date maths), so the Cost rules import it
+// instead of re-inlining it. Re-exported here so every existing `@/data/odata` importer keeps working.
+export { dateOnly } from "@/domain/dates";
 
 /**
  * The `yyyy-mm-dd` part of a Dataverse date value read from a row, or null when the value is not a date text.

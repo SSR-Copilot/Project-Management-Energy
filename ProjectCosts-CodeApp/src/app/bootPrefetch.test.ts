@@ -6,7 +6,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient } from "@tanstack/react-query";
 import { startupFlags } from "./startupFlags";
 
-const calls = vi.hoisted(() => ({ list: [] as string[], launchParams: {} as Record<string, string>, rejectProjects: false }));
+const calls = vi.hoisted(() => ({
+  list: [] as string[], launchParams: {} as Record<string, string>, rejectProjects: false,
+  /** The scope each session-project prefetch asked for (OPT-01/03). */
+  scopes: [] as (string | undefined)[], rejectSession: false,
+}));
 const note = (what: string) => { calls.list.push(what); };
 
 vi.mock("@/data/projects", () => ({
@@ -14,7 +18,11 @@ vi.mock("@/data/projects", () => ({
   listCountries: vi.fn(async () => { note("countries"); return []; }),
 }));
 vi.mock("@/data/project", () => ({
-  loadProject: vi.fn(async (id: string) => { note(`sessionProject:${id}`); return undefined; }),
+  loadProject: vi.fn(async (id: string, options?: { scope?: string }) => {
+    note(`sessionProject:${id}`); calls.scopes.push(options?.scope);
+    if (calls.rejectSession) throw new Error("session boom");
+    return undefined;
+  }),
   loadEnvironmentVariables: vi.fn(async () => ({})),
 }));
 vi.mock("@/data/generalData", () => ({
@@ -34,9 +42,24 @@ vi.mock("@/platform/powerClient", async (original) => ({
 vi.mock("./screenLoaders", () => ({
   loadProjectOverviewScreen: vi.fn(async () => { note("chunk:overview"); return {}; }),
   loadGeneralDataScreen: vi.fn(async () => { note("chunk:general-data"); return {}; }),
+  // OPT-03: the Cost and the other Project Management screens' chunks.
+  COST_SCREEN_LOADERS: {
+    "/costs/capex": [vi.fn(async () => { note("chunk:cost:capex"); return {}; })],
+    "/costs/land-lease": [vi.fn(async () => { note("chunk:cost:land-lease"); return {}; })],
+    "/costs/add-from-table": [
+      vi.fn(async () => { note("chunk:cost:capex"); return {}; }),
+      vi.fn(async () => { note("chunk:cost:add-from-table"); return {}; }),
+    ],
+  },
+  PM_SCREEN_LOADERS: {
+    team: vi.fn(async () => { note("chunk:pm:team"); return {}; }),
+    finance: vi.fn(async () => { note("chunk:pm:finance"); return {}; }),
+  },
 }));
 
 import { startBootPrefetch } from "./bootPrefetch";
+import { sessionProjectQueryOptions } from "./SessionContext";
+import { sessionProjectScope } from "./bootPlan";
 import { projectPageKey, countriesQueryOptions } from "@/features/pm/project-main/queries";
 import { parseCriteria } from "@/features/pm/project-main/rules";
 import { generalDataProjectQueryOptions } from "@/features/pm/general-data/queries";
@@ -49,6 +72,8 @@ beforeEach(() => {
   calls.list.length = 0;
   calls.launchParams = {};
   calls.rejectProjects = false;
+  calls.rejectSession = false;
+  calls.scopes.length = 0;
   startupFlags.bootPrefetch = true;
 });
 
@@ -77,10 +102,12 @@ describe("boot prefetch", () => {
     expect(calls.list).toContain("projectPage:1");
   });
 
-  it("UT-BOOT-023 a cost deep link at the root reads no project list (only the speculative chunk)", async () => {
+  it("UT-BOOT-023 a cost deep link at the root reads no project list (the speculative chunk, the Cost screen and the project only)", async () => {
     calls.launchParams = { projectId: ID };
     await boot(newClient(), "");
-    expect(calls.list.filter((c) => c !== "chunk:overview")).toEqual([]);
+    // OPT-03 (B5b): it used to start nothing besides the overview chunk; now the Cost screen's chunk and the project start too.
+    // Still no project page, country list or any Project Management read.
+    expect([...calls.list].sort()).toEqual(["chunk:cost:capex", "chunk:overview", `sessionProject:${ID}`]);
   });
 
   it("UT-BOOT-024 Edit Project starts General Data's project row, lists and children at once", async () => {
@@ -103,7 +130,10 @@ describe("boot prefetch", () => {
   });
 
   it("UT-BOOT-026 a route the plan does not know starts nothing", async () => {
+    // OPT-03 (B5b): `#/costs/capex` WITH a project id now starts (UT-BOOT-OPT-010); without one, or an unknown route, nothing does.
     await boot(newClient(), "#/costs/capex");
+    await boot(newClient(), "#/admin/cost");
+    await boot(newClient(), `#/project/team`);
     expect(calls.list).toEqual([]);
   });
 
@@ -124,5 +154,63 @@ describe("boot prefetch", () => {
     calls.rejectProjects = false;
     await qc.fetchQuery({ queryKey: key, queryFn: async () => "ok" });
     expect(qc.getQueryData(key)).toBe("ok");
+  });
+
+  it("UT-BOOT-OPT-010 a Cost deep link starts the Cost screen's chunk and the FULL session project, under the key the provider reads", async () => {
+    const qc = newClient();
+    await boot(qc, `#/costs/land-lease?projectId=${ID}`);
+    expect([...calls.list].sort()).toEqual(["chunk:cost:land-lease", `sessionProject:${ID}`]);
+    expect(calls.scopes).toEqual(["full"]);
+    expect(qc.getQueryState(sessionProjectQueryOptions(ID, "full").queryKey)?.status).toBe("success");
+    // The PM scope has its own key: the Cost load never lands where a PM route reads.
+    expect(qc.getQueryState(sessionProjectQueryOptions(ID, "pm").queryKey)).toBeUndefined();
+  });
+
+  it("UT-BOOT-OPT-011 Add Cost from Table starts both of its chunks (a panel over the CAPEX screen)", async () => {
+    await boot(newClient(), `#/costs/add-from-table?projectId=${ID}`);
+    expect(calls.list).toEqual(expect.arrayContaining(["chunk:cost:capex", "chunk:cost:add-from-table", `sessionProject:${ID}`]));
+  });
+
+  it("UT-BOOT-OPT-012 another Project Management screen starts its chunk and the ROW-ONLY (pm) session project, nothing of its own data", async () => {
+    const qc = newClient();
+    await boot(qc, `#/project/team?projectId=${ID}`);
+    expect([...calls.list].sort()).toEqual(["chunk:pm:team", `sessionProject:${ID}`]);
+    expect(calls.scopes).toEqual(["pm"]);
+    expect(qc.getQueryState(sessionProjectQueryOptions(ID, "pm").queryKey)?.status).toBe("success");
+    expect(qc.getQueryState(sessionProjectQueryOptions(ID, "full").queryKey)).toBeUndefined();
+  });
+
+  it("UT-BOOT-OPT-013 General Data's own project prefetch is the PM scope too", async () => {
+    await boot(newClient(), `#/project/general?projectId=${ID}`);
+    expect(calls.scopes).toEqual(["pm"]);
+  });
+
+  it("UT-BOOT-OPT-014 Edit Project at the root prefetches the PM scope (the SessionProvider reads the same key there)", async () => {
+    calls.launchParams = { projectId: ID, pmScreen: "/project/general" };
+    const qc = newClient();
+    await boot(qc, "");
+    expect(calls.scopes).toEqual(["pm"]);
+    expect(sessionProjectScope("/", true)).toBe("pm");
+    expect(qc.getQueryState(sessionProjectQueryOptions(ID, sessionProjectScope("/", true)).queryKey)?.status).toBe("success");
+  });
+
+  it("UT-BOOT-OPT-015 a failed session prefetch never throws and leaves the gate's own read to retry (cf. UT-BOOT-028)", async () => {
+    calls.rejectSession = true;
+    const qc = newClient();
+    await expect(boot(qc, `#/project/finance?projectId=${ID}`)).resolves.toBeUndefined();
+    expect(qc.getQueryData(sessionProjectQueryOptions(ID, "pm").queryKey)).toBeUndefined();
+    // The gate mounting later reads again, and the failed state does not stick.
+    calls.rejectSession = false;
+    await qc.fetchQuery(sessionProjectQueryOptions(ID, "pm"));
+    expect(qc.getQueryState(sessionProjectQueryOptions(ID, "pm").queryKey)?.status).toBe("success");
+  });
+
+  it("UT-BOOT-OPT-016 no project id, an invalid one, or the switch off starts nothing for a PM or Cost route", async () => {
+    await boot(newClient(), "#/project/team?projectId=nope");
+    await boot(newClient(), "#/costs/capex?projectId=nope");
+    startupFlags.bootPrefetch = false;
+    await boot(newClient(), `#/project/team?projectId=${ID}`);
+    await boot(newClient(), `#/costs/capex?projectId=${ID}`);
+    expect(calls.list).toEqual([]);
   });
 });

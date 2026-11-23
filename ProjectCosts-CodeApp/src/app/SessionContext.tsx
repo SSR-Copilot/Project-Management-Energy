@@ -16,10 +16,13 @@ import { useLocation } from "react-router-dom";
 import { startupFlags } from "./startupFlags";
 import { startAppInsights } from "@/appInsights";
 import { readSession, readProjectLink, type Session } from "@/platform/powerClient";
-import { loadEnvironmentVariables, loadProject, type EnvVars } from "@/data/project";
+import { loadEnvironmentVariables, loadProject, type EnvVars, type ProjectLoadScope } from "@/data/project";
+import { projectStateLookup } from "@/data/projectStateLookup";
 import { qk } from "@/data/keys";
 import { localeInfo } from "@/domain/locale";
 import type { ProjectContext } from "@/features/cost/contracts/rules";
+import { launchPmPath } from "./deepLinks";
+import { sessionProjectScope } from "./bootPlan";
 import { projectManagementAppUrl } from "./navigation";
 
 export interface AppSession {
@@ -60,10 +63,15 @@ export const environmentVariablesQueryOptions = () => queryOptions({
   staleTime: 15 * 60 * 1000,
 });
 
-export const sessionProjectQueryOptions = (projectId: string) => queryOptions({
-  queryKey: qk.project(projectId),
+/**
+ * The scope is part of the key (`qk.projectPm` is a child of `qk.project`), so a PM row-only context and a full Cost context never
+ * share a cache entry, and a `qk.project(id)` invalidation from a PM save reaches both.
+ */
+export const sessionProjectQueryOptions = (projectId: string, scope: ProjectLoadScope = "full") => queryOptions({
+  queryKey: scope === "pm" ? qk.projectPm(projectId) : qk.project(projectId),
   // React Query reserves undefined for an absent query result; use null for not found.
-  queryFn: async () => (await loadProject(projectId)) ?? null,
+  // OPT-07d: the cluster state is looked up in the shared `Project States` entry when it can be.
+  queryFn: async ({ client }) => (await loadProject(projectId, { scope, stateLookup: projectStateLookup(client) })) ?? null,
   staleTime: 5 * 60 * 1000,
 });
 
@@ -104,8 +112,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     || location.pathname.startsWith("/project/");
   const projectId = needsProject && projectLink.status === "valid" ? projectLink.projectId : undefined;
 
+  const launchesPmScreen = launchPmPath(
+    sessionQuery.data?.launchParams ?? {}, typeof window === "undefined" ? "" : window.location.search,
+  ) !== undefined;
   const projectQuery = useQuery({
-    ...sessionProjectQueryOptions(projectId ?? "none"),
+    ...sessionProjectQueryOptions(projectId ?? "none", sessionProjectScope(location.pathname, launchesPmScreen)),
     enabled: Boolean(projectId) && sessionQuery.isSuccess,
   });
 

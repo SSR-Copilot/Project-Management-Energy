@@ -172,11 +172,16 @@ export function useProductionWrites(projectId: string | undefined) {
    * and the project as they are AFTER the action's writes (the canvas `Refresh`es first). `seen` keeps what
    * part 2 decides on.
    */
-  type Seen = { next: { netYieldP50: number; standardCostCreated: boolean } | null };
+  type Seen = {
+    next: { netYieldP50: number; standardCostCreated: boolean } | null;
+    /** The project row the roll-up read, handed to part 2 (OPT-24) so it is not read a second time. */
+    project?: ProductionProject;
+  };
   const rollUp = (seen: Seen) => async () => {
     const [yields, project] = await Promise.all([listEnergyYields(id), loadProductionProject(id)]);
     if (!project) throw new Error("The project could not be read.");
     seen.next = { netYieldP50: projectYieldTotals(yields).netP50, standardCostCreated: project.standardCostCreated };
+    seen.project = project;
     return planRollUp(id, yields);
   };
 
@@ -186,7 +191,9 @@ export function useProductionWrites(projectId: string | undefined) {
     const generated = await w.run({
       progress: UI.loadingStandardContracts,
       plan: async () => {
-        const project = await loadProductionProject(id);
+        // OPT-24: the project the roll-up just read (it holds what the generation uses: id, name, COD, country, technology and
+        // business unit; the roll-up writes only yield columns). The reads of the generation itself (`loadGenerationInputs`) stay live.
+        const project = seen.project ?? await loadProductionProject(id);
         if (!project) throw new Error("The project could not be read.");
         return planStandardContracts(await loadGenerationInputs(project));
       },

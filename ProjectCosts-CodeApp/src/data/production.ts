@@ -20,6 +20,7 @@ import { Vsb_opexsubaccountsService } from "@/generated/services/Vsb_opexsubacco
 import { Vsb_opexlandleasestandardassumptionsesService } from "@/generated/services/Vsb_opexlandleasestandardassumptionsesService";
 import { Vsb_landleaseprojectcostsService } from "@/generated/services/Vsb_landleaseprojectcostsService";
 import { Vsb_opexprojectcostsService } from "@/generated/services/Vsb_opexprojectcostsService";
+import { Vsb_devicetypesinprojectsService } from "@/generated/services/Vsb_devicetypesinprojectsService";
 import { AssumptionsRevenueService } from "@/generated/services/AssumptionsRevenueService";
 import {
   NEGATIVE_PRICE_COL, PROJECT_YIELD_COL, REVENUE_COL, SEASONALITY_COL, YIELD_COL, inflationStartYear,
@@ -29,14 +30,13 @@ import {
 } from "@/features/pm/production/rules";
 import { CHOICE_PRODUCTION, OANDM_SUBACCOUNT_NAME } from "./dataverseNames";
 import { fetchAll, fetchPage } from "./client";
-import { listDeviceTypes, listGeneratorTypes, listProjectTurbines, listPvTypes } from "./generators";
+import { listGeneratorTypes, listProjectTurbines, listPvTypes } from "./generators";
+import { mapLimit } from "./concurrency";
 import { loadCountryInflation } from "./landLease";
-import { and, dateOnlyOf as ymd, eq, guid, inList, lookupEq, numberOf } from "./odata";
+import { and, chunk, dateOnlyOf as ymd, eq, guid, inList, lookupEq, lookupIn } from "./odata";
+import { rowStr as str, rowNum as num, rowBool as bool } from "./rowValues";
 
 type Raw = Record<string, unknown>;
-const str = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
-const num = (v: unknown): number | null => numberOf(v) ?? null;
-const bool = (v: unknown): boolean | null => (typeof v === "boolean" ? v : null);
 const raw = <T,>(rows: T[]): Raw[] => rows as unknown as Raw[];
 /** A Dataverse date-only value as `yyyy-mm-dd`. */
 
@@ -298,6 +298,38 @@ async function countStandardContracts(projectId: string, oAndMId: string | null)
   return { landLease: landLease.length, otherOpex: opexRows.length - oAndM, oAndM };
 }
 
+/** Device-type reads in flight at once (one per chunk of 40 type ids). */
+const DEVICE_READ_CONCURRENCY = 4;
+
+/**
+ * OPT-07e: the `DeviceTypesInProjects` rows of ALL the given types in one request per chunk of 40 ids (BEFORE: one request per
+ * type, unbounded, through `listDeviceTypes` of `data/generators.ts`). The result is exactly what the per-type reads gave once
+ * flattened: the rows of the first type, then the second, ... in `typeIds` order, each type's rows oldest first (`createdon asc`),
+ * any status. That order decides the creation order of the standard O&M rows, so it is rebuilt from the type lookup.
+ */
+export async function listDeviceTypesOf(typeIds: readonly string[]): Promise<{ id: string }[]> {
+  const unique = [...new Set(typeIds)];
+  if (unique.length === 0) return [];
+  const chunks = await mapLimit(chunk(unique), async (part) => raw(await fetchAll(
+    "load the types' O&M device types",
+    (o) => Vsb_devicetypesinprojectsService.getAll(o),
+    {
+      select: ["vsb_devicetypesinprojectid", "_vsb_typeinprojectid_value"],
+      filter: lookupIn("vsb_typeinprojectid", part),
+      orderBy: ["createdon asc"],
+    },
+  )), DEVICE_READ_CONCURRENCY);
+  const byType = new Map<string, { id: string }[]>();
+  for (const r of chunks.flat()) {
+    const type = String(r._vsb_typeinprojectid_value ?? "").toLowerCase();
+    const list = byType.get(type) ?? [];
+    list.push({ id: String(r.vsb_devicetypesinprojectid) });
+    byType.set(type, list);
+  }
+  // `typeIds` may repeat an id (the old code read it twice and kept both copies): keep the repeats.
+  return typeIds.flatMap((id) => byType.get(id.toLowerCase()) ?? []);
+}
+
 /**
  * Everything the generator half of "Recalc" reads (Y:8014-8097, 8273-8807): the assumptions, the
  * existing standard contracts, every turbine and PV unit (`colGeneratorsInProject`), the device
@@ -315,7 +347,7 @@ export async function loadGenerationInputs(project: ProductionProject): Promise<
       ? listGenerationAssumptions(project.countryId, project.technology) : Promise.resolve([]),
     countStandardContracts(project.id, oAndM?.id ?? null),
     typeIds.length > 0 ? listProjectTurbines(typeIds) : Promise.resolve([]),
-    Promise.all(typeIds.map((id) => listDeviceTypes(id))),
+    listDeviceTypesOf(typeIds),
     project.countryId ? loadCountryInflation(project.countryId) : Promise.resolve([]),
   ]);
   return {
@@ -323,7 +355,7 @@ export async function loadGenerationInputs(project: ProductionProject): Promise<
     assumptions,
     existing,
     generators: turbines.map((t) => ({ id: t.id, name: t.name })),
-    deviceTypes: deviceLists.flat().map((d) => ({ id: d.id })),
+    deviceTypes: deviceLists.map((d) => ({ id: d.id })),
     oAndM,
     countryInflation: inflation.find((r) => r.year === year)?.inflation ?? null,
   };

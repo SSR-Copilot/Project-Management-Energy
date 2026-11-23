@@ -65,6 +65,27 @@ export function fromMMYY(mmyy: string): Date | null {
   return new Date(2000 + yy, mm - 1, 1);
 }
 
+/**
+ * `YYYY-MM-DD` for a Date-Only (`Edm.Date`) column, from the LOCAL parts (CONVENTIONS rule 18), never `toISOString()`.
+ * One definition (OPT-31, B8): `data/odata.ts` re-exports it, and the Cost rules import it instead of re-inlining the
+ * same three `padStart` calls. A Date that may be blank keeps its null guard at the call site.
+ */
+export function dateOnly(value: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
+}
+
+/**
+ * A Date Only text (`yyyy-mm-dd…`) as a LOCAL calendar day (rule 18), or null when it is not one (a non-string, shorter than
+ * 10 characters, or a zero / non-numeric year, month or day). One definition (OPT-31, B8) for `data/revenues.ts` `day`, the
+ * Finance `rawDay` and the Finance screen's `day`. Unlike `canvasDate.dateFromIso` it does NOT reject a rolled-over date.
+ */
+export function localDayOf(v: unknown): Date | null {
+  if (typeof v !== "string" || v.length < 10) return null;
+  const [y, m, d] = v.slice(0, 10).split("-").map(Number);
+  return y && m && d ? new Date(y, m - 1, d) : null;
+}
+
 export const startOfYear = (y: number) => new Date(y, 0, 1);
 export const isSameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString();
 

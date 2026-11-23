@@ -41,6 +41,15 @@
  *    overlap (D115 decision 5).
  *  - `trimReload` (default ON): after a Generators save the Milestones, General Data and session copies of the project are
  *    marked stale without being fetched (`features/pm/generators/reload.ts`); a later visit fetches them.
+ *  - `deleteReadWaves` (default ON; OPT-15 S4-04, optimization programme B6): the WTG / PV type delete reads its inputs (units,
+ *    allocations and their counts, device-type rows, O&M costs) as a dependency graph: the O&M read starts when the device-type
+ *    read answers, not when the allocation counts do, and the PV delete starts the device-type read with the unit read. Reads
+ *    only; the same rows come back. OFF: the staged reads (WTG 4 sequential waves, PV 5; ON: 3 and 3).
+ *  - `countryFromSharedList` (default ON; OPT-07a S4-05, B6): the project's country name and ISO currency come from the shared
+ *    countries list (`data/countries.ts`, cached 30 minutes, started beside the project read) instead of a single-row country
+ *    read after the project read on every load and save reload. DIVERGENCE: a country name / ISO edit is seen up to 30 minutes
+ *    late on this screen (nothing in the app writes `vsb_countries`, so the 30-minute window is the only bound). OFF: the
+ *    two sequential reads as before.
  *  - `wideGroups` (default ON): the default in-flight limit of a Generators `together()` group goes from 8 to 16
  *    (`WIDE_GROUP_CONCURRENCY`). The leaf and cascade delete tiers (16 / 4) are NOT changed.
  */
@@ -64,6 +73,10 @@ export interface GeneratorsPerfFlags {
   trimReload: boolean;
   /** Save latency (D144). */
   wideGroups: boolean;
+  /** OPT-15 S4-04 (optimization programme B6). */
+  deleteReadWaves: boolean;
+  /** OPT-07a S4-05 (optimization programme B6). */
+  countryFromSharedList: boolean;
 }
 
 /** A partial set of the switches, merged over `GENERATORS_PERF` by whoever accepts overrides. */
@@ -82,6 +95,8 @@ export const GENERATORS_PERF: Readonly<GeneratorsPerfFlags> = {
   replaceLanes: true,
   trimReload: true,
   wideGroups: true,
+  deleteReadWaves: true,
+  countryFromSharedList: true,
 };
 
 /** Every switch at its OLD behaviour: today's requests exactly (tests, and the rollback in one line). */
@@ -89,6 +104,7 @@ export const GENERATORS_PERF_ALL_OFF: Readonly<GeneratorsPerfFlags> = {
   targetedReload: false, gateByList: false, prefetch: false, parallelChunks: false,
   readsByProject: false, optimisticToggle: false, persistCatalogue: false,
   relaneWrites: false, replaceLanes: false, trimReload: false, wideGroups: false,
+  deleteReadWaves: false, countryFromSharedList: false,
 };
 
 let override: GeneratorsPerfOverrides | null = null;

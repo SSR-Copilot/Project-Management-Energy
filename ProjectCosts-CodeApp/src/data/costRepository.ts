@@ -29,9 +29,8 @@ import type {
 } from "@/features/cost/contracts/rules";
 import type { CostBook } from "@/features/cost/costing/model";
 import {
-  loadCapexTotals, loadCostBook, loadCountryInflationAreas, loadLandLeaseContracts,
-  loadLandLeaseCostFlags,
-  type CapexCategoryTotal, type LandLeaseContract, type LandLeaseCostFlags,
+  loadCapexTotals, loadCostBook,
+  type CapexCategoryTotal, type LoadCostBookOptions,
 } from "./costBook";
 import { clearLinkedCluster, deleteCostLine, saveCostLine, setCostPaid, type SaveCostLineArgs } from "./capexWrites";
 import {
@@ -95,7 +94,11 @@ export interface CostRepository {
    * level-3 accounts. Splitting it that way keeps one cached query per project instead of one
    * per account selection.
    */
-  listCapexCostRows(projectId: string): Promise<CapexCostRow[]>;
+  listCapexCostRows(
+    projectId: string,
+    /** The project's DevCo CAPEX contracts (or their read in flight), so they are not read a second time (B2, S1-07). */
+    devCoContracts?: readonly CapexProjectContract[] | Promise<readonly CapexProjectContract[]>,
+  ): Promise<CapexCostRow[]>;
 
   /**
    * The whole Cost book for a project — accounts, cost lines and periods.
@@ -103,7 +106,7 @@ export interface CostRepository {
    * This is what DEVEX/CAPEX, O&M, Land Lease and Other OPEX render. Both implementations
    * return the same shape, so the screens do not know or care which one they got.
    */
-  getCostBook(projectId: string, category?: number): Promise<CostBook>;
+  getCostBook(projectId: string, category?: number, options?: LoadCostBookOptions): Promise<CostBook>;
 
   /**
    * Per-category totals for the DEVEX/CAPEX Summary tab.
@@ -116,31 +119,6 @@ export interface CostRepository {
    * the sums (D51 §11.19, `./pendingDeletes.ts`).
    */
   getCapexTotals(projectId: string, pending?: PendingDeleteIds): Promise<CapexCategoryTotal[]>;
-
-  /**
-   * The Land Lease `Allocation` / `OTP` flags, keyed by `vsb_landleaseprojectcostid` — the id a
-   * Land Lease period's `Project Cost` lookup points at.
-   *
-   * Separate from `getCostBook` because Land Lease's own periods are not on the book yet (see
-   * `costBook.ts`'s header); this is the join's read half, ready for whenever they are.
-   */
-  getLandLeaseCostFlags(projectId: string): Promise<Map<string, LandLeaseCostFlags>>;
-
-  /**
-   * Every Land Lease CONTRACT on the project — the `vsb_landleaseprojectcosts` headers.
-   *
-   * Separate from `getCostBook` because a header with no period rows yet is invisible in the
-   * book: the periods are the book's rows, and "Add Contract Type" creates a contract before any
-   * period exists under it. Measured on VSBCloud_Dev, 16 Sep, 19 of Project New Data's 27
-   * headers are in exactly that state.
-   */
-  getLandLeaseContracts(projectId: string): Promise<LandLeaseContract[]>;
-
-  /**
-   * The `Inflation Country Area` choices for a project's country — the text values
-   * `vsb_inflationcountryarea` is written from.
-   */
-  getCountryInflationAreas(countryId: string | undefined): Promise<string[]>;
 
   /* ── Land Lease ───────────────────────────────────────────────────────────
    * The Land Lease screen edits TWO tables plus an allocation join from one panel, and its
@@ -164,7 +142,7 @@ export interface CostRepository {
   /**
    * `Country Inflation Profiles` for a country — every year and every Area, unaggregated.
    *
-   * Distinct from `getCountryInflationAreas`, which returns only the Area NAMES for the
+   * Distinct from the removed `getCountryInflationAreas` (OPT-34, B8), which returned only the Area NAMES for the
    * dropdown: this is what the panel's read-only percentage and the standard import's
    * `Inflation Profile` resolve against (`opexRules.countryInflationPercent`).
    */
@@ -188,8 +166,13 @@ export interface CostRepository {
   /** `colOpexAccounts` — `Sort('Opex Accounts', Order, Ascending)`. */
   listOpexAccounts(): Promise<OpexAccount[]>;
 
-  /** `colOpexSubaccounts` — `Sort('Opex Subaccounts', Order, Ascending)`, with the account name. */
-  listOpexSubaccounts(): Promise<OpexSubaccount[]>;
+  /**
+   * `colOpexSubaccounts` — `Sort('Opex Subaccounts', Order, Ascending)`, with the account name.
+   *
+   * `accounts` (B2, OPT-06): the OPEX accounts, or the promise of them, so the accounts table is not read a second time for
+   * the names. Omitted, the loader reads them itself.
+   */
+  listOpexSubaccounts(accounts?: readonly OpexAccount[] | Promise<readonly OpexAccount[]>): Promise<OpexSubaccount[]>;
 
   /**
    * `colDeviceTypesInProject` — the O&M cards, as `[generators, pvModules]`.
@@ -264,7 +247,7 @@ export interface CostRepository {
    *
    * O&M / Other OPEX: a chain head takes every period under it. Land Lease: slot 1 takes the
    * contract's WTG allocations, its periods and its header, in that order. Both are the canvas'
-   * own routing; see `deleteOpexPeriod` / `deleteLandLeasePeriod`.
+   * own routing; see `deleteOpexPeriod` (Land Lease is not written here, OPT-34).
    */
   deletePeriod(period: CostPeriod): Promise<void>;
 
@@ -308,9 +291,6 @@ export const dataverseCostRepository: CostRepository = {
   listCapexCostRows,
   getCostBook: loadCostBook,
   getCapexTotals: loadCapexTotals,
-  getLandLeaseCostFlags: loadLandLeaseCostFlags,
-  getLandLeaseContracts: loadLandLeaseContracts,
-  getCountryInflationAreas: loadCountryInflationAreas,
 
   getLeaseBook: loadLeaseBook,
   getLeaseGenerators: loadLeaseGenerators,
@@ -320,7 +300,7 @@ export const dataverseCostRepository: CostRepository = {
   applyLeaseWrites,
 
   listOpexAccounts: loadOpexAccounts,
-  listOpexSubaccounts: () => loadOpexSubaccounts(),
+  listOpexSubaccounts: (accounts) => loadOpexSubaccounts(accounts),
   listOpexDeviceTypes: loadOpexDeviceTypes,
   listOpexAssumptionScopes: loadOpexAssumptionScopes,
 

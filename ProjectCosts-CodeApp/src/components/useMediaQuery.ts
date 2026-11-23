@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 
 /**
  * `window.matchMedia(query).matches`, kept live. Replaces Contracts' local `useNarrow`
@@ -6,13 +6,16 @@ import { useSyncExternalStore } from "react";
  * the wide layout — the same fallback the local hook had.
  */
 export function useMediaQuery(query: string): boolean {
+  // OPT-29 (B8): `subscribe` keeps one identity per query. A new function on every render made React drop and re-add the
+  // `matchMedia` listener on every render of every host (the Country / Technology picker among them).
+  const subscribe = useCallback((onChange: () => void) => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return () => {};
+    const mql = window.matchMedia(query);
+    mql.addEventListener?.("change", onChange);
+    return () => mql.removeEventListener?.("change", onChange);
+  }, [query]);
   return useSyncExternalStore(
-    (onChange) => {
-      if (typeof window === "undefined" || typeof window.matchMedia !== "function") return () => {};
-      const mql = window.matchMedia(query);
-      mql.addEventListener?.("change", onChange);
-      return () => mql.removeEventListener?.("change", onChange);
-    },
+    subscribe,
     () => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia(query).matches,
     () => false,
   );

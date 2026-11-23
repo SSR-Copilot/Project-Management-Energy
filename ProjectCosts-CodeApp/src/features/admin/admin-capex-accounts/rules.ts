@@ -26,7 +26,7 @@
  * controls apart from `lbl_Account_AccountItemHeightValue_Hidden` (a gallery-height helper, not
  * ported).
  */
-import { ES_ADMIN } from "@/data/dataverseNames";
+import { CAPEX_ROOT_NUMBER, ES_ADMIN } from "@/data/dataverseNames";
 import { emptyPlan, guardedUpdate, refusePlan, type PlannedWrite, type WritePlan } from "@/data/writePlan";
 import type { TablePrivileges } from "@/platform/privileges";
 import type { CapexAccountRow } from "@/data/adminCapexAccounts";
@@ -34,7 +34,7 @@ import type { CapexAccountRow } from "@/data/adminCapexAccounts";
 /* ═══════════════════════════════════════════════════════════════════ tree ══ */
 
 /** The root of the chart of accounts (App:1567-1580 `'Parent Account'.Number = "00001"`). */
-export const ROOT_NUMBER = "00001";
+export const ROOT_NUMBER = CAPEX_ROOT_NUMBER; // OPT-07c: the shared definition ("00001")
 
 export interface CapexNode {
   id: string;

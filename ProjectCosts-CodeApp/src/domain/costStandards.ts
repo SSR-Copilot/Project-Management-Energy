@@ -8,6 +8,12 @@
  */
 import { TECHNOLOGY as SHARED_TECHNOLOGY } from "./technology";
 
+/**
+ * `StartsWith(x, "Standard")` / `StartsWith(Lower(x), "standard")`: Power Fx `StartsWith` ignores case. One definition (OPT-33, B8) for the
+ * Land Lease period-name tests, the OPEX name / description tests and the Revenues contract rehydration.
+ */
+export const startsWithStandard = (text: string): boolean => text.toLowerCase().startsWith("standard");
+
 /** `vsb_typeofcontract` (same values as `TYPE_OF_CONTRACT` in `features/periods/opexRules`). */
 export const CONTRACT_TYPE = {
   landLease: 952850000,

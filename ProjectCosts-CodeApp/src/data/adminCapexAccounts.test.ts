@@ -10,6 +10,8 @@ let fetchAllRows: Record<string, unknown[]> = {};
 let fetchAllCalls: { label: string; options: Options }[] = [];
 let fetchPageRows: Record<string, unknown[]> = {};
 let fetchPageCalls: { label: string; options: Options }[] = [];
+/** OPT-20: labels whose `fetchPage` read fails, with the error to throw. */
+let fetchPageErrors: Record<string, Error> = {};
 let deleted: { table: string; id: string }[] = [];
 let createCalls: Record<string, unknown>[] = [];
 let updateCalls: { id: string; fields: Record<string, unknown> }[] = [];
@@ -58,6 +60,7 @@ vi.mock("./client", async () => {
     },
     fetchPage: async (label: string, _page: unknown, options: Options) => {
       fetchPageCalls.push({ label, options });
+      if (fetchPageErrors[label]) throw fetchPageErrors[label];
       return fetchPageRows[label] ?? [];
     },
     deleteRecord: async (_op: string, table: string, id: string) => {
@@ -103,7 +106,7 @@ vi.mock("@/generated/services/Vsb_capexcostsService", () => ({
 }));
 
 import {
-  DeleteBlockedError, DuplicateNumberError, PartialStepError, RecordGoneError,
+  DELETE_BLOCKED, DeleteBlockedError, DuplicateNumberError, PartialStepError, RecordGoneError,
   cleanUpForecastCosts, createCapexAccount, deactivateCapexAccount, deactivateCapexAccountStatus,
   deactivateCapexSubaccount, deactivateCapexSubaccountStatus, deleteCapexAccount, deleteCapexSubaccount, deleteCostsFilter,
   loadCapexAccountRows, numberExists, PAID_EXCLUSION, saveCapexOrder, zeroCostsFilter,
@@ -116,7 +119,7 @@ const SUB_A = G(3);
 const SUB_B = G(4);
 
 beforeEach(() => {
-  fetchAllRows = {}; fetchAllCalls = []; fetchPageRows = {}; fetchPageCalls = [];
+  fetchAllRows = {}; fetchAllCalls = []; fetchPageRows = {}; fetchPageCalls = []; fetchPageErrors = {};
   deleted = []; createCalls = []; updateCalls = []; bulkCalls = [];
   failUpdateFor = new Set(); failBulk = false; failDeleteFor = new Set(); fetchAllFn = undefined;
   goneIds = new Set(); existsCalls = []; deletedAfterCheck = new Set();
@@ -519,5 +522,69 @@ describe("Status changes", () => {
     expect(error.failedStep).toBe("Later-year costs deleted (2 rows)");
     expect(error.completed).toEqual(["Subaccount set to Inactive", "Future-month costs set to 0 (1 row)"]);
     expect(error.detail).toBe("1 of 2 later-year cost rows were deleted");
+  });
+});
+
+/* ═════════ Optimization programme B7, OPT-20 (S6-14): independent guard reads go out together, message priority kept ═════════ */
+
+describe("OPT-20 guard reads", () => {
+  const CHECK_NUMBER = "check CAPEX account number";
+  const SIBLING_ORDER = "read CAPEX sibling order";
+  const CHILDREN = "check CAPEX account children";
+  const CONTRACTS = "check CAPEX contracts on account";
+
+  it("UT-ADCAPEX-OPT-001 create: the number check and the sibling-order read are both started before either answers (old: one after the other)", async () => {
+    const pending = createCapexAccount({ parentId: PARENT, number: "80000_3", name: "Fees" });
+    expect(fetchPageCalls.map((c) => c.label)).toEqual([CHECK_NUMBER, SIBLING_ORDER]);
+    await pending;
+    expect(createCalls).toHaveLength(1);
+  });
+
+  it("UT-ADCAPEX-OPT-002 create: a duplicate number still wins over everything (no POST), a failing number check surfaces its own error before the order read's", async () => {
+    fetchPageRows[CHECK_NUMBER] = [{ vsb_capexaccountlistid: "x" }];
+    fetchPageErrors[SIBLING_ORDER] = new Error("order read failed");
+    await expect(createCapexAccount({ parentId: PARENT, number: "1", name: "A" })).rejects.toBeInstanceOf(DuplicateNumberError);
+    expect(createCalls).toEqual([]);
+
+    fetchPageRows = {};
+    fetchPageErrors[CHECK_NUMBER] = new Error("number check failed");
+    await expect(createCapexAccount({ parentId: PARENT, number: "1", name: "A" })).rejects.toThrow("number check failed");
+    expect(createCalls).toEqual([]);
+  });
+
+  it("UT-ADCAPEX-OPT-003 create: when only the order read fails, nothing is created and its error is thrown", async () => {
+    fetchPageErrors[SIBLING_ORDER] = new Error("order read failed");
+    await expect(createCapexAccount({ parentId: PARENT, number: "1", name: "A" })).rejects.toThrow("order read failed");
+    expect(createCalls).toEqual([]);
+  });
+
+  it("UT-ADCAPEX-OPT-004 delete account: the children and contracts guards are both started before either answers (old: one after the other)", async () => {
+    const pending = deleteCapexAccount(ACCOUNT);
+    expect(fetchPageCalls.map((c) => c.label)).toEqual([CHILDREN, CONTRACTS]);
+    await pending;
+    expect(deleted).toEqual([{ table: "vsb_capexaccountlists", id: ACCOUNT }]);
+  });
+
+  it("UT-ADCAPEX-OPT-005 delete account: children win over contracts when both block; a failing children read wins over a blocking contracts read; nothing is deleted", async () => {
+    fetchPageRows[CHILDREN] = [{ vsb_capexaccountlistid: SUB_A }];
+    fetchPageRows[CONTRACTS] = [{ vsb_capexprojectcontractid: "c" }];
+    const both = await deleteCapexAccount(ACCOUNT).catch((e: unknown) => e);
+    expect(both).toBeInstanceOf(DeleteBlockedError);
+    expect((both as Error).message).toBe(DELETE_BLOCKED.accountHasChildren);
+
+    fetchPageRows = { [CONTRACTS]: [{ vsb_capexprojectcontractid: "c" }] };
+    fetchPageErrors[CHILDREN] = new Error("children read failed");
+    await expect(deleteCapexAccount(ACCOUNT)).rejects.toThrow("children read failed");
+
+    fetchPageErrors = {};
+    const contractsOnly = await deleteCapexAccount(ACCOUNT).catch((e: unknown) => e);
+    expect((contractsOnly as Error).message).toBe(DELETE_BLOCKED.accountHasContracts);
+    expect(deleted).toEqual([]);
+  });
+
+  it("UT-ADCAPEX-OPT-006 delete account: a failing contracts read stops the delete (children clear, contracts unknown)", async () => {
+    fetchPageErrors[CONTRACTS] = new Error("contracts read failed");
+    await expect(deleteCapexAccount(ACCOUNT)).rejects.toThrow("contracts read failed");
+    expect(deleted).toEqual([]);
   });
 });

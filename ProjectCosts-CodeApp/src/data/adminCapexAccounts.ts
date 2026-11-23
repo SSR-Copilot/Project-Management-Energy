@@ -238,8 +238,14 @@ export interface CreateResult {
  */
 export async function createCapexAccount(input: CreateInput): Promise<CreateResult> {
   const number = input.number;
-  if (await numberExists(number)) throw new DuplicateNumberError(number);
-  const order = nextOrder([await maxChildOrder(input.parentId)]);
+  // OPT-20 (S6-14): the uniqueness check and the sibling-order read are independent, so they go out together. Their outcomes are
+  // read in the old priority: the number check (its error, or a duplicate) first, the order read's error second. Nothing is
+  // created before both are known.
+  const [numberCheck, orderRead] = await Promise.allSettled([numberExists(number), maxChildOrder(input.parentId)]);
+  if (numberCheck.status === "rejected") throw numberCheck.reason;
+  if (numberCheck.value) throw new DuplicateNumberError(number);
+  if (orderRead.status === "rejected") throw orderRead.reason;
+  const order = nextOrder([orderRead.value]);
 
   const created = unwrap(
     await Vsb_capexaccountlistsService.create({
@@ -299,8 +305,13 @@ export async function deleteCapexSubaccount(id: string): Promise<void> {
 
 /** No children (any status) AND no contracts on the account itself. */
 export async function deleteCapexAccount(id: string): Promise<void> {
-  if (await hasChildren(id)) throw new DeleteBlockedError(DELETE_BLOCKED.accountHasChildren);
-  if (await hasContracts(id)) throw new DeleteBlockedError(DELETE_BLOCKED.accountHasContracts);
+  // OPT-20 (S6-14): the two guard reads are independent, so they go out together; the message priority is the old one (children
+  // first, then contracts; a failed read stops the delete with its own error at the position it had).
+  const [children, contracts] = await Promise.allSettled([hasChildren(id), hasContracts(id)]);
+  if (children.status === "rejected") throw children.reason;
+  if (children.value) throw new DeleteBlockedError(DELETE_BLOCKED.accountHasChildren);
+  if (contracts.status === "rejected") throw contracts.reason;
+  if (contracts.value) throw new DeleteBlockedError(DELETE_BLOCKED.accountHasContracts);
   await deleteRecord("delete CAPEX account", ACCOUNTS_TABLE, id);
 }
 

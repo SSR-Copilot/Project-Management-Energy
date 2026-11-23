@@ -19,8 +19,10 @@ import {
 } from "@/features/pm/team/rules";
 import { getEntraPeople } from "./adminGatesApprovals";
 import { fetchAll, fetchPage } from "./client";
+import { lookupPeopleCached } from "./personCache";
 import { trace } from "@/platform/telemetry";
 import { dateOnlyOf as ymd, guid, lookupEq, numberOf } from "./odata";
+import { rowStr as str, formattedColumn as formatted } from "./rowValues";
 
 type Raw = Record<string, unknown>;
 type People = Awaited<ReturnType<typeof getEntraPeople>>;
@@ -31,19 +33,21 @@ type People = Awaited<ReturnType<typeof getEntraPeople>>;
  * failure) shows with a BLANK name — as the canvas `Member.'Display Name'` does — instead of
  * failing the whole Team screen with "Team data is unavailable" (E2E-Tests-FIX, 4 Nov 2026). The
  * failure is kept in the trace buffer as a warning.
+ *
+ * OPT-14 / DIVERGENCE (D160): each person goes through the per-person cache (`data/personCache.ts`: 30 minutes, 6 at a time,
+ * failures not remembered), so a load after a save asks Entra only for people it has not seen. A name or mail changed in
+ * Entra can be up to `PERSON_CACHE_MS` old. Switch: `PERSON_CACHE_MS = 0`.
  */
 async function getPeopleTolerant(ids: readonly string[]): Promise<People> {
   const out: People = new Map();
-  const results = await Promise.allSettled([...new Set(ids)].map((id) => getEntraPeople([id])));
-  results.forEach((r, i) => {
-    if (r.status === "fulfilled") r.value.forEach((v, k) => out.set(k, v));
-    else trace("warning", `Team: could not read the directory entry of person ${[...new Set(ids)][i]}`, r.reason);
-  });
+  const answers = await lookupPeopleCached(ids, (id) => getEntraPeople([id]));
+  for (const { id, result } of answers) {
+    if (result.status === "fulfilled") result.value.forEach((v, k) => out.set(k, v));
+    else trace("warning", `Team: could not read the directory entry of person ${id}`, result.reason);
+  }
   return out;
 }
 const raw = <T,>(rows: T[]): Raw[] => rows as unknown as Raw[];
-const str = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
-const formatted = (col: string): string => `${col}@OData.Community.Display.V1.FormattedValue`;
 
 /** A person lookup, resolved through Entra; the lookup's formatted name when Entra has no row. */
 function person(r: Raw, col: string, people: People): TeamPerson | null {
@@ -114,19 +118,26 @@ const MEMBER_SELECT = [
  * `Filter('Project Members', Project = gblRecordSelectedProject)`, with `Member.'Display Name'`,
  * `Member.Mail` and `'Project Member Description'.Description` resolved. Sorted by `sortMembers`
  * in the hook (`$orderby` cannot reach the expanded name).
+ *
+ * OPT-14: `descriptions` is the screen's already-cached descriptions read (a value or a promise of one), joined by id; the
+ * table is read here only when the caller passes none (the loader stays usable alone). The members read and the descriptions
+ * still start together.
  */
-export async function listTeamMembers(projectId: string): Promise<ProjectMemberRow[]> {
-  const [rows, descriptions] = await Promise.all([
+export async function listTeamMembers(
+  projectId: string,
+  descriptions?: readonly MemberDescriptionOption[] | Promise<readonly MemberDescriptionOption[]>,
+): Promise<ProjectMemberRow[]> {
+  const [rows, descriptionRows] = await Promise.all([
     fetchAll(
       "load the project members",
       (o) => Vsb_projectmembersesService.getAll(o),
       { select: MEMBER_SELECT, filter: lookupEq("vsb_project", projectId) },
     ).then(raw),
-    listMemberDescriptions(),
+    descriptions ?? listMemberDescriptions(),
   ]);
   const ids = rows.map((r) => str(r[MEMBER_COL.member])).filter((x): x is string => Boolean(x));
   const people = ids.length > 0 ? await getPeopleTolerant(ids) : new Map() as People;
-  const byId = new Map(descriptions.map((d) => [d.id, d]));
+  const byId = new Map(descriptionRows.map((d) => [d.id, d]));
   return rows.map((r) => {
     const who = person(r, MEMBER_COL.member, people);
     const descriptionId = str(r[MEMBER_COL.description]);

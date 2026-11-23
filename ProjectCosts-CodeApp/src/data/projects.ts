@@ -16,6 +16,8 @@ import { Vsb_basecasesService } from "@/generated/services/Vsb_basecasesService"
 import { SystemusersService } from "@/generated/services/SystemusersService";
 import { unwrap } from "@/platform/errors";
 import { loggedCall } from "@/platform/requestLog";
+import { trace } from "@/platform/telemetry";
+import type { ProjectStateLookup } from "./project";
 import {
   countedPage, deleteRecord, fetchAll, fetchPage, invalidatePageTokens, type CountedPage,
 } from "./client";
@@ -397,8 +399,22 @@ async function servePage(
  */
 export async function loadProjectStateOrder(
   clusterStateId: string | null,
+  stateLookup?: ProjectStateLookup,
 ): Promise<number | null> {
   if (!clusterStateId) return null;
+  /*
+   * OPT-07d: answered from the shared 10-row `'Project States'` entry when it holds the state: `orderRaw` is the stored `Order`
+   * or null, exactly what the single-row read below returns (never the list's null-to-0 `order`). A state the list does not hold,
+   * or a list that cannot be read, takes the single-row read, which still throws on failure (PO-006).
+   */
+  if (stateLookup) {
+    try {
+      const state = await stateLookup(clusterStateId);
+      if (state) return state.orderRaw;
+    } catch (error) {
+      trace("warning", "project state list unavailable; reading the project state on its own", { error });
+    }
+  }
   // PO-006: a failed read throws (and is traced as a DATA line) instead of answering `null`, which the
   // Simulate gate took for "no cluster order" and answered with the "Clusters 1 to 5" warning.
   const state = await loggedCall(

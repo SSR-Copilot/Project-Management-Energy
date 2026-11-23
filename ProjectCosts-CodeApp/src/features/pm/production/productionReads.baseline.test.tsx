@@ -155,7 +155,8 @@ describe("UT-PRODBASE-1xx reads and jobs per action (the code before optimizatio
       seasonality: { on: false, rows: [] }, negativePrices: { on: false, rows: [] },
     }));
     expect(s.runs).toHaveLength(3); // action job (with its roll-up) + generation job = executePlan twice for job 1, once for job 2
-    expect(log.filter((l) => l === "read project")).toHaveLength(2); // roll-up, then before the generation
+    // OPT-24: BEFORE 2 (roll-up, then again before the generation); the generation now takes the roll-up's project.
+    expect(log.filter((l) => l === "read project")).toHaveLength(1);
   });
 
   it("UT-PRODBASE-104 delete a yield", async () => {

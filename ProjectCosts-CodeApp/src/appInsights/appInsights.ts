@@ -257,6 +257,7 @@ export const appInsightsStarted = (): Promise<void> => started;
 
 /** A platform metric (`sessionLoadSummary` / `networkRequest`) as a custom event of that name. */
 export function trackMetric(metric: Metric): void {
+  if (client === null) return; // OPT-29 (B8): telemetry is off, so the payload is not built (`send` would drop it)
   const payload = { name: metric.type, ...toEventPayload(metric.data) };
   send((ai) => ai.trackEvent(payload));
 }

@@ -36,6 +36,9 @@ vi.mock("@/data/executePlan", async (importOriginal) => {
 vi.mock("@/data/checklist", () => ({
   listChecklistTrackings: (id: string) => h.trackings(id),
   listClusterChecklist: (id: string, state: string) => h.rows(id, state),
+  // OPT-24 (S4-12, B6): the narrow reads answer from the same fixtures the cluster / tracking lists give.
+  readClusterTask: async (id: string, state: string, rowId: string) => ((await h.rows(id, state)) as { id: string }[]).find((r) => r.id === rowId) ?? null,
+  readClusterTracking: async (id: string, state: string) => ((await h.trackings(id)) as { clusterStateId: string | null }[]).find((t) => t.clusterStateId === state) ?? null,
   countClusterChecklistRows: (id: string, state: string) => h.count(id, state),
   listClusterTemplates: (p: unknown, state: string) => h.templates(p, state),
   listChecklistApprovalSettings: vi.fn(), listChecklistGates: vi.fn(), listChecklistProjectStates: vi.fn(),

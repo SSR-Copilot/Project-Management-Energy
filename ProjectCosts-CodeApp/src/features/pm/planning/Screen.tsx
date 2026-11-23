@@ -72,6 +72,7 @@ import {
   PLANNING_CAN_EDIT, useAquisitionStatuses, useAquisitionTypes, useCustomChoiceValues, usePermits,
   usePlanningProject, usePlanningWrites, useProjectPlanning,
 } from "./hooks";
+import { planningReloadKeys } from "./reload";
 
 const C = "ProjectPlanning_DisplayProjectBodyRightContent";
 
@@ -466,11 +467,12 @@ export default function PlanningScreen() {
 
   const projectQ = usePlanningProject(projectId);
   const project = projectQ.data;
-  const planningQ = useProjectPlanning(project);
+  // OPT-16: the planning row and the acquisition statuses are keyed on the project id, so they start with the project read.
+  const planningQ = useProjectPlanning(projectId);
   const planning = planningQ.data;
   const permitsQ = usePermits(projectId, planning?.id);
   const typesQ = useAquisitionTypes();
-  const aquisitionQ = useAquisitionStatuses(project, typesQ.data, !typesQ.isLoading && !typesQ.error);
+  const aquisitionQ = useAquisitionStatuses(projectId, typesQ.data, !typesQ.isLoading && !typesQ.error);
   const countryId = project?.countryId ?? null;
   const legalQ = useCustomChoiceValues(CUSTOM_CHOICE_FIELD.legalPlanningBasis, countryId, Boolean(project));
   const procedureQ = useCustomChoiceValues(CUSTOM_CHOICE_FIELD.permitProcedure, countryId, Boolean(project));
@@ -522,20 +524,20 @@ export default function PlanningScreen() {
 
   const onSave = async () => {
     writes.clear();
-    const ids = await writes.run(savePlanningJob(form, project, planning, lang));
+    const ids = await writes.run({ ...savePlanningJob(form, project, planning, lang), invalidate: planningReloadKeys(projectId, "planning") });
     if (ids !== null) setEdited(null);
   };
   const onReset = () => { writes.clear(); setEdited(resetPlanningForm(form, baseline)); setSelectedPermitId(null); };
 
   const onSavePermit = async () => {
     if (!permitPanel) return;
-    const job = savePermitJob(permitPanel.draft, permitPanel.permitId, planning);
+    const job = { ...savePermitJob(permitPanel.draft, permitPanel.permitId, planning), invalidate: planningReloadKeys(projectId, "permit") };
     await writes.run(job);
     closePermitPanel();
   };
   const onDeletePermit = async () => {
     if (!selectedPermit) return;
-    const job = deletePermitJob(selectedPermit.id);
+    const job = { ...deletePermitJob(selectedPermit.id), invalidate: planningReloadKeys(projectId, "permit") };
     setConfirmDelete(false);
     await writes.run(job);
     setSelectedPermitId(null);
@@ -543,13 +545,13 @@ export default function PlanningScreen() {
 
   const onSaveAquisition = async () => {
     if (!aquisition) return;
-    const job = saveAquisitionJob(aquisition.draft, aquisition.row, project, lang);
+    const job = { ...saveAquisitionJob(aquisition.draft, aquisition.row, project, lang), invalidate: planningReloadKeys(projectId, "aquisition") };
     setAquisition(null);
     await writes.run(job);
   };
   const onClearAquisition = async () => {
     if (!aquisition) return;
-    const job = clearAquisitionJob(aquisition.row);
+    const job = { ...clearAquisitionJob(aquisition.row), invalidate: planningReloadKeys(projectId, "aquisition") };
     setAquisition(null);
     await writes.run(job);
   };

@@ -6,7 +6,7 @@
  * asserted in `writes.test.ts`).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, renderHook } from "@testing-library/react";
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
@@ -26,7 +26,7 @@ import { CreatedIdMissingError, PlanError } from "@/data/executePlan";
 import type { WritePlan } from "@/data/writePlan";
 import { RecordGoneError } from "@/platform/errors";
 import { TECHNOLOGY } from "@/domain/technology";
-import { useDeleteTask, useResetGate, useSaveTemplate, useToggleActive } from "./hooks";
+import { useDeleteTask, useGatesDataset, useResetGate, useSaveTemplate, useToggleActive } from "./hooks";
 
 const COUNTRY = "00000000-0000-0000-0000-0000000000de";
 const WIND = TECHNOLOGY.wind;
@@ -145,5 +145,49 @@ describe("Writes are plans (mutationFn only)", () => {
     expect(await act(() => result.current.mutateAsync({ kind: "task", id: undefined, payload: {} }))).toBe("new-1");
     exec.mockRejectedValueOnce(new PlanError(0, 1, "gate approval created", new CreatedIdMissingError("create gate approval template")));
     expect(await act(() => result.current.mutateAsync({ kind: "gate", id: undefined, payload: {} }))).toBe("");
+  });
+});
+
+describe("OPT-17(c) a reload reuses the people already resolved", () => {
+  const PEOPLE = { "30000000-0000-0000-0000-000000000001": { entraId: "30000000-0000-0000-0000-000000000001", name: "Pat", mail: "pat@vsb.energy" } };
+  const dataset = (people: Record<string, unknown>) => ({
+    templates: [], checklistHeaderId: null, checklists: [], approvals: [], people, checklistError: null, peopleError: null,
+  });
+
+  it("UT-ADGATE-OPT-014 the first load passes no known people; a refetch passes the previous dataset's people", async () => {
+    const { client, wrapper } = setup();
+    repo.loadDataset.mockResolvedValueOnce(dataset(PEOPLE)).mockResolvedValueOnce(dataset(PEOPLE));
+    const { result } = renderHook(() => useGatesDataset(COUNTRY, WIND), { wrapper });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(repo.loadDataset).toHaveBeenLastCalledWith(COUNTRY, WIND, undefined);
+    await act(async () => { await client.invalidateQueries({ queryKey: qk.adminGateDataset(COUNTRY, WIND) }); });
+    expect(repo.loadDataset).toHaveBeenCalledTimes(2);
+    expect(repo.loadDataset).toHaveBeenLastCalledWith(COUNTRY, WIND, PEOPLE);
+  });
+
+  it("UT-ADGATE-OPT-015 an Active toggle refetch carries the people; a failed toggle rolls the optimistic flip back and keeps them", async () => {
+    const { client, wrapper } = setup();
+    const withApproval = { ...dataset(PEOPLE), approvals: [{ id: "a1", gateActive: false }] };
+    repo.loadDataset.mockResolvedValue(withApproval);
+    const data = renderHook(() => useGatesDataset(COUNTRY, WIND), { wrapper });
+    await waitFor(() => expect(data.result.current.data).toBeDefined());
+    const toggle = renderHook(() => useToggleActive(COUNTRY, WIND, true), { wrapper });
+    await act(() => toggle.result.current.mutateAsync({ kind: "task", id: "a1", active: true }));
+    await waitFor(() => expect(repo.loadDataset).toHaveBeenCalledTimes(2));
+    expect(repo.loadDataset).toHaveBeenLastCalledWith(COUNTRY, WIND, PEOPLE);
+
+    // A failing toggle: the optimistic flip is rolled back (while the refetch is still pending) and the cached people stay.
+    exec.mockRejectedValueOnce(new Error("boom"));
+    repo.loadDataset.mockClear();
+    let release!: () => void;
+    repo.loadDataset.mockImplementation(() => new Promise((resolve) => { release = () => resolve(withApproval); }));
+    let pending!: Promise<unknown>;
+    act(() => { pending = toggle.result.current.mutateAsync({ kind: "task", id: "a1", active: true }).catch(() => undefined); });
+    await waitFor(() => expect(repo.loadDataset).toHaveBeenCalledTimes(1));
+    const cached = client.getQueryData<{ approvals: { gateActive: boolean }[]; people: unknown }>(qk.adminGateDataset(COUNTRY, WIND));
+    expect(cached?.approvals[0]?.gateActive).toBe(false); // rolled back before the reload answered
+    expect(cached?.people).toEqual(PEOPLE);
+    expect(repo.loadDataset).toHaveBeenLastCalledWith(COUNTRY, WIND, PEOPLE);
+    await act(async () => { release(); await pending; });
   });
 });

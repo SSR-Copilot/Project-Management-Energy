@@ -42,6 +42,10 @@ describe("GENERATORS_PERF — the switches (D141)", () => {
       readsByProject: false, optimisticToggle: false, persistCatalogue: false,
       // D144 (save latency): the four switches added after D141-D143, all ON.
       relaneWrites: true, replaceLanes: true, trimReload: true, wideGroups: true,
+      // OPT-15 S4-04 (optimization programme B6): the type delete's input reads as a dependency graph, ON.
+      deleteReadWaves: true,
+      // OPT-07a S4-05 (B6): the project's country from the shared 30-minute countries list, ON.
+      countryFromSharedList: true,
     });
     expect(generatorsPerf()).toEqual(GENERATORS_PERF);
   });

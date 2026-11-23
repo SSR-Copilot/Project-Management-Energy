@@ -83,6 +83,7 @@ import {
   useGeneralDataWrites, useGermanTradeTaxRate, useProjectReader, useMilestoneDurations, useMunicipalitySearch,
   useProjectStates, useShareholders, useStateTrackings, useTerrainUtilizations,
 } from "./hooks";
+import { generalDataReloadKeys } from "./reload";
 
 /** `gblAppConstants.DefaultMaxLength` (`App.pa.yaml`) — every `{Len}/55` counter on the form. */
 const DEFAULT_MAX_LENGTH = 55;
@@ -575,10 +576,15 @@ export default function GeneralDataScreen() {
     if (!snapshot?.id || !clusterPanel) return;
     const panel = clusterPanel;
     setClusterPanel(null);
+    // OPT-13: the main save below follows at once and uses the snapshot and form captured above, so this job only marks the
+    // screen's keys stale; `runSave` reloads them once, awaited. A failed job reloads them for real (the save does not run).
+    const keys = generalDataReloadKeys(projectId);
     const done = await writes.run({
       progress: MSG.savingCluster, errorText: clusterSaveErrorText, plan: planClusterPanelSave(snapshot.id, panel),
+      invalidate: keys, staleOnly: keys,
     });
-    if (done !== null) await runSave();
+    if (done === null) { await writes.reloadAll(); return; }
+    await runSave();
   };
 
   /** The delete confirmation — deletes from Dataverse at once, as the canvas does (W7). */

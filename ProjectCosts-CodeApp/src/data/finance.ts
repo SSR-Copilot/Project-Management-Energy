@@ -5,8 +5,8 @@
  * were registered for this screen with `pac code add-data-source`, one at a time (77 → 81):
  * `vsb_financingcategory`, `vsb_financinginput`, `vsb_financinginputsrepaymentamount` and
  * `vsb_financinginputstepupmargins`. The project row is mapped by `toRevenueProject`
- * (`data/revenues.ts`), the generator types / turbines by `listGeneratorTypes` /
- * `listProjectTurbines` (`data/generators.ts`) — reused, not copied (rule 17).
+ * (`data/revenues.ts`), the generator types by `listGeneratorTypes` (`data/generators.ts`) — reused, not copied (rule 17);
+ * the active turbine count reads `vsb_generatorinprojects` itself with the server-side `statecode eq 0` filter (OPT-07e).
  *
  * `Assumptions Debt SQL`, `Assumptions Banks SQL` and `AssumptionsKfWTrancheSQL` are Fabric SQL
  * sources (`[dbo].[AssumptionsDebt]` / `[AssumptionsBanks]` / `[AssumptionsKfWTranche]` on
@@ -20,6 +20,7 @@ import { Vsb_financinginputsrepaymentamountsService } from "@/generated/services
 import { Vsb_financinginputstepupmarginsesService } from "@/generated/services/Vsb_financinginputstepupmarginsesService";
 import { Vsb_capexprojectcontractsService } from "@/generated/services/Vsb_capexprojectcontractsService";
 import { Vsb_capexcostsService } from "@/generated/services/Vsb_capexcostsService";
+import { Vsb_generatorinprojectsService } from "@/generated/services/Vsb_generatorinprojectsService";
 import { AssumptionsDebtService } from "@/generated/services/AssumptionsDebtService";
 import { AssumptionsBanksService } from "@/generated/services/AssumptionsBanksService";
 import { AssumptionsKfWTrancheService } from "@/generated/services/AssumptionsKfWTrancheService";
@@ -33,18 +34,17 @@ import "./financeBulk"; // registers the schedule tables with the bulk backend (
 import { financePerf } from "./financeFlags";
 import { mapLimit } from "./concurrency";
 import { fetchAll, fetchPage } from "./client";
-import { chunk, eq, guid, lookupEq, lookupIn, numberOf } from "./odata";
+import { ACTIVE, and, chunk, eq, guid, lookupEq, lookupIn } from "./odata";
+import { rowStr as str, rowNum as num } from "./rowValues";
 import { PROJECT_SELECT, toRevenueProject } from "./revenues";
 import { listProjectStates } from "./generalData";
-import { listGeneratorTypes, listProjectTurbines } from "./generators";
+import { listGeneratorTypes } from "./generators";
 
 /** Cost-chunk reads in flight at once (`parallelReads`): a read shares the 52-request ceiling with the screen's other reads. */
 const READ_CONCURRENCY = 8;
 
 type Raw = Record<string, unknown>;
 const raw = <T,>(rows: T[]): Raw[] => rows as unknown as Raw[];
-const str = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
-const num = (v: unknown): number | null => numberOf(v) ?? null;
 
 /**
  * `gblRecordSelectedProject` with `'Financing Options'` — the project row the PM screens share,
@@ -185,7 +185,9 @@ export async function loadTotalDevexCapex(
   const readChunk = async (part: string[]) => raw(await fetchAll(
     "load the project's CAPEX costs",
     (o) => Vsb_capexcostsService.getAll(o),
-    { select: ["vsb_capexcostid", "_vsb_contract_value", "vsb_cost"], filter: lookupIn("vsb_contract", part) },
+    // OPT-08a: 5000 rows a page (a project with 579 cost rows was two sequential pages at 500; it changes the number of round
+    // trips and nothing else, as `loadContractCostSums`) and no unused `vsb_capexcostid`. No `ACTIVE` filter: the canvas has none.
+    { select: ["_vsb_contract_value", "vsb_cost"], filter: lookupIn("vsb_contract", part), maxPageSize: 5000 },
   ));
   const parts = chunk(contracts);
   // `mapLimit` keeps the chunk order, so the rows (and the sum) are exactly the sequential ones; at most
@@ -214,8 +216,16 @@ async function readInOrder<T, R>(parts: readonly T[], read: (part: T) => Promise
 export async function countActiveTurbines(projectId: string): Promise<number> {
   const types = await listGeneratorTypes(projectId);
   if (types.length === 0) return 0;
-  const turbines = await listProjectTurbines(types.map((t) => t.id));
-  return turbines.filter((t) => t.status === 0).length;
+  // OPT-07e: the `statecode eq 0` clause is sent to the server and only the id is selected, so the active rows come back and the
+  // count is their number. Same count as the old browser-side `status === 0` over every turbine (`listProjectTurbines` maps a
+  // row's `statecode` to `status`, `?? 0`; Dataverse always sends `statecode`).
+  const parts = chunk(types.map((t) => t.id));
+  const counts = await mapLimit(parts, async (part) => (await fetchAll(
+    "count the project's active turbines",
+    (o) => Vsb_generatorinprojectsService.getAll(o),
+    { select: ["vsb_generatorinprojectid"], filter: and(lookupIn("vsb_moduletypeinprojectid", part), ACTIVE) },
+  )).length, READ_CONCURRENCY);
+  return counts.reduce((sum, n) => sum + n, 0);
 }
 
 /**

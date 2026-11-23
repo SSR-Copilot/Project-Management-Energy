@@ -35,9 +35,12 @@
  *
  * NO `$batch`. `convertOptionsToQueryString` in `@microsoft/power-apps` serialises only
  * `$select/$filter/$orderby/$top/$skip/$count/$skiptoken` and the SDK exposes no changeset, so
- * `applyLeaseWrites` runs a plan's writes SEQUENTIALLY in the order the planner emitted them.
- * That order is the canvas' own and it is load-bearing: a create that others bind to comes
- * first, and deletes run children-before-parents.
+ * `applyLeaseWrites` sends a plan's writes as separate requests, in TIERS of the order the planner
+ * emitted them (OPT-10, `leaseWriteTiers`). That order is the canvas' own and it is load-bearing:
+ * a create that others bind to comes first, and deletes run children-before-parents. A tier never
+ * starts before the one before it has landed; only the writes inside a tier (the allocation
+ * re-writes of a Period-1 edit, the allocation deletes of a contract delete) go side by side.
+ * `LEASE_WRITE_PARALLEL = false` restores the one-request-at-a-time loop.
  */
 import type { IOperationResult } from "@microsoft/power-apps/data";
 import { Vsb_landleasesubaccountsService } from "@/generated/services/Vsb_landleasesubaccountsService";
@@ -49,14 +52,15 @@ import { Vsb_generatortypeinprojectsService } from "@/generated/services/Vsb_gen
 import { Vsb_pvmoduletypeinprojectsService } from "@/generated/services/Vsb_pvmoduletypeinprojectsService";
 import { Vsb_opexlandleasestandardassumptionsesService } from "@/generated/services/Vsb_opexlandleasestandardassumptionsesService";
 import { Vsb_countryinflationprofilesService } from "@/generated/services/Vsb_countryinflationprofilesService";
-import { TransactioncurrenciesService } from "@/generated/services/TransactioncurrenciesService";
 import { unwrap } from "@/platform/errors";
 import {
-  bindParent, generatorOptions, LEASE_ENTITY_SET, LeaseStepsError, leaseHttpResponse, leaseStepOf,
+  bindParent, generatorOptions, LEASE_ENTITY_SET, LeaseStepsError, leaseHttpResponse, leaseStepOf, leaseWriteTiers,
   TYPE_OF_CONTRACT, type LeaseStepFailure, type GeneratorOption, type LeaseAllocationRow, type LeaseAssumptionRow, type LeaseCostRow,
   type LeasePeriodRow, type LeaseSubaccountRow, type LeaseWrite,
 } from "@/features/cost/periods/landLeaseRules";
 import { deleteRecord, fetchAll } from "./client";
+import { CASCADE_DELETE_CONCURRENCY, LEAF_DELETE_CONCURRENCY, mapLimitFirstFailure, WRITE_CONCURRENCY } from "./concurrency";
+import { loadAllCurrencies, loadCurrencyNameMap, type CurrencyRow } from "./currencies";
 import { ACTIVE, and, chunk, eq, lookupEq, lookupIn } from "./odata";
 
 /** Option sets arrive as a number or as its string form depending on the column. */
@@ -164,7 +168,7 @@ export async function loadLeaseBook(projectId: string): Promise<LeaseBook> {
         filter: lookupIn("vsb_projectcost", ids),
       },
     ))),
-    loadCurrencyNames(currencyIds),
+    loadCurrencyNameMap(currencyIds),
   ]);
 
   const costs: LeaseCostRow[] = costRows.map((r) => ({
@@ -219,38 +223,19 @@ export async function loadLeaseBook(projectId: string): Promise<LeaseBook> {
   return { subaccounts, costs, periods, allocations };
 }
 
-/** One `Currencies` row, as the panel's disabled dropdown and the grid's column need it. */
-export interface CurrencyRow {
-  id: string;
-  /** `Currency Name` — "Euro", the dropdown's display field (`LL:2770`). */
-  name: string;
-  /** `Currency Code` — "EUR", what `defaultCurrencyCode` returns. */
-  code: string;
-}
+/** One `Currencies` row — defined with the shared read (`./currencies`, OPT-07b). */
+export type { CurrencyRow } from "./currencies";
 
 /**
  * `Currencies`, unfiltered.
  *
- * Deliberately NOT filtered by `statecode`, for the reason `costBook.loadCurrencyNames` gives:
+ * Deliberately NOT filtered by `statecode`, for the reason `./currencies` gives:
  * a contract that points at a since-deactivated currency should still show the name it was
- * saved with.
+ * saved with. B2 (OPT-07b): one shared read of the whole table (it used to be read here AND in `costBook`, and the name
+ * helper below ignored its `ids`), so the Land Lease screen's dropdown and both books share one request.
  */
 export async function loadCurrencies(): Promise<CurrencyRow[]> {
-  const rows = await fetchAll(
-    "list transaction currencies for Land Lease",
-    (o) => TransactioncurrenciesService.getAll(o),
-    { select: ["transactioncurrencyid", "currencyname", "isocurrencycode"] },
-  );
-  return rows.map((r) => ({
-    id: r.transactioncurrencyid,
-    name: r.currencyname ?? "",
-    code: r.isocurrencycode ?? "",
-  }));
-}
-
-async function loadCurrencyNames(ids: readonly string[]): Promise<Map<string, string>> {
-  if (ids.length === 0) return new Map();
-  return new Map((await loadCurrencies()).map((c) => [c.id, c.name]));
+  return [...(await loadAllCurrencies())];
 }
 
 /* ═════════════════════════════════════════════════════════════════ generators ══ */
@@ -507,17 +492,35 @@ export interface LeaseWriteResult {
 /**
  * Runs a `planLeaseSave` / `planLeaseDelete` / `planStandardImport` plan.
  *
- * Writes go in the planner's order, one at a time. Each write's `parentRef` is resolved
- * against the ids the earlier creates returned — `bindParent` does the substitution, which is
+ * Writes go in the planner's order, tier by tier (`LEASE_WRITE_PARALLEL`, OPT-10; one at a time when it is off). Each write's
+ * `parentRef` is resolved against the ids the earlier creates returned — `bindParent` does the substitution, which is
  * why the plan carries a marker rather than an OData `$<contentid>` reference: there is no
  * changeset for one to resolve inside.
  *
  * A write whose `parentRef` is still unresolved when its turn comes is a planner/caller bug,
  * and it throws rather than POSTing a row with no parent.
  */
-export async function applyLeaseWrites(
+export function applyLeaseWrites(
   writes: readonly LeaseWrite[],
   options?: { independentSteps?: boolean },
+): Promise<LeaseWriteResult> {
+  return applyPlan(writes, options, LEASE_WRITE_PARALLEL ? runLeaseWritesInTiers : runLeaseWritesSequentially);
+}
+
+/** The legacy, one-request-at-a-time `applyLeaseWrites`: the ORACLE of `landLease.writes.test.ts` (OPT-10). Not used by the app. */
+export function applyLeaseWritesSequentially(
+  writes: readonly LeaseWrite[],
+  options?: { independentSteps?: boolean },
+): Promise<LeaseWriteResult> {
+  return applyPlan(writes, options, runLeaseWritesSequentially);
+}
+
+type LeaseRunner = (writes: readonly LeaseWrite[], createdIds: Record<string, string>) => Promise<void>;
+
+async function applyPlan(
+  writes: readonly LeaseWrite[],
+  options: { independentSteps?: boolean } | undefined,
+  runLeaseWrites: LeaseRunner,
 ): Promise<LeaseWriteResult> {
   const createdIds: Record<string, string> = {};
 
@@ -549,31 +552,70 @@ export async function applyLeaseWrites(
   return { createdIds };
 }
 
-async function runLeaseWrites(
+/**
+ * OPT-10 (B3) — `true`: a plan's writes run in TIERS (`leaseWriteTiers`), the independent writes of a tier side by side; `false`: the
+ * legacy loop, one request after another, exactly as before. The same kind of switch as `BULK_SAVE` and `DEFER_*_DELETES`; treat it as a
+ * live product decision. The legacy loop stays below as the oracle of `landLease.writes.test.ts`.
+ */
+export const LEASE_WRITE_PARALLEL = true;
+
+/** How many writes of one tier are in flight at once: creates and updates as everywhere (8), leaf deletes 16, cascade deletes 4. */
+function leaseTierWidth(tier: readonly LeaseWrite[]): number {
+  if (!tier.every((w) => w.op === "delete")) return WRITE_CONCURRENCY;
+  return tier.some((w) => w.entitySet === LEASE_ENTITY_SET.cost) ? CASCADE_DELETE_CONCURRENCY : LEAF_DELETE_CONCURRENCY;
+}
+
+/** One write of a plan: binds its parent id, then sends it. A create records the id it got under its `ref`. */
+async function sendLeaseWrite(write: LeaseWrite, createdIds: Record<string, string>): Promise<void> {
+  const [bound] = bindParent([write], createdIds);
+  if (!bound) return;
+  const writer = WRITERS[bound.entitySet];
+  if (!writer) throw new Error(`No writer for "${bound.entitySet}".`);
+
+  if (bound.op === "delete") {
+    await writer.remove(bound.id);
+    return;
+  }
+  if (bound.parentRef) {
+    throw new Error(
+      `"${bound.entitySet}" write still needs its "${bound.parentRef}" parent id.`,
+    );
+  }
+  if (bound.op === "update") {
+    unwrap(await writer.update(bound.id, bound.payload), `update ${writer.label}`);
+    return;
+  }
+  const created = unwrap(await writer.create(bound.payload), `create ${writer.label}`);
+  const id = created[writer.idField];
+  if (bound.ref && typeof id === "string") createdIds[bound.ref] = id;
+}
+
+/**
+ * OPT-10: the tiers of `leaseWriteTiers`, one after another; inside a tier the writes go through a bounded pool.
+ *
+ * FAILURE. The sequential loop stopped at the first write that failed and nothing after it was sent. Here a tier that fails stops
+ * starting new writes, waits for the ones in flight, and throws the error of the first failing write IN PLANNER ORDER
+ * (`mapLimitFirstFailure`); no later tier starts. A tier has several writes only among the WTG ALLOCATION rows and only of ONE op (see
+ * `leaseWriteTiers`): every header and period write, and every create, update or delete of a different kind, is a tier of its own. So the
+ * only things that can land after a failure, and that the loop would have left unsent, are the other allocation rows of the SAME op
+ * in the failed tier that were already in flight (they cannot be recalled): e.g. another allocation re-write beside a refused one. Never a
+ * delete after a failed create, a follower start-date update after a refused period update, or any write of a later tier.
+ * `createdIds` is the caller's object, filled as creates land, exactly as in the sequential loop.
+ */
+async function runLeaseWritesInTiers(
   writes: readonly LeaseWrite[],
   createdIds: Record<string, string>,
 ): Promise<void> {
-  for (const write of writes) {
-    const [bound] = bindParent([write], createdIds);
-    if (!bound) continue;
-    const writer = WRITERS[bound.entitySet];
-    if (!writer) throw new Error(`No writer for "${bound.entitySet}".`);
-
-    if (bound.op === "delete") {
-      await writer.remove(bound.id);
-      continue;
-    }
-    if (bound.parentRef) {
-      throw new Error(
-        `"${bound.entitySet}" write still needs its "${bound.parentRef}" parent id.`,
-      );
-    }
-    if (bound.op === "update") {
-      unwrap(await writer.update(bound.id, bound.payload), `update ${writer.label}`);
-      continue;
-    }
-    const created = unwrap(await writer.create(bound.payload), `create ${writer.label}`);
-    const id = created[writer.idField];
-    if (bound.ref && typeof id === "string") createdIds[bound.ref] = id;
+  for (const indexes of leaseWriteTiers(writes)) {
+    const tier = indexes.map((i) => writes[i] as LeaseWrite);
+    await mapLimitFirstFailure(tier, (write) => sendLeaseWrite(write, createdIds), leaseTierWidth(tier));
   }
+}
+
+/** The legacy executor, kept as the oracle (OPT-10): one request after another, in the planner's order. */
+async function runLeaseWritesSequentially(
+  writes: readonly LeaseWrite[],
+  createdIds: Record<string, string>,
+): Promise<void> {
+  for (const write of writes) await sendLeaseWrite(write, createdIds);
 }

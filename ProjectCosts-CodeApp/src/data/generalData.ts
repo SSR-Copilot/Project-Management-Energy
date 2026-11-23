@@ -26,15 +26,12 @@ import {
   type CountryRef, type ProjectRow, type ProjectStateRef, type ShareholdingEntity, type TrackingRow,
 } from "@/features/pm/general-data/rules";
 import { fetchAll, fetchPage } from "./client";
-import { and, contains, eq, guid, isNull, lookupEq, numberOf, or, startsWith } from "./odata";
+import { and, contains, eq, guid, isNull, lookupEq, or, startsWith } from "./odata";
+import { rowStr as str, rowNum as num, rowBool as bool, formattedColumn as formatted } from "./rowValues";
 
 /** `<col>@OData.Community.Display.V1.FormattedValue` — a lookup's name. */
-const formatted = (col: string): string => `${col}@OData.Community.Display.V1.FormattedValue`;
 
 type Raw = Record<string, unknown>;
-const str = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
-const num = (v: unknown): number | null => numberOf(v) ?? null;
-const bool = (v: unknown): boolean | null => (typeof v === "boolean" ? v : null);
 
 /* ═══════════════════════════════════════════════════════════════ the project ══ */
 

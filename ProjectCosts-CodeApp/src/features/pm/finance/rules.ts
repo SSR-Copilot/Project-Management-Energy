@@ -68,7 +68,7 @@ import {
   parseNumber, isNumeric, isInteger, inRange, inRangeAbs, isDecimalWithPlaces, isBlank,
   decimalSeparator, pfxRound, type Lang,
 } from "@/domain/powerFxNumeric";
-import { addDays, addMonths, addYears, toMMYY, fromMMYY } from "@/domain/dates";
+import { addDays, addMonths, addYears, toMMYY, fromMMYY, localDayOf } from "@/domain/dates";
 import { DATE_PICKER_FORMAT, formatCanvasDate } from "@/domain/canvasDate";
 import { dateFormat } from "@/domain/locale";
 import { CHOICE_FINANCE, ES, ES_FINANCE } from "@/data/dataverseNames";
@@ -3656,11 +3656,7 @@ const rawNum = (v: unknown): number | null => (typeof v === "number" ? v : null)
 const rawStr = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
 const rawBool = (v: unknown): boolean => v === true;
 /** A Date Only string from the row as a LOCAL day (rule 18). */
-export function rawDay(v: unknown): Date | null {
-  if (typeof v !== "string" || v.length < 10) return null;
-  const [y, m, d] = v.slice(0, 10).split("-").map(Number);
-  return y && m && d ? new Date(y, m - 1, d) : null;
-}
+export const rawDay = localDayOf; // OPT-31 (B8): the one definition is `domain/dates.localDayOf` (UT-DATES-OPT-004)
 
 /** `Text(<stored or standard>, "<pattern>")` for the panel's text inputs. */
 const fmtFieldIn = (v: number | null | undefined, pattern: string, lang: Lang): string => textFormat(v ?? null, pattern, lang);

@@ -354,7 +354,9 @@ export function useRefreshSessionProjectOnLeave(projectId: string | undefined): 
   useEffect(() => {
     if (!projectId) return undefined;
     return () => {
-      if (qc.getQueryState(qk.project(projectId))?.isInvalidated) void qc.invalidateQueries({ queryKey: qk.project(projectId) });
+      // Any scope of the session project (`["project", id]` for Cost, `["project", id, "pm"]` for PM routes, OPT-01): an exact-key
+      // lookup would miss the PM entry, which is the live one on a Generators visit.
+      if (qc.getQueryCache().findAll({ queryKey: qk.project(projectId) }).some((q) => q.state.isInvalidated)) void qc.invalidateQueries({ queryKey: qk.project(projectId) });
     };
   }, [qc, projectId]);
 }
@@ -429,8 +431,25 @@ export const loadAllocations = loadTurbineAllocations;
 export async function loadTypeDeleteInputs(projectId: string, typeId: string, turbineIds: readonly string[]): Promise<{
   allocations: { id: string; costId: string }[]; countByCost: Record<string, number>; opexCostIds: string[];
 }> {
+  if (generatorsPerf().deleteReadWaves) return loadDeleteInputsInWaves(projectId, typeId, Promise.resolve(turbineIds));
   const [alloc, deviceTypes] = await Promise.all([loadTurbineAllocations(turbineIds), listDeviceTypes(typeId)]);
   const opexCostIds = await listOpexCostIdsForBridges(projectId, deviceTypes.map((d) => d.id));
+  return { allocations: alloc.allocations, countByCost: alloc.countByCost, opexCostIds };
+}
+
+/**
+ * OPT-15 S4-04 (`GENERATORS_PERF.deleteReadWaves`): the type delete's Identify reads as a dependency graph, like
+ * `loadReplaceInputsInWaves`. The O&M read starts as soon as the DEVICE-TYPE read answers (the staged form waited for the
+ * allocation rows AND their per-cost counts as well), and the counts start as soon as the allocation rows do (inside
+ * `loadTurbineAllocations`). `turbineIdsRead` is already settled for a WTG delete and is the unit read for a PV delete. The rows
+ * returned are the same, in the same shapes.
+ */
+async function loadDeleteInputsInWaves(projectId: string, typeId: string, turbineIdsRead: Promise<readonly string[]>): Promise<{
+  allocations: { id: string; costId: string }[]; countByCost: Record<string, number>; opexCostIds: string[];
+}> {
+  const allocationsRead = turbineIdsRead.then((ids) => loadTurbineAllocations(ids));
+  const opexRead = listDeviceTypes(typeId).then((deviceTypes) => listOpexCostIdsForBridges(projectId, deviceTypes.map((d) => d.id)));
+  const [alloc, opexCostIds] = await Promise.all([allocationsRead, opexRead]);
   return { allocations: alloc.allocations, countByCost: alloc.countByCost, opexCostIds };
 }
 
@@ -444,6 +463,12 @@ export async function loadTypeDeleteInputs(projectId: string, typeId: string, tu
 export async function loadPvDeleteInputs(projectId: string, pvId: string): Promise<{
   unitIds: string[]; allocations: { id: string; costId: string }[]; countByCost: Record<string, number>; opexCostIds: string[];
 }> {
+  if (generatorsPerf().deleteReadWaves) {
+    // OPT-15 S4-04: the device-type read needs only the type id, so it starts with the unit read, not after it.
+    const unitIdsRead = listProjectTurbines([pvId]).then((units) => units.map((u) => u.id));
+    const [unitIds, inputs] = await Promise.all([unitIdsRead, loadDeleteInputsInWaves(projectId, pvId, unitIdsRead)]);
+    return { unitIds, ...inputs };
+  }
   const unitIds = (await listProjectTurbines([pvId])).map((u) => u.id);
   const inputs = await loadTypeDeleteInputs(projectId, pvId, unitIds);
   return { unitIds, ...inputs };

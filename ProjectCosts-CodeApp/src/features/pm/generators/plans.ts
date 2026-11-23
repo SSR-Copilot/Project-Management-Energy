@@ -639,7 +639,11 @@ export function planTypeLandLeaseCleanup(args: {
   allocationCountByCost: Record<string, number>;
 }): TurbineDeletionStep[] {
   const byCost = new Map<string, string[]>();
-  for (const a of args.allocations) byCost.set(a.costId, [...(byCost.get(a.costId) ?? []), a.id]);
+  // OPT-30 (S4-10): push onto the stored list; `[...old, id]` copied the growing list once per allocation (O(A^2 / C)). Same lists, same order.
+  for (const a of args.allocations) {
+    const ids = byCost.get(a.costId);
+    if (ids) ids.push(a.id); else byCost.set(a.costId, [a.id]);
+  }
   const steps: TurbineDeletionStep[] = [];
   for (const [costId, ids] of byCost) {
     if ((args.allocationCountByCost[costId] ?? 0) > ids.length) {

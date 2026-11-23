@@ -67,7 +67,8 @@ describe("the seed's reads run together and are read ahead (save performance, 5 
     m.listRevenueAssumptions.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
     const pending = loadRevenueSeedInputs("Germany");
     await Promise.resolve();
-    expect(m.findCurrency).toHaveBeenCalledWith("EUR");
+    // OPT-07b (S3-09): with the server-side code filter (BEFORE: `findCurrency("EUR")`, the whole table).
+    expect(m.findCurrency).toHaveBeenCalledWith("EUR", { onlyThisCode: true });
     expect(m.loadFirstRevenueSubaccount).toHaveBeenCalled();
     release(GERMANY);
     await expect(pending).resolves.toEqual({ assumptions: GERMANY, currencyId: "cur-eur", subaccountId: "sub-1" });

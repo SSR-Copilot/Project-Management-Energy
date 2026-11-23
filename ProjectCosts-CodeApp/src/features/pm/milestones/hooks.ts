@@ -39,6 +39,7 @@ import {
 } from "@/data/milestones";
 import { findCurrency, loadFirstRevenueSubaccount } from "@/data/revenues";
 import { projectSaveErrorText } from "@/features/pm/general-data/rules";
+import { generalDataCountriesQueryOptions } from "@/features/pm/general-data/queries";
 import {
   accumulatedIndex, buildDefaultRevenue, milestoneLabels, revenueSeedWouldRun,
   type MilestoneAssumptionRow, type MilestoneDates, type MilestoneProject, type ProjectGenerator,
@@ -67,11 +68,34 @@ const out = <T>(q: { data?: T; isLoading: boolean; error: unknown }, empty: T): 
 
 const NO_LABELS: string[] = [];
 
-/** `gblRecordSelectedProject` with the country's business unit. */
+/**
+ * `gblRecordSelectedProject` with the country's business unit.
+ *
+ * OPT-07a: the business unit comes from the cached General Data countries list (`CountryRef.businessUnitId`, 30 minutes, also read
+ * by General Data and the boot prefetch), so a load is one request, not two. The list read starts WITH the project read (it needs no
+ * country id); if it fails or lacks the country the loader reads the country row itself, as before.
+ */
 export function useMilestoneProject(projectId: string | undefined): ScreenData<MilestoneProject | null> {
+  const qc = useQueryClient();
   const q = useQuery({
     queryKey: qk.milestoneProject(projectId ?? ""),
-    queryFn: () => loadMilestoneProject(projectId!),
+    queryFn: () => {
+      // `fetchQuery`, not `ensureQueryData`: it honours the list's 30-minute stale time (a stale list is read again), and this value
+      // is re-stamped as the owning business unit of the rows the screen saves (rule 4).
+      const countries = qc.fetchQuery(generalDataCountriesQueryOptions());
+      // A rejected list must not surface as an unhandled rejection when the project has no country (nothing awaits it).
+      countries.catch(() => undefined);
+      return loadMilestoneProject(projectId!, {
+        businessUnitOf: async (countryId) => {
+          try {
+            const country = (await countries).find((c) => c.id === countryId);
+            return country ? country.businessUnitId : undefined; // a country without a business unit answers null
+          } catch {
+            return undefined;
+          }
+        },
+      });
+    },
     enabled: Boolean(projectId),
   });
   return out(q, null);
@@ -165,7 +189,8 @@ export class FabricReadError extends Error {
  */
 export async function loadRevenueSeedInputs(countryName: string): Promise<RevenueSeedInputs> {
   const [fabric, currency, subaccount] = await Promise.allSettled([
-    listRevenueAssumptions(countryName), findCurrency("EUR"), loadFirstRevenueSubaccount(),
+    // OPT-07b (S3-09): the server filters on the ISO code (D136, as Revenues), one small read instead of the whole currency table.
+    listRevenueAssumptions(countryName), findCurrency("EUR", { onlyThisCode: true }), loadFirstRevenueSubaccount(),
   ]);
   if (fabric.status === "rejected") throw new FabricReadError(fabric.reason);
   if (currency.status === "rejected") throw currency.reason;

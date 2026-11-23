@@ -41,6 +41,7 @@ vi.mock("./hooks", async (importOriginal) => {
   const q = <T,>(data: T, error: Error | null = null) => ({
     data, isLoading: false, isPending: false, isError: error !== null, error, refetch: vi.fn(),
   });
+  const NO_INACTIVE_ROWS: unknown[] = [];
   const m = () => ({ mutateAsync, isPending: false });
   const pick = <K extends keyof typeof real>(key: K, fake: unknown) =>
     ((...args: unknown[]) => (useFixtures.on ? (typeof fake === "function" ? (fake as (...a: unknown[]) => unknown)(...args) : fake) : (real[key] as (...a: unknown[]) => unknown)(...args))) as (typeof real)[K];
@@ -55,13 +56,23 @@ vi.mock("./hooks", async (importOriginal) => {
     useInflationAreas: pick("useInflationAreas", () => q(["Centre - North", "South"])),
     useDevexCosts: pick("useDevexCosts", () => q(overrides.devex ?? fx.FX_DEVEX_COSTS)),
     useOpexPeriods: pick("useOpexPeriods", () => q(overrides.opex ?? fx.FX_OPEX_PERIODS)),
-    useInactiveOpexRows: pick("useInactiveOpexRows", () => q(overrides.inactive ?? [])),
+    // A stable empty list, as the real query returns the same data object between renders (OPT-27(b) counts regroupings).
+    useInactiveOpexRows: pick("useInactiveOpexRows", () => q(overrides.inactive ?? NO_INACTIVE_ROWS)),
     useSaveDevexCost: pick("useSaveDevexCost", m),
     useDeleteDevexCost: pick("useDeleteDevexCost", m),
     useSaveOpexPeriod: pick("useSaveOpexPeriod", m),
     useDeleteOpexContract: pick("useDeleteOpexContract", m),
     useDeleteOpexPeriod: pick("useDeleteOpexPeriod", m),
   };
+});
+
+/** OPT-27(b): pass-through spies so the test can count how often the screen regroups its contracts. */
+const spies = vi.hoisted(() => ({ group: undefined as unknown as ReturnType<typeof vi.fn>, menu: undefined as unknown as ReturnType<typeof vi.fn> }));
+vi.mock("./rules", async (importOriginal) => {
+  const real = await importOriginal<typeof import("./rules")>();
+  spies.group = vi.fn(real.groupContracts);
+  spies.menu = vi.fn(real.contractMenu);
+  return { ...real, groupContracts: spies.group, contractMenu: spies.menu };
 });
 
 import { vsbTheme } from "@/theme/fluent";
@@ -803,5 +814,34 @@ describe("CostsSettingsScreen — picker/rail height parity", () => {
     const column = appliedRules(picker);
     expect(column["overflow-y"]).not.toBe("auto");
     expect(column["height"]).toBeUndefined();
+  });
+});
+
+describe("OPT-27(b) contract groupings are derived once per data change", () => {
+  beforeEach(() => { useFixtures.on = true; access.admin = true; delete overrides.opex; });
+  afterEach(() => vi.clearAllMocks());
+
+  it("UT-ADCOST-OPT-001 folding and unfolding sections does not regroup the contracts (one grouping and one menu per contract type)", () => {
+    render(<Harness><CostsSettingsScreen /></Harness>);
+    const afterMount = { group: spies.group.mock.calls.length, menu: spies.menu.mock.calls.length };
+    expect(afterMount.group).toBe(3); // Land Lease, O&M, Other OPEX: once each
+    expect(afterMount.menu).toBe(3);
+    openSection("Land Lease");
+    openSection("Land Lease");
+    openSection("Operation & Maintenance");
+    expect(spies.group.mock.calls.length).toBe(afterMount.group);
+    expect(spies.menu.mock.calls.length).toBe(afterMount.menu);
+  });
+
+  it("UT-ADCOST-OPT-002 Edit / Delete on a row follow its own contract: enabled with a sub-account, disabled without one (no per-row search of the contracts)", () => {
+    overrides.opex = [
+      fx.fxPeriod({ id: "orphan", description: "Orphan row", landLeaseSubaccountId: undefined }),
+      ...fx.FX_OPEX_PERIODS,
+    ];
+    render(<Harness><CostsSettingsScreen /></Harness>);
+    openSection("Land Lease");
+    expect(screen.getByTestId(T.deleteContract("orphan"))).toBeDisabled();
+    expect(isDisabled(screen.getByTestId(T.editContract(LL_P1)))).toBe(false);
+    expect(isDisabled(screen.getByTestId(T.editPeriod(LL_P2)))).toBe(false);
   });
 });

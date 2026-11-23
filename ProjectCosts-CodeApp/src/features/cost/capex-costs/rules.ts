@@ -16,6 +16,7 @@ import {
   CATEGORIES, total, type CostAccount, type CostLine, type Payment,
 } from "../costing/model";
 import { DISTRIBUTION_FREQUENCY } from "@/data/dataverseNames";
+import { dateOnly } from "@/domain/dates";
 import { canvasNumberText, localeInfo, numberFormat } from "@/domain/locale";
 import { distributionSchedule, equalDistributionAmounts } from "./distribution";
 
@@ -215,7 +216,7 @@ export function clusterPayments(
     // is the first of a month, one day back and one month back land in the same month.
     const end = new Date(`${boundary}T12:00:00`);
     end.setDate(end.getDate() - 1);
-    const to = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`;
+    const to = dateOnly(end);
     return equalPayments(0, from, to, frequency);
   });
   const seen = new Set<string>();

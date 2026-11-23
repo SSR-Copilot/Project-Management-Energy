@@ -65,8 +65,9 @@ export interface OpexContractTableProps {
   currencyNames: ReadonlyMap<string, string>;
   collapsed: ReadonlySet<string>;
   canCreate: boolean;
-  canEdit: (row: OpexPeriod) => boolean;
-  canDelete: (row: OpexPeriod) => boolean;
+  /** `contract` is the row's own contract (OPT-27(b)): callers need not search for it. */
+  canEdit: (row: OpexPeriod, contract: ContractView) => boolean;
+  canDelete: (row: OpexPeriod, contract: ContractView) => boolean;
   onToggle: (contractKey: string) => void;
   onEdit: (contract: ContractView, row: OpexPeriod) => void;
   onDelete: (contract: ContractView, row: OpexPeriod) => void;
@@ -231,7 +232,7 @@ export function OpexContractTable(props: OpexContractTableProps) {
                         actions={[
                           {
                             key: "edit", icon: <EditRegular />, label: "Edit",
-                            disabled: !props.canEdit(row), onClick: () => props.onEdit(contract, row),
+                            disabled: !props.canEdit(row, contract), onClick: () => props.onEdit(contract, row),
                             testId: isHead
                               ? `btn_ICON_OpexCosts_Content_Subaccounts_CardBody_CostsTableRow_Edit-${row.id}`
                               : `btn_ICON_OpexCosts_Content_Subaccounts_CardBody_CostsTableRow_Edit_1-${row.id}`,
@@ -248,7 +249,7 @@ export function OpexContractTable(props: OpexContractTableProps) {
                             visible: canDeleteRow(contract, row),
                             ...(blockedReason && !canDeletePeriodRow(contract, row)
                               ? { disabledReason: blockedReason }
-                              : { disabled: !props.canDelete(row) }),
+                              : { disabled: !props.canDelete(row, contract) }),
                             onClick: () => props.onDelete(contract, row),
                             testId: isHead
                               ? `ico_OpexCosts_Content_Subaccounts_CardBody_CostsTableRow_Delete-${row.id}`

@@ -50,7 +50,7 @@
  *     `Remove(...)` with no error handling. We await the cancellation first.
  */
 import { CHOICE_PLANT, ES_PLANT } from "@/data/dataverseNames";
-import { type Lang, decimalSeparator, inRange, isBlank, isDecimalWithPlaces, isInteger, isNumeric, parseNumber, pfxRound, roundUp } from "@/domain/powerFxNumeric";
+import { type Lang, forLanguage, inRange, isBlank, isDecimalWithPlaces, isInteger, isNumeric, parseNumber, roundUp, textFormat, textIntOr } from "@/domain/powerFxNumeric";
 import { foundationCostAdded, foundationCostAddedBooleanReading } from "@/domain/foundationCost";
 
 /* ═══════════════════════════════════════════════════════════════════ columns ════ */
@@ -2531,45 +2531,8 @@ export const pvOtherSupplierValueCanvasParity = (fieldValue: string): string | n
 
 /* ═══════════════════════════════════════════════════════════════════ formatting ══ */
 
-/**
- * A number's en-US text as the user's language writes it: for a comma-decimal language "." and ","
- * swap (`1,234.50` becomes `1.234,50`), as the canvas `Text(n, fmt, Language())` renders it. Same rule as
- * `pfxText` on the Production screen. A function declaration, so it is hoisted for module-level callers.
- */
-export function forLanguage(en: string, lang: Lang = "en-US"): string {
-  return decimalSeparator(lang) === "." ? en : en.replace(/[.,]/g, (c) => (c === "." ? "," : "."));
-}
-
-/**
- * Power Fx `Text(value, "<pattern>")` for the custom numeric patterns this screen uses (`#`,
- * `#0.0#`, `#0.00`, `#.0`, `#0.0`, `0.0#`, `0`, `#,##0.00`, `#,##0.0`, `#,###.00`, `#.0#`), in
- * en-US notation: `0` is a required digit, `#` an optional one, `,` turns on thousands grouping.
- * A blank value is `""`, as `Text(Blank(), …)` is. `lang` (default en-US) swaps the separators for a
- * comma-decimal language (see `forLanguage`).
- */
-export function textFormat(value: number | null | undefined, pattern: string, lang: Lang = "en-US"): string {
-  if (value === null || value === undefined || !Number.isFinite(value)) return "";
-  const [intPart = "", fracPart = ""] = pattern.split(".");
-  const minFrac = (fracPart.match(/0/g) ?? []).length;
-  const maxFrac = fracPart.length;
-  const minInt = (intPart.match(/0/g) ?? []).length;
-  const grouped = intPart.includes(",");
-  const negative = value < 0;
-  const rounded = pfxRound(Math.abs(value), maxFrac);
-  const fixed = rounded.toFixed(maxFrac);
-  let [whole = "", frac = ""] = fixed.split(".");
-  while (frac.length > minFrac && frac.endsWith("0")) frac = frac.slice(0, -1);
-  whole = whole.replace(/^0+/, "");
-  while (whole.length < minInt) whole = `0${whole}`;
-  if (grouped) whole = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  const body = frac ? `${whole}.${frac}` : whole;
-  const text = negative && body !== "" && /[1-9]/.test(body) ? `-${body}` : body;
-  return forLanguage(text, lang);
-}
-
-/** `If(Int(x) = x, Text(x, "#"), Text(x, <alt>))` — the card formula every height / power uses. */
-export const textIntOr = (value: number | null | undefined, alt: string, lang: Lang = "en-US"): string =>
-  value === null || value === undefined ? "" : Number.isInteger(value) ? textFormat(value, "#", lang) : textFormat(value, alt, lang);
+// OPT-33 (B8): `forLanguage`, `textFormat` and `textIntOr` now live in `domain/powerFxNumeric.ts` (five PM screens used them through this barrel); re-exported here so no importer changes.
+export { forLanguage, textFormat, textIntOr };
 
 /** Grid formats from `…_GeneratorsList.Items` (Y:2124-2138): `#0.0#`. */
 export const fmtCapacity = (v: number | null | undefined, lang: Lang = "en-US"): string => textFormat(v, "#0.0#", lang);

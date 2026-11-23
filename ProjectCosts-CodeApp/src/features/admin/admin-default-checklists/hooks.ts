@@ -6,10 +6,11 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  createTask, loadClusters, loadLockedTaskIds, loadTabs, loadTasks, softDeleteTask, writeOrders,
+  checklistClusterView, createTask, loadLockedTaskIds, loadTabs, loadTasks, softDeleteTask, writeOrders,
   type ChecklistTab, type ChecklistTask, type CreateTaskArgs, type OrderPatch, type TaskForm,
 } from "@/data/adminDefaultChecklists";
 import { runPlan } from "@/data/runPlan";
+import { projectStatesQueryOptions } from "@/data/projectStates";
 import { planSetActive, planToggleCompletion, planUpdateTask } from "./rules";
 import { CHECKLIST_ENTITY_SETS } from "@/data/dataverseNames";
 import { invalidateAfterChecklistsWrite } from "@/data/adminInvalidation";
@@ -22,11 +23,13 @@ export function useChecklistTabs() {
   return useQuery({ queryKey: qk.adminChecklistTabs, queryFn: () => loadTabs(), staleTime: 5 * 60_000 });
 }
 
-/** The clusters (`colChecklistClusters`, `OnVisible`): not tab-scoped, cached for the visit. */
+/**
+ * The clusters (`colChecklistClusters`, `OnVisible`): not tab-scoped. OPT-07d: a view of the one shared `Project States` read (D159;
+ * same key, function and freshness as every other screen's states) filtered to the states visible on the checklist, as the old
+ * dedicated read was. The shared entry is global master data: it is cached for 30 minutes, not 5 (`PROJECT_STATES_STALE`).
+ */
 export function useChecklistClusters(enabled: boolean) {
-  return useQuery({
-    queryKey: qk.adminChecklistClusters, queryFn: () => loadClusters(), enabled, staleTime: 5 * 60_000,
-  });
+  return useQuery({ ...projectStatesQueryOptions(), enabled, select: checklistClusterView });
 }
 
 /** The tab's tasks, one query per tab (the canvas filtered each cluster's gallery separately). */

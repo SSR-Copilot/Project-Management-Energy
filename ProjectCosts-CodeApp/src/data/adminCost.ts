@@ -38,6 +38,7 @@ import { Vsb_devexcapexstandardassumptionsesService } from "@/generated/services
 import { Vsb_opexlandleasestandardassumptionsesService } from "@/generated/services/Vsb_opexlandleasestandardassumptionsesService";
 import { RecordGoneError, unwrap } from "@/platform/errors";
 import { deleteRecord, fetchAll, updateRecordIfExists } from "./client";
+import { CAPEX_ROOT_NUMBER, OVERLEVERAGING } from "./dataverseNames";
 import { ACTIVE, and, eq, lookupEq, ne } from "./odata";
 import { updateRowsEach } from "./adminRowWrites";
 
@@ -210,8 +211,9 @@ export interface CapexListRow {
   id: string; name: string; number: string; order: number; parentId: string | undefined;
 }
 
-export const CAPEX_ROOT_NUMBER = "00001";
-export const EXCLUDED_CATEGORY_NAME = "Overleveraging";
+// OPT-07c: the root number and the hidden category are the shared definitions (`data/dataverseNames.ts`), same values as before.
+export { CAPEX_ROOT_NUMBER };
+export const EXCLUDED_CATEGORY_NAME = OVERLEVERAGING;
 
 /**
  * From ONE read, as a pure and immutable derivation (nothing
@@ -220,7 +222,17 @@ export const EXCLUDED_CATEGORY_NAME = "Overleveraging";
 export function buildCapexHierarchy(rows: readonly CapexListRow[]): CapexHierarchy {
   const byOrder = (a: CapexListRow, b: CapexListRow) =>
     a.order - b.order || a.number.localeCompare(b.number) || a.name.localeCompare(b.name);
-  const childrenOf = (parentId: string) => rows.filter((r) => r.parentId === parentId).sort(byOrder);
+  // OPT-27(d): the rows are grouped by parent ONCE (dataset order inside a group, then the stable sort by order, number, name), as
+  // `buildCapexTree` does, instead of re-filtering and re-sorting the whole list for every parent.
+  const byParent = new Map<string, CapexListRow[]>();
+  for (const r of rows) {
+    if (r.parentId === undefined) continue;
+    const group = byParent.get(r.parentId);
+    if (group) group.push(r);
+    else byParent.set(r.parentId, [r]);
+  }
+  for (const group of byParent.values()) group.sort(byOrder);
+  const childrenOf = (parentId: string): readonly CapexListRow[] => byParent.get(parentId) ?? [];
   const root = rows.find((r) => r.number === CAPEX_ROOT_NUMBER);
   if (!root) return { categories: [], accounts: [], subaccounts: [] };
 

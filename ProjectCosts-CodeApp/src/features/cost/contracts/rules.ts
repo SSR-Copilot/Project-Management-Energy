@@ -355,6 +355,13 @@ export interface ProjectContext {
    */
   clusterStateName?: string;
   owningBusinessUnitId?: string;
+  /**
+   * `_vsb_country_value`, the project row's country id, and `vsb_technology`, its option-set number (undefined when the column
+   * is not a number). OPT-02 (B8): carried on the session project so the Cost screens no longer re-read the project row for them
+   * (`useProjectExtras` derives from this). Both scopes of `loadProject` set them; they are row columns, not extra requests.
+   */
+  countryId?: string;
+  technology?: number;
   /** `gblRecordSelectedProjectCountry.'ISO Currency Code'`, "EUR" when absent. */
   isoCurrencyCode?: string;
   /**
@@ -745,6 +752,25 @@ export function costsUntilClosing({ closingDate, costs }: ClosingSplitArgs): num
 }
 
 /**
+ * Both halves of the closing-date split in ONE pass over the cost rows (OPT-28, D160): `costsUntilClosing` and
+ * `costsAfterClosing` each took two passes, and `laterInYear` was summed twice. Each of the three sums is accumulated with the same
+ * rows in the same order as before, so every figure is bit-identical (`UT-CONTR-OPT-*`, differential against the two
+ * functions above, which stay as the readable canvas form). The inclusion-exclusion shape is kept.
+ */
+export function closingSplit({ closingDate, costs }: ClosingSplitArgs): { until: number; after: number } {
+  const y = closingDate.getFullYear();
+  const m = closingDate.getMonth() + 1;
+  let upToYear = 0, laterYears = 0, laterInYear = 0;
+  for (const row of costs) {
+    const amount = orZero(row.cost);
+    if (row.year <= y) upToYear += amount;
+    if (row.month > m && row.year === y) laterInYear += amount;
+    if (row.year > y) laterYears += amount;
+  }
+  return { until: upToYear - laterInYear, after: laterYears + laterInYear };
+}
+
+/**
  * `Sum(Filter(costs, …), vsb_cost)` — blanks skipped. A loop, not `sum(...rows)`: spreading more than about 120,000
  * rows into call arguments throws a RangeError (V8; fewer in Safari), and it would do so inside a state updater.
  */
@@ -1087,6 +1113,25 @@ export function canSaveContract(args: {
     if (marginError) return false;
   }
   return true;
+}
+
+/**
+ * `canSaveContract`, answered from the errors the screen already computed for this render (OPT-28, D160).
+ *
+ * For a Development / Construction contract the Save gate and `contractErrors` check the same things (the nine-way `And`'s
+ * terms are exactly the error rules), so the gate is "recalculated, and no error". A Project Rights contract has its own
+ * list (`contractErrors` stops after the Rights total) and its own gate, so it keeps `canSaveContract` untouched.
+ * `UT-CONTR-OPT-*` pins the equivalence over generated forms, with `canSaveContract` as the oracle.
+ */
+export function canSaveContractFromErrors(args: {
+  form: ContractForm;
+  tree: readonly AccountNode[];
+  recalculated: boolean;
+  locale?: string;
+  errors: readonly FieldError[];
+}): boolean {
+  if (args.form.contractType === CONTRACT_TYPE.ProjectRights) return canSaveContract(args);
+  return args.recalculated && args.errors.length === 0;
 }
 
 /**
@@ -1557,8 +1602,7 @@ export function recalculateForm(
 ): ContractForm {
   if (!form.closingDate) return form;
   // The halves stay UNROUNDED for the total (`:7669`); the Plan boxes show `RoundUp(…, 0)` (`:4456`).
-  const untilRaw = costsUntilClosing({ closingDate: form.closingDate, costs });
-  const afterRaw = costsAfterClosing({ closingDate: form.closingDate, costs });
+  const { until: untilRaw, after: afterRaw } = closingSplit({ closingDate: form.closingDate, costs });
   const raw = totalCostsRaw(form, { untilClosingPlan: untilRaw, afterClosingPlan: afterRaw }, locale);
   return {
     ...form,

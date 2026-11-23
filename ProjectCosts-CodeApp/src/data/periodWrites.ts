@@ -54,24 +54,18 @@ import { Vsb_opexsubaccountsService } from "@/generated/services/Vsb_opexsubacco
 import { Vsb_devicetypesinprojectsService } from "@/generated/services/Vsb_devicetypesinprojectsService";
 import { Vsb_generatortypeinprojectsService } from "@/generated/services/Vsb_generatortypeinprojectsService";
 import { Vsb_pvmoduletypeinprojectsService } from "@/generated/services/Vsb_pvmoduletypeinprojectsService";
-import { Vsb_landleaseprojectcostsService } from "@/generated/services/Vsb_landleaseprojectcostsService";
-import { Vsb_landleaseperiodsService } from "@/generated/services/Vsb_landleaseperiodsService";
-import { Vsb_landleasesubaccountsService } from "@/generated/services/Vsb_landleasesubaccountsService";
-import { Vsb_landleaseallocationwtgsService } from "@/generated/services/Vsb_landleaseallocationwtgsService";
 import { Vsb_opexlandleasestandardassumptionsesService } from "@/generated/services/Vsb_opexlandleasestandardassumptionsesService";
-import { TransactioncurrenciesService } from "@/generated/services/TransactioncurrenciesService";
 import { unwrap } from "@/platform/errors";
 import { loggedCall } from "@/platform/requestLog";
-import { OPEX_MSG, planFollowingPeriodStarts, type ChainPeriod } from "@/features/cost/periods/opexRules";
+import { OPEX_MSG, planFollowingPeriodStarts, type ChainPeriod, type OpexAccount, type OpexSubaccount } from "@/features/cost/periods/opexRules";
 import type { CostPeriod, PeriodMode } from "@/features/cost/costing/model";
 import { deleteRecord, fetchAll } from "./client";
-import { ES, ES_PLANT } from "./dataverseNames";
-import { ACTIVE, and, bind, dateOnly, eq, guid, lookupEq, lookupIn, money } from "./odata";
+import { mapLimit, mapLimitFirstFailure, WRITE_CONCURRENCY } from "./concurrency";
+import { loadActiveCurrencies } from "./currencies";
+import { ES_PLANT } from "./dataverseNames";
+import { ACTIVE, and, bind, dateOnly, eq, lookupEq, lookupIn, money } from "./odata";
 import { addMonths as addMonthsOnDate } from "@/domain/dates";
-import {
-  LAND_LEASE_PERIOD_CHOICE, LAND_LEASE_SECURED, THRESHOLD_TYPE_VALUE,
-  landLeasePeriodIndex, readAggregation, writeAggregation,
-} from "./costBook";
+import { THRESHOLD_TYPE_VALUE, readAggregation, writeAggregation } from "./costBook";
 
 /** `Opex Accounts.Name` — the literal strings the O&M / Other OPEX tables compare against. */
 const OPEX_MODE_NAME = { om: "Operation & Maintenance", other: "Other OPEX Costs" } as const;
@@ -111,7 +105,7 @@ function numberOfOption(value: unknown): number | undefined {
  * BoP 128470001. The canvas names them `'Contract Types'.Landlease` / `.'Opex O&M'` /
  * `.'Opex Other'` (`OpexCostScreenCode.txt:656`, `:3044`; `LandLeaseCostScreenCode.txt:388`).
  */
-const CONTRACT_TYPE = { land: 952850000, om: 952850001, other: 952850002 } as const;
+const CONTRACT_TYPE = { om: 952850001, other: 952850002 } as const;
 
 /** `'Time Zone Rule Version Number': 4` in the OPEX Save Patch (`Opex Costs Screen.pa.yaml:8703`). */
 export const OPEX_TIME_ZONE_RULE_VERSION_NUMBER = 4;
@@ -143,6 +137,12 @@ export interface PeriodWriteContext {
    * sub-account, which is cosmetic — nothing reads a header's `vsb_name` back.
    */
   projectName?: string;
+  /**
+   * OPT-11 (B3): the OPEX accounts and sub-accounts the screen already holds (`useOpexCatalog`: ACTIVE rows, cached 30 minutes).
+   * Given, a save or an import resolves its account and sub-account from them instead of reading both tables again; omitted (or
+   * only one of the two), it reads them as before.
+   */
+  opexCatalog?: { accounts: readonly OpexAccount[]; subaccounts: readonly OpexSubaccount[] };
 }
 
 /* ══════════════════════════════════════════════════════ group -> id lookups ══ */
@@ -150,13 +150,11 @@ export interface PeriodWriteContext {
 async function resolveCurrencyId(currencyName: string): Promise<string | undefined> {
   const name = currencyName.trim();
   if (!name) return undefined;
-  const rows = await fetchAll(
-    "list transaction currencies",
-    (o) => TransactioncurrenciesService.getAll(o),
-    { select: ["transactioncurrencyid", "currencyname"], filter: ACTIVE },
-  );
-  const match = rows.find((r) => (r.currencyname ?? "").toLowerCase() === name.toLowerCase());
-  return match?.transactioncurrencyid;
+  // OPT-11: the ACTIVE rows of the shared currency read (`data/currencies.ts`), not a request per save. Same rule as before:
+  // active currencies only, the first whose name matches without regard to case.
+  const rows = await loadActiveCurrencies();
+  const match = rows.find((r) => r.name.toLowerCase() === name.toLowerCase());
+  return match?.id;
 }
 
 interface OpexGroupTarget {
@@ -173,19 +171,30 @@ async function resolveOpexGroupTarget(
   mode: "om" | "other",
   group: string,
   deviceId?: string,
+  catalog?: PeriodWriteContext["opexCatalog"],
 ): Promise<OpexGroupTarget> {
-  const [accounts, subaccounts] = await Promise.all([
-    fetchAll(
-      "list OPEX accounts",
-      (o) => Vsb_opexaccountsService.getAll(o),
-      { select: ["vsb_opexaccountid", "vsb_name", "vsb_order"], filter: ACTIVE },
-    ),
-    fetchAll(
-      "list OPEX subaccounts for a period save",
-      (o) => Vsb_opexsubaccountsService.getAll(o),
-      { select: ["vsb_opexsubaccountid", "vsb_name", "vsb_order", "_vsb_account_value"], filter: ACTIVE },
-    ),
-  ]);
+  // OPT-11: the screen's own ACTIVE accounts and sub-accounts when the caller has them (same select, same filter as the two reads
+  // below, so the same rows); otherwise the two reads, exactly as before.
+  const [accounts, subaccounts] = catalog
+    ? [
+      // The catalogue turned a null name into "" (`loadOpexAccounts`); turned back, so `?? fallback` below reads the same.
+      catalog.accounts.map((a) => ({ vsb_opexaccountid: a.id, vsb_name: a.name === "" ? null : a.name, vsb_order: a.order })),
+      catalog.subaccounts.map((s) => ({
+        vsb_opexsubaccountid: s.id, vsb_name: s.name === "" ? null : s.name, vsb_order: s.order, _vsb_account_value: s.accountId,
+      })),
+    ]
+    : await Promise.all([
+      fetchAll(
+        "list OPEX accounts",
+        (o) => Vsb_opexaccountsService.getAll(o),
+        { select: ["vsb_opexaccountid", "vsb_name", "vsb_order"], filter: ACTIVE },
+      ),
+      fetchAll(
+        "list OPEX subaccounts for a period save",
+        (o) => Vsb_opexsubaccountsService.getAll(o),
+        { select: ["vsb_opexsubaccountid", "vsb_name", "vsb_order", "_vsb_account_value"], filter: ACTIVE },
+      ),
+    ]);
   const byOrder = (a: { vsb_order: number }, b: { vsb_order: number }) => a.vsb_order - b.vsb_order;
   const account = accounts.find((a) => a.vsb_name === OPEX_MODE_NAME[mode])
     ?? [...accounts].sort(mode === "om" ? byOrder : (a, b) => byOrder(b, a))[0];
@@ -253,19 +262,6 @@ async function resolveDeviceType(
   const match = devices.find((d) => (d.vsb_name ?? "").toLowerCase() === deviceName.toLowerCase());
   if (!match) throw new Error(`Unknown Operation & Maintenance device type "${deviceName}".`);
   return { id: match.vsb_devicetypesinprojectid, name: match.vsb_name ?? deviceName };
-}
-
-async function resolveLandLeaseSubaccount(
-  group: string,
-): Promise<{ id: string; name: string }> {
-  const rows = await fetchAll(
-    "list Land Lease subaccounts for a period save",
-    (o) => Vsb_landleasesubaccountsService.getAll(o),
-    { select: ["vsb_landleasesubaccountid", "vsb_name"], filter: ACTIVE },
-  );
-  const match = rows.find((r) => (r.vsb_name ?? "").toLowerCase() === group.toLowerCase());
-  if (!match) throw new Error(`Unknown Land Lease location "${group}".`);
-  return { id: match.vsb_landleasesubaccountid, name: match.vsb_name ?? group };
 }
 
 /* ══════════════════════════════════════════════════════════════ O&M / Other OPEX ══ */
@@ -417,6 +413,20 @@ export interface OpexSaveExtras {
 
 const messageOf = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
+/**
+ * Runs `task` for every item, `WRITE_CONCURRENCY` at a time, EVERY item whatever happens to the others, and returns the message of the
+ * first failure in ITEM order (null when none). The canvas' `ForAll` inside `IfError` tries each row and shows the first error
+ * (OPT-11: the loops that did that one row at a time).
+ */
+async function firstFailureOf<T>(items: readonly T[], task: (item: T) => Promise<unknown>): Promise<string | null> {
+  const failures: (string | undefined)[] = [];
+  await mapLimit(items, async (item, index) => {
+    try { await task(item); } catch (e) { failures[index] = messageOf(e); }
+  }, WRITE_CONCURRENCY);
+  for (let i = 0; i < items.length; i += 1) if (failures[i] !== undefined) return failures[i] as string;
+  return null;
+}
+
 export async function saveOpexPeriod(
   ctx: PeriodWriteContext,
   period: CostPeriod,
@@ -426,7 +436,7 @@ export async function saveOpexPeriod(
   const mode = period.mode as "om" | "other";
   const [currencyId, target] = await Promise.all([
     resolveCurrencyId(period.currency),
-    resolveOpexGroupTarget(ctx.projectId, mode, period.group, period.deviceId),
+    resolveOpexGroupTarget(ctx.projectId, mode, period.group, period.deviceId, ctx.opexCatalog),
   ]);
   // `'Time Zone Rule Version Number': 4` is in every hand-saved Patch (`:8703`); the standard
   // import does not set it. Not part of `cascadeFields`, which copies ten named columns only.
@@ -477,28 +487,34 @@ export async function saveOpexPeriod(
 
   // Rule 12's cascade. Run for every save, exactly as the canvas does: on a later period the
   // filter simply returns nothing, because the chain is a star and only heads have children.
-  const children = await childrenOfChain(savedId);
+  // OPT-11: a period that points at a head (`parentId`), and a row created a moment ago, have no children of their own, so the query
+  // is not sent for them (it always came back empty: the chain is a star). Only an existing head asks.
+  const children = period.parentId || isNew ? [] : await childrenOfChain(savedId);
   const cascade = cascadeFields(fields);
   // The canvas wraps the ForAll in `IfError(…, Notify("Error: the child periods could not be
   // updated. …"); Blank())`: every child is tried, the first failure is shown, the save goes on.
-  let childFailure: string | null = null;
-  for (const child of children) {
-    try {
-      unwrap(
-        await Vsb_opexprojectcostsService.update(child.id, cascade as never),
-        "cascade OPEX inflation to a child period",
-      );
-    } catch (e) {
-      childFailure ??= messageOf(e);
-    }
-  }
+  // OPT-11: the children are patched side by side (`WRITE_CONCURRENCY`); each is still tried, and the failure shown is the first IN ORDER.
+  const childFailure = await firstFailureOf(children, async (child) => {
+    unwrap(
+      await Vsb_opexprojectcostsService.update(child.id, cascade as never),
+      "cascade OPEX inflation to a child period",
+    );
+  });
   if (childFailure !== null) {
     extras?.warnings?.push(OPEX_MSG.childPeriodsFailed("Save", childFailure));
     if (!extras?.warnings) throw new Error(OPEX_MSG.childPeriodsFailed("Save", childFailure));
   }
 
+  // Where the saved row now sits in its chain, read back rather than assumed: the slot depends on
+  // `vsb_name` ordering, and the name is composed from a description the panel may have changed.
+  // OPT-11: it reads only the head's children by name, which the row's own write has already set and neither the cascade nor the
+  // re-chain below touches (they write other columns), so it starts here, beside the re-chain, instead of after it. A failure of it
+  // still surfaces after the re-chain's own outcome, as before.
+  const siblingsRead = period.parentId ? childrenOfChain(period.parentId) : null;
+  siblingsRead?.catch(() => undefined); // a throw of the re-chain below must not leave this one unhandled
+
   // Edited canvas: when an EXISTING period's Start Date or total months changed, re-chain the
-  // periods that follow it (`planFollowingPeriodStarts`), one PATCH per period.
+  // periods that follow it (`planFollowingPeriodStarts`), one PATCH per period (side by side, OPT-11).
   if (extras && !isNew && extras.before) {
     const rootId = period.parentId ?? savedId;
     const inChain = (p: CostPeriod) => p.id === rootId || p.parentId === rootId;
@@ -510,32 +526,23 @@ export async function saveOpexPeriod(
       saved: toChain({ ...period, id: savedId }),
       previous: toChain(extras.before),
     });
-    let rechainFailure: string | null = null;
-    for (const step of plan) {
-      try {
-        await loggedCall(
-          "update", `${ES_PLANT.opexProjectCosts} (re-chain start date)`,
-          async () => unwrap(
-            await Vsb_opexprojectcostsService.update(step.id, { vsb_startdate: step.startDate } as never),
-            "re-chain a following OPEX period",
-          ),
-          () => 1,
-        );
-      } catch (e) {
-        rechainFailure ??= messageOf(e);
-      }
-    }
+    const rechainFailure = await firstFailureOf(plan, (step) => loggedCall(
+      "update", `${ES_PLANT.opexProjectCosts} (re-chain start date)`,
+      async () => unwrap(
+        await Vsb_opexprojectcostsService.update(step.id, { vsb_startdate: step.startDate } as never),
+        "re-chain a following OPEX period",
+      ),
+      () => 1,
+    ));
     if (rechainFailure !== null) {
       extras.warnings?.push(OPEX_MSG.followingPeriodsFailed("Save", rechainFailure));
       if (!extras.warnings) throw new Error(OPEX_MSG.followingPeriodsFailed("Save", rechainFailure));
     }
   }
 
-  // Where the saved row now sits in its chain, read back rather than assumed: the slot depends on
-  // `vsb_name` ordering, and the name is composed from a description the panel may have changed.
   let periodIndex = 1;
-  if (period.parentId) {
-    const siblings = await childrenOfChain(period.parentId);
+  if (siblingsRead) {
+    const siblings = await siblingsRead;
     const at = siblings.findIndex((s) => s.id === savedId);
     periodIndex = at === -1 ? (period.periodIndex ?? siblings.length + 1) : at + 2;
   }
@@ -563,390 +570,14 @@ export async function saveOpexPeriod(
 export async function deleteOpexPeriod(period: CostPeriod): Promise<void> {
   const children = await childrenOfChain(period.id);
   // Through `deleteRecord` (rule 14, CA-27): the generated `delete()` returns nothing, so a refusal looked like success.
-  for (const child of children) await deleteRecord("delete OPEX period", ES_PLANT.opexProjectCosts, child.id);
+  // OPT-11: the children go side by side (`WRITE_CONCURRENCY`), the head only after every one has settled, so the head is never gone
+  // while a child still points at it. A failing child stops the rest from starting and the error is the first one IN ORDER, as the loop's.
+  await mapLimitFirstFailure(
+    children,
+    (child) => deleteRecord("delete OPEX period", ES_PLANT.opexProjectCosts, child.id),
+    WRITE_CONCURRENCY,
+  );
   await deleteRecord("delete OPEX period", ES_PLANT.opexProjectCosts, period.id);
-}
-
-/* ══════════════════════════════════════════════════════════════════ Land Lease ══ */
-
-interface LandLeaseHeaderState {
-  id: string;
-  allWtgAllocated: boolean;
-  hasOneTimePayment: boolean;
-  secured: boolean;
-}
-
-/**
- * The header columns the panel's Description / Currency / Inflation / Secured controls own.
- *
- * `vsb_description` comes from the PERIOD's description box, not from `contractName`: the canvas
- * writes the one text input into both `'Land Lease Project Costs'.Description` and the period's
- * `Name` (`LandLeaseCostScreenCode.txt:5895`), so renaming Period 1 renames the contract. Reading
- * `contractName` instead would write back the value the loader put there and make the rename a
- * no-op on the contract.
- */
-/**
- * The six one-time-payment columns, each written only when the caller supplied it.
- *
- * `vsb_amountonetimepayment` 1..3 are money; `vsb_duedateonetimepayment` 1..3 are FREE TEXT in
- * `MM/YYYY` (verified on the org — live values read `"12/2025"`), not dates, so they are written
- * as-is and blanked with `null` rather than being parsed.
- */
-function oneTimePaymentFields(period: CostPeriod): Record<string, unknown> {
-  const amount = (key: string, value: number | null | undefined) =>
-    (value === undefined ? {} : { [key]: money(value) });
-  const due = (key: string, value: string | null | undefined) =>
-    (value === undefined ? {} : { [key]: value || null });
-  return {
-    ...amount("vsb_amountonetimepayment", period.amountOneTimePayment),
-    ...amount("vsb_amountonetimepayment2", period.amountOneTimePayment2),
-    ...amount("vsb_amountonetimepayment3", period.amountOneTimePayment3),
-    ...due("vsb_duedateonetimepayment", period.dueDateOneTimePayment),
-    ...due("vsb_duedateonetimepayment2", period.dueDateOneTimePayment2),
-    ...due("vsb_duedateonetimepayment3", period.dueDateOneTimePayment3),
-  };
-}
-
-function landLeaseHeaderFields(
-  period: CostPeriod,
-  currencyId: string | undefined,
-  projectName: string | undefined,
-  subaccountName: string,
-): Record<string, unknown> {
-  const description = period.description.trim() || subaccountName;
-  return {
-    vsb_name: [projectName, subaccountName, description].filter(Boolean).join("-"),
-    vsb_description: description,
-    // `Land Owner` and the three One-Time Payments live on the HEADER and are the panel's own
-    // controls (`LandLeaseCostScreenCode.txt:5895`). They were neither selected on the way in nor
-    // written on the way out, which made the whole One-Time Payment section cosmetic. Each is
-    // written only when the caller has an opinion — `undefined` leaves the column alone, so a
-    // save from a screen that does not edit them cannot blank a stored payment.
-    ...(period.landOwner === undefined ? {} : { vsb_landowner: period.landOwner || null }),
-    ...oneTimePaymentFields(period),
-    vsb_useinflationprofile: period.inflation,
-    vsb_usecountryinflationprofile: period.countryInflation,
-    // The RESOLVED percentage, on the country branch too — the same rule `opexFields` states and
-    // the same one `landLeaseRules.buildCostPayload` already follows
-    // (`[LEASE_COST_COL.inflationProfile]: num(form.inflationProfile)`, written unconditionally).
-    vsb_inflationprofile: period.inflation ? money(period.inflationPercent) : null,
-    vsb_inflationstartyear: period.inflation ? period.inflationYear : null,
-    vsb_inflationcountryarea:
-      period.countryInflation ? (period.inflationCountryArea ?? "") || null : null,
-    // `undefined` means "the caller has no opinion" and the column is left alone. Writing a
-    // default would silently clear a Secured / Allocation flag another screen had set — the
-    // failure mode this module's ordering rules exist to avoid.
-    ...(period.secured === undefined
-      ? {}
-      : { vsb_secured: period.secured ? LAND_LEASE_SECURED.yes : LAND_LEASE_SECURED.no }),
-    ...(period.allWtgAllocated === undefined
-      ? {} : { vsb_allwtgallocated: period.allWtgAllocated }),
-    ...(currencyId ? { "vsb_Currency@odata.bind": bind("transactioncurrencies", currencyId) } : {}),
-  };
-}
-
-async function readLandLeaseHeader(id: string): Promise<LandLeaseHeaderState | undefined> {
-  const rows = await fetchAll(
-    "read a Land Lease header",
-    (o) => Vsb_landleaseprojectcostsService.getAll(o),
-    {
-      select: [
-        "vsb_landleaseprojectcostid", "vsb_allwtgallocated", "vsb_secured",
-        "vsb_duedateonetimepayment", "vsb_amountonetimepayment",
-      ],
-      filter: `vsb_landleaseprojectcostid eq ${guid(id)}`,
-    },
-  );
-  const row = rows.find((r) => r.vsb_landleaseprojectcostid === id);
-  if (!row) return undefined;
-  return {
-    id: row.vsb_landleaseprojectcostid,
-    allWtgAllocated: row.vsb_allwtgallocated === true,
-    secured: Number(row.vsb_secured) === LAND_LEASE_SECURED.yes,
-    hasOneTimePayment:
-      row.vsb_duedateonetimepayment != null && row.vsb_amountonetimepayment != null,
-  };
-}
-
-/**
- * The header half of a Land Lease save.
- *
- * `LandLeaseCostScreenCode.txt:5895` guards it with
- * `If(IsBlank(locSelectedLandLeaseCost) || locSelectedLandLeasePeriod.Period = 'Period 1', …)`:
- *
- *   no `contractId`   CREATE a new header — this is "Add Contract Type", and it is the only way
- *                     a Land Lease contract comes into existence.
- *   slot 1            UPDATE that header. Period 1 owns the contract's shared fields, which is
- *                     why the panel disables them on every later period.
- *   slot 2..9         LEAVE IT ALONE. Patching it here — which is what this did on every save —
- *                     let an edit to Period 3 rewrite the currency and inflation of Period 1.
- */
-async function resolveLandLeaseHeader(
-  ctx: PeriodWriteContext,
-  period: CostPeriod,
-  isNew: boolean,
-): Promise<LandLeaseHeaderState> {
-  if (period.contractId) {
-    const existing = await readLandLeaseHeader(period.contractId);
-    if (!existing) throw new Error("This Land Lease contract no longer exists.");
-    // `IsBlank(locSelectedLandLeaseCost) || locSelectedLandLeasePeriod.Period = 'Period 1'`.
-    // On "Add Period" the canvas' `locSelectedLandLeasePeriod` is Blank, so the second test is
-    // false and the header is untouched — a NEW period under an EXISTING contract never rewrites
-    // the contract, whatever slot it lands in.
-    const ownsHeader = !isNew && (period.periodIndex ?? 1) === 1;
-    if (!ownsHeader) return existing;
-    const [currencyId, subaccount] = await Promise.all([
-      resolveCurrencyId(period.currency),
-      resolveLandLeaseSubaccount(period.group),
-    ]);
-    unwrap(
-      await Vsb_landleaseprojectcostsService.update(
-        existing.id,
-        landLeaseHeaderFields(period, currencyId, ctx.projectName, subaccount.name) as never,
-      ),
-      "update Land Lease contract",
-    );
-    return {
-      ...existing,
-      secured: period.secured ?? existing.secured,
-      allWtgAllocated: period.allWtgAllocated ?? existing.allWtgAllocated,
-    };
-  }
-
-  if (!isNew) throw new Error("This Land Lease period is not attached to a contract.");
-
-  const [currencyId, subaccount] = await Promise.all([
-    resolveCurrencyId(period.currency),
-    resolveLandLeaseSubaccount(period.group),
-  ]);
-  const created = unwrap(
-    await Vsb_landleaseprojectcostsService.create({
-      ...landLeaseHeaderFields(period, currencyId, ctx.projectName, subaccount.name),
-      // `vsb_secured` is a REQUIRED picklist on this table, so a create must carry one even when
-      // the panel has no control for it. "No" is the canvas' own unchecked-toggle answer.
-      vsb_secured: period.secured ? LAND_LEASE_SECURED.yes : LAND_LEASE_SECURED.no,
-      vsb_isstandardcontract: period.standard,
-      vsb_isstartdatestandardassumption: period.isStartDateStandard === true,
-      "vsb_Project@odata.bind": bind("vsb_projects", ctx.projectId),
-      "vsb_Subaccount@odata.bind": bind("vsb_landleasesubaccounts", subaccount.id),
-      ...(ctx.owningBusinessUnitId
-        ? { "owningbusinessunit@odata.bind": bind("businessunits", ctx.owningBusinessUnitId) } : {}),
-    } as never),
-    "create Land Lease contract",
-  );
-  return {
-    id: created.vsb_landleaseprojectcostid,
-    allWtgAllocated: period.allWtgAllocated === true,
-    secured: period.secured === true,
-    // `Not(IsBlank(Due Date)) && Not(IsBlank(Amount))` on the FIRST payment
-    // (`LandLeaseCostScreenCode.txt:1010`) — computed from what was just written, not assumed
-    // false. It was hard-coded `false`, which reported "no OTP" on a contract created WITH one.
-    hasOneTimePayment:
-      (period.dueDateOneTimePayment ?? null) !== null
-      && (period.amountOneTimePayment ?? null) !== null,
-  };
-}
-
-/** The `vsb_period` slots already taken under a header, as 1-based indexes. */
-async function usedLandLeaseSlots(headerId: string): Promise<number[]> {
-  const rows = await fetchAll(
-    "list Land Lease period slots",
-    (o) => Vsb_landleaseperiodsService.getAll(o),
-    { select: ["vsb_landleaseperiodid", "vsb_period"], filter: lookupEq("vsb_projectcost", headerId) },
-  );
-  return rows.map((r) => landLeasePeriodIndex(Number(r.vsb_period)));
-}
-
-/**
- * The slot a NEW period takes: its predecessor's + 1.
- *
- * `LandLeaseCostScreenCode.txt:5895` — `Switch(locParentLandLeasePeriod.Period, Period1, Period2,
- * Period2, Period3, … Period8, Period9, Period 1)`, where `locParentLandLeasePeriod` is the row
- * the user pressed Add Period on. That never collides, because Add Period is only enabled on the
- * LAST period of a contract (`:260-286`, `locSelectedLandLeasePeriod = varLastLandLeasePeriod`).
- * This reproduces the rule from the slots actually in use, so it holds even when the caller has
- * not tracked which period was selected — and it FILLS A GAP left by a delete rather than
- * running off the end of the nine, which is the one place it is deliberately kinder than canvas:
- * the canvas would hand out a duplicate slot there, and a duplicate `vsb_period` makes two
- * periods sort identically and the chain unreadable.
- */
-export function nextLandLeaseSlot(used: readonly number[], preferred?: number): number {
-  const taken = new Set(used);
-  if (preferred !== undefined && preferred >= 1 && preferred <= 9 && !taken.has(preferred)) {
-    return preferred;
-  }
-  for (let slot = 1; slot <= 9; slot += 1) if (!taken.has(slot)) return slot;
-  throw new Error("This Land Lease contract already has the maximum of 9 periods.");
-}
-
-/** The writable column bag for one `vsb_landleaseperiods` row. */
-function landLeasePeriodFields(period: CostPeriod): Record<string, unknown> {
-  return {
-    // The canvas writes the Description box straight into `Name` — and the table's Description
-    // column reads it back (`Text: =ThisItem.Name`, `:1642`).
-    vsb_name: period.description.trim(),
-    vsb_startdate: period.startDate,
-    vsb_landleasedurationyears: period.years,
-    vsb_landleasedurationmonths: period.months,
-    // Nullable, for the same reason OPEX's are: a blank rate is blank, and the Land Lease grid
-    // prints a stored `0` but leaves a null cell empty.
-    vsb_fixedcosts: money(period.fixed),
-    vsb_ofrevenues: money(period.revenue),
-    vsb_eurmwh: money(period.perMwh),
-    vsb_eurmw: money(period.perMw),
-    vsb_eurwtg: money(period.perWtg),
-    vsb_aggregation: writeAggregation(period.aggregation),
-    vsb_distributionfrequency: period.frequency,
-  };
-}
-
-/**
- * Brings a contract's `vsb_landleaseallocationwtgs` rows in line with `allocatedGeneratorIds`.
- *
- * `undefined` means the caller has no opinion and NOTHING is touched — writing `[]` would delete
- * every allocation on the contract, and a lost or stranded allocation is the failure
- * `ProjectDocs/app-docs/01-BUGS-FOUND.md` S-5 records. Creates run before deletes so an interruption leaves an
- * over-allocated contract (visible, fixable) rather than an under-allocated one.
- */
-async function reconcileLandLeaseAllocations(
-  ctx: PeriodWriteContext,
-  headerId: string,
-  wanted: readonly string[] | undefined,
-): Promise<void> {
-  if (wanted === undefined) return;
-  const rows = await fetchAll(
-    "list Land Lease WTG allocations to reconcile",
-    (o) => Vsb_landleaseallocationwtgsService.getAll(o),
-    {
-      select: [
-        "vsb_landleaseallocationwtgid", "_vsb_projectcost_value",
-        "_vsb_generatorinproject_value",
-      ],
-      filter: lookupEq("vsb_projectcost", headerId),
-    },
-  );
-  const existing = new Map(
-    rows
-      .filter((r) => r._vsb_generatorinproject_value)
-      .map((r) => [r._vsb_generatorinproject_value as string, r.vsb_landleaseallocationwtgid]),
-  );
-  const target = new Set(wanted);
-
-  for (const generatorId of target) {
-    if (existing.has(generatorId)) continue;
-    unwrap(
-      await Vsb_landleaseallocationwtgsService.create({
-        "vsb_ProjectCost@odata.bind": bind("vsb_landleaseprojectcosts", headerId),
-        "vsb_GeneratorInProject@odata.bind": bind("vsb_generatorinprojects", generatorId),
-        ...(ctx.owningBusinessUnitId
-          ? { "owningbusinessunit@odata.bind": bind("businessunits", ctx.owningBusinessUnitId) } : {}),
-      } as never),
-      "create a Land Lease WTG allocation",
-    );
-  }
-  for (const [generatorId, rowId] of existing) {
-    if (!target.has(generatorId)) await deleteRecord("delete a Land Lease WTG allocation", ES.landLeaseAllocationWtgs, rowId);
-  }
-}
-
-export async function saveLandLeasePeriod(
-  ctx: PeriodWriteContext,
-  period: CostPeriod,
-  isNew: boolean,
-): Promise<CostPeriod> {
-  const header = await resolveLandLeaseHeader(ctx, period, isNew);
-  const fields = landLeasePeriodFields(period);
-
-  // The WTG allocations belong to the CONTRACT, so they are reconciled on the same saves that own
-  // the header: a create, or an edit of Period 1. A later period carries the same list only
-  // because it inherited it on read, and must not write it back.
-  if (isNew || (period.periodIndex ?? 1) === 1) {
-    await reconcileLandLeaseAllocations(ctx, header.id, period.allocatedGeneratorIds);
-  }
-
-  if (!isNew) {
-    // `vsb_period` is NOT re-written on an edit: the canvas keeps `locSelectedLandLeasePeriod
-    // .Period` and only computes a new slot when `locRightPanelState = "New"`.
-    unwrap(
-      await Vsb_landleaseperiodsService.update(period.id, fields as never),
-      "update Land Lease period",
-    );
-    return {
-      ...period,
-      contractId: header.id,
-      secured: header.secured,
-      allWtgAllocated: header.allWtgAllocated,
-      hasOneTimePayment: header.hasOneTimePayment,
-    };
-  }
-
-  const slot = nextLandLeaseSlot(await usedLandLeaseSlots(header.id), period.periodIndex);
-  const created = unwrap(
-    await Vsb_landleaseperiodsService.create({
-      ...fields,
-      vsb_period: LAND_LEASE_PERIOD_CHOICE[slot - 1] as never,
-      "vsb_ProjectCost@odata.bind": bind("vsb_landleaseprojectcosts", header.id),
-      ...(ctx.owningBusinessUnitId
-        ? { "owningbusinessunit@odata.bind": bind("businessunits", ctx.owningBusinessUnitId) } : {}),
-    } as never),
-    "create Land Lease period",
-  );
-  return {
-    ...period,
-    id: created.vsb_landleaseperiodid,
-    contractId: header.id,
-    periodIndex: slot,
-    secured: header.secured,
-    allWtgAllocated: header.allWtgAllocated,
-    hasOneTimePayment: header.hasOneTimePayment,
-  };
-}
-
-/**
- * Deletes one Land Lease period — or, on Period 1, the whole contract.
- *
- * `LandLeaseCostScreenCode.txt:360-384` routes the Delete command on the slot, and the two
- * confirmations do different things:
- *
- *   slot 1     `:6076-6087` — "Delete Land Lease?": `RemoveIf('Land Lease Allocation WTGS', …)`,
- *              then `RemoveIf('Land Lease Periods', …)`, then `RemoveIf('Land Lease Project
- *              Costs', …)`. The WTG allocations FIRST — they are the rows `ProjectDocs/app-docs/01-BUGS-FOUND.md`
- *              S-5 records as the ones that get missed, and a stranded allocation points at a
- *              header that no longer exists.
- *   slot 2..9  `:6041` — `Remove('Land Lease Periods', period)`, and nothing else.
- *
- * NO RENUMBERING, deliberately: the canvas does not renumber either, and `nextLandLeaseSlot`
- * fills the gap the next time a period is added, so the nine slots never run short. Renumbering
- * would rewrite `vsb_period` on rows the user did not touch.
- */
-export async function deleteLandLeasePeriod(period: CostPeriod): Promise<void> {
-  const headerId = period.contractId;
-  if (!headerId || (period.periodIndex ?? 1) !== 1) {
-    await deleteRecord("delete Land Lease period", ES.landLeasePeriods, period.id);
-    return;
-  }
-
-  const [allocations, periods] = await Promise.all([
-    fetchAll(
-      "list Land Lease WTG allocations to delete",
-      (o) => Vsb_landleaseallocationwtgsService.getAll(o),
-      {
-        select: ["vsb_landleaseallocationwtgid"],
-        filter: lookupEq("vsb_projectcost", headerId),
-      },
-    ),
-    fetchAll(
-      "list Land Lease periods to delete",
-      (o) => Vsb_landleaseperiodsService.getAll(o),
-      { select: ["vsb_landleaseperiodid"], filter: lookupEq("vsb_projectcost", headerId) },
-    ),
-  ]);
-
-  for (const a of allocations) {
-    await deleteRecord("delete Land Lease WTG allocation", ES.landLeaseAllocationWtgs, a.vsb_landleaseallocationwtgid);
-  }
-  for (const p of periods) await deleteRecord("delete Land Lease period", ES.landLeasePeriods, p.vsb_landleaseperiodid);
-  await deleteRecord("delete Land Lease contract", ES_PLANT.landLeaseProjectCosts, headerId);
 }
 
 /* ══════════════════════════════════════════════ Add Standard Contract ══ */
@@ -1035,19 +666,6 @@ function addMonths(iso: string, months: number): string {
   return dateOnly(addMonthsOnDate(d, months));   // D159: the shared clamping and the shared local date text (rule 18)
 }
 
-/**
- * The assumption's inflation percentage, by the canvas' three-way `Switch`.
- *
- * `OpexCostScreenCode.txt:719-735` (and the identical block on the Land Lease screen):
- * inflation + country inflation -> the COUNTRY's profile for COD year + 1; inflation alone ->
- * the assumption's own `Inflation Profile`; neither -> blank.
- */
-function assumptionInflation(a: AssumptionRow, countryPercent: number | undefined): number {
-  if (a.vsb_useinflationprofile !== true) return 0;
-  if (a.vsb_usecountryinflationprofile === true) return countryPercent ?? 0;
-  return a.vsb_inflationprofile ?? 0;
-}
-
 async function loadAssumptions(
   typeOfContract: number,
   args: StandardContractArgs,
@@ -1098,9 +716,27 @@ export async function addStandardContract(
   ctx: PeriodWriteContext,
   args: StandardContractArgs,
 ): Promise<CostPeriod[]> {
-  return args.mode === "land"
-    ? addLandLeaseStandardContract(ctx, args)
-    : addOpexStandardContract(ctx, args);
+  if (args.mode === "land") throw new Error(NOT_HERE);
+  return addOpexStandardContract(ctx, args);
+}
+
+/**
+ * OPT-11 (B3) — `true`: the rows of an OPEX standard import after the first go through a bounded pool; `false`: one request
+ * after the other, as before. DIVERGENCE: the rows are created in a different order, so their `createdon` order is no longer the
+ * assumptions' order. Nothing in this app reads it for these rows (the book has no created-on column and the add-period start date is
+ * `startDateDefault` with `deviceCosts: []`); the canvas' own "last created period on the card" rule does.
+ */
+export const OPEX_IMPORT_PARALLEL = true;
+
+/** One row of the import, fully worked out before anything is sent. */
+interface OpexImportSeed {
+  a: AssumptionRow;
+  period: CostPeriod;
+  rawDescription: string;
+  profile: number | null;
+  isFirst: boolean;
+  contractName: string;
+  periodIndex: number;
 }
 
 async function addOpexStandardContract(
@@ -1108,7 +744,7 @@ async function addOpexStandardContract(
   args: StandardContractArgs,
 ): Promise<CostPeriod[]> {
   const mode = args.mode as "om" | "other";
-  const target = await resolveOpexGroupTarget(ctx.projectId, mode, args.group, args.deviceId);
+  const target = await resolveOpexGroupTarget(ctx.projectId, mode, args.group, args.deviceId, ctx.opexCatalog);
 
   const existing = await fetchAll(
     "check for an existing OPEX standard contract",
@@ -1148,15 +784,20 @@ async function addOpexStandardContract(
    * that contract ends; a later period starts when the last period created so far ends (sorted by
    * Description for O&M, `:3189-3215`; by Period for Other OPEX, `:801-827`).
    */
-  const out: CostPeriod[] = [];
+  /*
+   * OPT-11: the payloads of EVERY row are worked out first. Nothing in a row's own columns needs the id of another row except the
+   * parent bind of the later periods (the Period-1 row's id), and the start dates, slots and names come from the assumptions alone, so
+   * this pass is pure and runs in the canvas' order. Then the Period-1 row is created (its id is the only thing the rest waits for)
+   * and the other rows go through a bounded pool, instead of one request after the other.
+   */
+  const seeds: OpexImportSeed[] = [];
   const heads: CostPeriod[] = [];
   const later: { period: CostPeriod; order: number }[] = [];
   const codYear = new Date(`${args.codDate}T12:00:00`).getFullYear() + 1;
 
   for (const a of assumptions) {
     const isFirst = Number(a.vsb_period ?? ASSUMPTION_PERIOD_1) === ASSUMPTION_PERIOD_1;
-    const headId = isFirst ? undefined : heads[0]?.id;
-    if (!isFirst && !headId) continue; // a chain with no head is not one this command can seed.
+    if (!isFirst && heads.length === 0) continue; // a chain with no head is not one this command can seed.
     let startDate = args.codDate;
     if (!isFirst) {
       const periodNo = Number(a.vsb_period ?? 0) - ASSUMPTION_PERIOD_1;
@@ -1210,9 +851,20 @@ async function addOpexStandardContract(
       external: a.vsb_externalcontract === true,
       standard: true,
       isStartDateStandard: true,
-      parentId: headId,
     };
 
+    seeds.push({
+      a, period, rawDescription, profile, isFirst,
+      contractName: heads[0]?.description ?? description,
+      periodIndex: isFirst ? 1 : later.length + 2,
+    });
+    if (isFirst) heads.push(period);
+    else later.push({ period, order: Number(a.vsb_period ?? 0) });
+  }
+  if (seeds.length === 0) return [];
+
+  const createSeed = async (seed: OpexImportSeed, headId: string | undefined): Promise<CostPeriod> => {
+    const { a, period, rawDescription, profile } = seed;
     const created = unwrap(
       await Vsb_opexprojectcostsService.create({
         // The assumption's own threshold type and individual value ride on the period and are
@@ -1237,156 +889,42 @@ async function addOpexStandardContract(
       } as never),
       "create a standard OPEX period",
     );
-
     const id = created.vsb_opexprojectcostid;
-    const saved: CostPeriod = {
+    return {
       ...period,
       id,
+      parentId: headId,
       contractId: headId ?? id,
-      contractName: heads[0]?.description ?? description,
-      periodIndex: isFirst ? 1 : later.length + 2,
+      contractName: seed.contractName,
+      periodIndex: seed.periodIndex,
     };
-    if (isFirst) heads.push(saved);
-    else later.push({ period: saved, order: Number(a.vsb_period ?? 0) });
-    out.push(saved);
+  };
+
+  // The first row is always a Period-1 row (a later one is skipped until one exists) and every later row binds to ITS id.
+  const first = await createSeed(seeds[0] as OpexImportSeed, undefined);
+  const rest = seeds.slice(1);
+  const createRest = (seed: OpexImportSeed): Promise<CostPeriod> => createSeed(seed, seed.isFirst ? undefined : first.id);
+  let others: CostPeriod[];
+  if (OPEX_IMPORT_PARALLEL) {
+    // First failure IN ORDER, nothing started after a failure: the loop's behaviour; rows already in flight may have landed.
+    others = await mapLimitFirstFailure(rest, createRest, WRITE_CONCURRENCY);
+  } else {
+    others = [];
+    for (const seed of rest) others.push(await createRest(seed));
   }
-  return out;
-}
-
-async function addLandLeaseStandardContract(
-  ctx: PeriodWriteContext,
-  args: StandardContractArgs,
-): Promise<CostPeriod[]> {
-  const subaccount = await resolveLandLeaseSubaccount(args.group);
-
-  const existing = await fetchAll(
-    "check for an existing Land Lease standard contract",
-    (o) => Vsb_landleaseprojectcostsService.getAll(o),
-    {
-      select: ["vsb_landleaseprojectcostid"],
-      filter: and(
-        lookupEq("vsb_project", ctx.projectId),
-        eq("vsb_isstandardcontract", true),
-        lookupEq("vsb_subaccount", subaccount.id),
-        ACTIVE,
-      ),
-    },
-  );
-  if (existing.length > 0) {
-    throw new Error(`"${args.group}" already has a standard contract.`);
-  }
-
-  const assumptions = await loadAssumptions(
-    CONTRACT_TYPE.land, args, "vsb_landleasesubaccount", subaccount.id,
-  );
-  const first = assumptions[0];
-  if (!first) {
-    throw new Error(`No standard assumptions are configured for "${args.group}".`);
-  }
-
-  const codYear = new Date(`${args.codDate}T12:00:00`).getFullYear() + 1;
-  const header = unwrap(
-    await Vsb_landleaseprojectcostsService.create({
-      vsb_name: [ctx.projectName, subaccount.name, first.vsb_name ?? first.vsb_description ?? ""]
-        .filter(Boolean).join("-"),
-      vsb_description: (first.vsb_description ?? "").trim(),
-      vsb_secured: first.vsb_secured === true ? LAND_LEASE_SECURED.yes : LAND_LEASE_SECURED.no,
-      vsb_allwtgallocated: first.vsb_allwtgallocated === true,
-      vsb_isstandardcontract: true,
-      vsb_isstartdatestandardassumption: true,
-      vsb_useinflationprofile: first.vsb_useinflationprofile === true,
-      vsb_usecountryinflationprofile: first.vsb_usecountryinflationprofile === true,
-      vsb_inflationprofile: assumptionInflation(first, args.countryInflationPercent) || null,
-      vsb_inflationstartyear: codYear,
-      vsb_inflationcountryarea: first.vsb_inflationcountryarea ?? null,
-      // The three one-time payments come straight off the assumption (`:388`).
-      vsb_amountonetimepayment: first.vsb_amountonetimepayment ?? null,
-      vsb_amountonetimepayment2: first.vsb_amountonetimepayment2 ?? null,
-      vsb_amountonetimepayment3: first.vsb_amountonetimepayment3 ?? null,
-      vsb_duedateonetimepayment: first.vsb_duedateonetimepayment ?? null,
-      vsb_duedateonetimepayment2: first.vsb_duedateonetimepayment2 ?? null,
-      vsb_duedateonetimepayment3: first.vsb_duedateonetimepayment3 ?? null,
-      "vsb_Project@odata.bind": bind("vsb_projects", ctx.projectId),
-      "vsb_Subaccount@odata.bind": bind("vsb_landleasesubaccounts", subaccount.id),
-      ...(first._vsb_currency_value
-        ? { "vsb_Currency@odata.bind": bind("transactioncurrencies", first._vsb_currency_value) }
-        : {}),
-      ...(ctx.owningBusinessUnitId
-        ? { "owningbusinessunit@odata.bind": bind("businessunits", ctx.owningBusinessUnitId) } : {}),
-    } as never),
-    "create a standard Land Lease contract",
-  );
-  const headerId = header.vsb_landleaseprojectcostid;
-
-  const out: CostPeriod[] = [];
-  let startDate = args.codDate;
-  for (const [i, a] of assumptions.slice(0, LAND_LEASE_PERIOD_CHOICE.length).entries()) {
-    const previous = out[out.length - 1];
-    if (previous) {
-      startDate = addMonths(previous.startDate, (previous.years ?? 0) * 12 + (previous.months ?? 0));
-    }
-    const period: CostPeriod = {
-      id: "",
-      group: args.group,
-      mode: "land",
-      description: (a.vsb_description ?? "").trim(),
-      startDate,
-      years: a.vsb_durationinyears ?? 0,
-      months: a.vsb_durationinmonths ?? 0,
-      currency: "",
-      fixed: money(a.vsb_fixcosts),
-      revenue: money(a.vsb_ofrevenues),
-      perMwh: money(a.vsb_eurmwh),
-      perMw: money(a.vsb_eurmw),
-      perWtg: money(a.vsb_eurwtg),
-      aggregation: readAggregation(a.vsb_aggregation),
-      frequency: a.vsb_distributionfrequency ?? 1,
-      inflation: first.vsb_useinflationprofile === true,
-      countryInflation: first.vsb_usecountryinflationprofile === true,
-      inflationYear: codYear,
-      inflationPercent: assumptionInflation(first, args.countryInflationPercent),
-      inflationCountryArea: first.vsb_inflationcountryarea ?? "",
-      threshold: false,
-      align: false,
-      external: false,
-      standard: true,
-      isStartDateStandard: true,
-      secured: first.vsb_secured === true,
-      allWtgAllocated: first.vsb_allwtgallocated === true,
-      hasOneTimePayment:
-        first.vsb_duedateonetimepayment != null && first.vsb_amountonetimepayment != null,
-      // The three one-time payments the header create above took off the assumption (`:388`),
-      // carried back so the returned period reports what was actually stored.
-      landOwner: null,
-      amountOneTimePayment: money(first.vsb_amountonetimepayment),
-      amountOneTimePayment2: money(first.vsb_amountonetimepayment2),
-      amountOneTimePayment3: money(first.vsb_amountonetimepayment3),
-      dueDateOneTimePayment: first.vsb_duedateonetimepayment ?? null,
-      dueDateOneTimePayment2: first.vsb_duedateonetimepayment2 ?? null,
-      dueDateOneTimePayment3: first.vsb_duedateonetimepayment3 ?? null,
-    };
-    const created = unwrap(
-      await Vsb_landleaseperiodsService.create({
-        ...landLeasePeriodFields(period),
-        vsb_period: LAND_LEASE_PERIOD_CHOICE[i] as never,
-        "vsb_ProjectCost@odata.bind": bind("vsb_landleaseprojectcosts", headerId),
-        ...(ctx.owningBusinessUnitId
-          ? { "owningbusinessunit@odata.bind": bind("businessunits", ctx.owningBusinessUnitId) } : {}),
-      } as never),
-      "create a standard Land Lease period",
-    );
-    out.push({
-      ...period,
-      id: created.vsb_landleaseperiodid,
-      contractId: headerId,
-      contractName: (first.vsb_description ?? "").trim(),
-      periodIndex: i + 1,
-    });
-  }
+  const out: CostPeriod[] = [first, ...others];
   return out;
 }
 
 /* ══════════════════════════════════════════════════════════════════════ dispatch ══ */
+
+/**
+ * OPT-34 (B3): Land Lease is no longer written here. Its Save, Delete and Add Standard Contract are plans of writes
+ * (`planLeaseSave` / `planLeaseDelete` / `planStandardImport`) that `data/landLease.ts`' `applyLeaseWrites` runs, and since B2 the OPEX book
+ * never holds a Land Lease period, so nothing could reach the old slot-based Land Lease path (about 450 lines, with its own,
+ * different rules) through these three entry points. A `land` period here is a caller bug and is refused, not written by a second implementation.
+ */
+const NOT_HERE = "Land Lease periods are written through applyLeaseWrites (data/landLease.ts), not through the OPEX period writes.";
 
 export async function savePeriod(
   ctx: PeriodWriteContext,
@@ -1394,15 +932,11 @@ export async function savePeriod(
   isNew: boolean,
   extras?: OpexSaveExtras,
 ): Promise<CostPeriod> {
-  return period.mode === "land"
-    ? saveLandLeasePeriod(ctx, period, isNew)
-    : saveOpexPeriod(ctx, period, isNew, extras);
+  if (period.mode === "land") throw new Error(NOT_HERE);
+  return saveOpexPeriod(ctx, period, isNew, extras);
 }
 
 export async function deletePeriod(period: CostPeriod): Promise<void> {
-  if (period.mode === "land") {
-    await deleteLandLeasePeriod(period);
-    return;
-  }
+  if (period.mode === "land") throw new Error(NOT_HERE);
   await deleteOpexPeriod(period);
 }

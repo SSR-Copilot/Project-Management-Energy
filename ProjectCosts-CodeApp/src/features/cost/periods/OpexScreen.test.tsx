@@ -25,6 +25,8 @@ const save = { mutate: vi.fn(), mutateAsync: vi.fn((_book: unknown) => Promise.r
 const addStandard = { mutate: vi.fn(), mutateAsync: vi.fn((_args: unknown) => Promise.resolve()), isPending: false };
 let book: CostBook | undefined;
 let loading = false;
+/** B2 (OPT-04, OPT-26): the arguments the screen passes to the two hooks it gates. */
+const hookArgs = { costBook: [] as unknown[][], deviceTypes: [] as unknown[][] };
 /** Run 3: the catalogue and device-type queries, loading independently of the book. */
 let catalogLoading = false;
 let deviceTypesLoading = false;
@@ -88,16 +90,22 @@ const OPEX_SUBACCOUNTS = [
 let deviceTypes: [Record<string, unknown>[], Record<string, unknown>[]] = [[], []];
 
 vi.mock("@/features/cost/costing/useCostBook", () => ({
-  useCostBook: () => ({ data: book, isLoading: loading, error: null, save, projectId: "p" }),
+  useCostBook: (...args: unknown[]) => {
+    hookArgs.costBook.push(args);
+    return { data: book, isLoading: loading, error: null, save, projectId: "p" };
+  },
   useAddStandardContract: () => addStandard,
-  useCountryInflationAreas: () => ({ data: ["North", "Centre - North"] }),
-  useCountryInflation: () => ({ data: [{ year: 2028, area: "", inflation: 2.1 }] }),
+  // B2 (OPT-06): the Area options are derived from these rows (there is no separate areas query any more).
+  useCountryInflation: () => ({ data: [
+    { year: 2028, area: "", inflation: 2.1 }, { year: 2028, area: "North", inflation: 2.1 }, { year: 2028, area: "Centre - North", inflation: 2.1 },
+  ] }),
   useOpexCatalog: () => ({
     accounts: OPEX_ACCOUNTS, subaccounts: OPEX_SUBACCOUNTS, isLoading: catalogLoading,
   }),
-  useOpexDeviceTypes: () => ({
-    data: deviceTypesLoading ? undefined : deviceTypes, isLoading: deviceTypesLoading,
-  }),
+  useOpexDeviceTypes: (...args: unknown[]) => {
+    hookArgs.deviceTypes.push(args);
+    return { data: deviceTypesLoading ? undefined : deviceTypes, isLoading: deviceTypesLoading };
+  },
   useOpexAssumptionScopes: () => ({ data: assumptionScopes }),
 }));
 vi.mock("@/app/SessionContext", () => ({
@@ -110,9 +118,25 @@ vi.mock("@/features/cost/costing/useCostWriteFlight", () => ({
   useCostWriteInFlight: () => writeInFlight,
   useWriteFailureReport: () => reportFailure,
 }));
+// One identity per render, as the TanStack query result has in the app (OPT-26: a fresh object here would rebuild `projectContext`).
+const PROJECT_EXTRAS = { data: { countryId: "country-de", technology: 1 } };
 vi.mock("@/features/cost/contracts/hooks", () => ({
-  useProjectExtras: () => ({ data: { countryId: "country-de", technology: 1 } }),
+  useProjectExtras: () => PROJECT_EXTRAS,
 }));
+/** OPT-26 - how often the screen asks the rules for a card's derived values (the card-level recompute counters). */
+const ruleCalls = { durationBadge: 0, omDurationBadge: 0, opexCommands: 0, toOpexRow: 0 };
+vi.mock("./opexRules", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./opexRules")>();
+  const counted = <A extends unknown[], R>(name: keyof typeof ruleCalls, fn: (...a: A) => R) =>
+    (...a: A): R => { ruleCalls[name]++; return fn(...a); };
+  return {
+    ...actual,
+    durationBadge: counted("durationBadge", actual.durationBadge),
+    omDurationBadge: counted("omDurationBadge", actual.omDurationBadge),
+    opexCommands: counted("opexCommands", actual.opexCommands),
+    toOpexRow: counted("toOpexRow", actual.toOpexRow),
+  };
+});
 
 import OpexScreen, { resetOpexFoldState } from "./OpexScreen";
 
@@ -174,6 +198,7 @@ function expectOrder(haystack: string, needles: readonly string[]) {
 describe("OpexScreen", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    Object.assign(ruleCalls, { durationBadge: 0, omDurationBadge: 0, opexCommands: 0, toOpexRow: 0 });
     resetOpexFoldState();
     loading = false;
     catalogLoading = false;
@@ -263,6 +288,27 @@ describe("OpexScreen", () => {
     fireEvent.click(screen.getByTestId("opex-select-om-1"));
     fireEvent.click(within(card("WTG V150-6.0")).getByTestId("opex-editOpexProjectCost"));
   };
+
+  it("UT-OPEXUI-OPT-001 typing in the panel does not recompute any card (the cards are memoised on stable props)", () => {
+    // Both device cards open, so rows, badges and command gates are all live.
+    render(<Harness><OpexScreen mode="om" /></Harness>);
+    fireEvent.click(screen.getByText("PV Module A"));
+    fireEvent.click(screen.getByTestId("opex-select-om-1"));
+    fireEvent.click(within(card("WTG V150-6.0")).getByTestId("opex-editOpexProjectCost"));
+    const box = within(panel()).getByTestId("txt_OpexCosts_RightPanel_NewEditCost_BodyContent_Description") as HTMLInputElement;
+    const before = { ...ruleCalls };
+    for (const text of ["a", "ab", "abc", "abcd", "abcde"]) fireEvent.change(box, { target: { value: text } });
+    // OLD (measured before the memo): every keystroke re-ran the badge, the gates and `toOpexRow` of every open card.
+    // NEW: nothing a card derives is recomputed, because no prop of any card changed.
+    expect(ruleCalls).toEqual(before);
+    expect(before.toOpexRow).toBeGreaterThan(0); // the cards really were live
+  });
+
+  it("UT-OPEXUI-OPT-002 a folded card computes no command gates and no row models", () => {
+    render(<Harness><OpexScreen mode="om" /></Harness>); // opens the leading card only
+    expect(ruleCalls.opexCommands).toBe(1);
+    expect(ruleCalls.toOpexRow).toBe(2); // the two periods of the WTG card; the PV card is folded
+  });
 
   it("UT-OPEXUI-034 labels the three dropdowns with the canvas AccessibleLabels Year / Month / Month", () => {
     openEditOm1();
@@ -819,6 +865,20 @@ describe("OpexScreen", () => {
   });
 
   /* ── plumbing ───────────────────────────────────────────────────────── */
+
+  it("UT-OPEXUI-070 asks for the OPEX-only book on every visit, and runs the device-type query for O&M only (B2, OPT-04 and OPT-26)", () => {
+    hookArgs.costBook.length = 0;
+    hookArgs.deviceTypes.length = 0;
+    // One mode per screen instance, left to the test cleanup (an unmount here would disturb the next case's focus bookkeeping).
+    render(<Harness><OpexScreen mode="om" /></Harness>);
+    render(<Harness><OpexScreen mode="other" /></Harness>);
+    expect(hookArgs.costBook.every(([category, options]) => category === undefined
+      && JSON.stringify(options) === JSON.stringify({ everyVisit: true, scope: "opex" }))).toBe(true);
+    expect(hookArgs.deviceTypes.some(([, enabled]) => enabled === true)).toBe(true);
+    expect(hookArgs.deviceTypes.some(([, enabled]) => enabled === false)).toBe(true);
+    // O&M is the only mode that enables it.
+    expect(new Set(hookArgs.deviceTypes.map(([, enabled]) => enabled))).toEqual(new Set([true, false]));
+  });
 
   it("UT-OPEXUI-024 renders both modes without a Griffel or hook-order failure", () => {
     const errors: unknown[] = [];

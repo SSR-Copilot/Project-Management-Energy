@@ -15,6 +15,8 @@
  *    here actually validates; `isPercentageCanvasParity` reproduces the original.
  */
 
+import { numberFormat } from "./locale";
+
 export type Lang = string;
 
 /** `Lower(First(Split(Language(),"-")).Value)` */
@@ -126,7 +128,7 @@ export function formatWithSeparators(
   places = 2,
 ): string {
   if (value === null || value === undefined || Number.isNaN(value)) return "";
-  return new Intl.NumberFormat(language, {
+  return numberFormat(language, {
     minimumFractionDigits: places,
     maximumFractionDigits: places,
   }).format(value);
@@ -134,7 +136,7 @@ export function formatWithSeparators(
 
 export function formatInteger(value: number | null | undefined, language: Lang = "en-US"): string {
   if (value === null || value === undefined || Number.isNaN(value)) return "";
-  return new Intl.NumberFormat(language, { maximumFractionDigits: 0 }).format(value);
+  return numberFormat(language, { maximumFractionDigits: 0 }).format(value);
 }
 
 /** `Round(x, places)` — Power Fx rounds half away from zero, unlike JS Math.round. */
@@ -155,6 +157,48 @@ export const roundUp = (x: number, places = 0) => {
   const m = 10 ** places;
   return (x < 0 ? Math.floor(x * m) : Math.ceil(x * m)) / m;
 };
+
+/* Moved here from `features/pm/generators/rulesCore.ts` (OPT-33, B8): five PM screens and Production use them. */
+
+/**
+ * A number's en-US text as the user's language writes it: for a comma-decimal language "." and ","
+ * swap (`1,234.50` becomes `1.234,50`), as the canvas `Text(n, fmt, Language())` renders it. Same rule as
+ * `pfxText` on the Production screen. A function declaration, so it is hoisted for module-level callers.
+ */
+export function forLanguage(en: string, lang: Lang = "en-US"): string {
+  return decimalSeparator(lang) === "." ? en : en.replace(/[.,]/g, (c) => (c === "." ? "," : "."));
+}
+
+/**
+ * Power Fx `Text(value, "<pattern>")` for the custom numeric patterns this screen uses (`#`,
+ * `#0.0#`, `#0.00`, `#.0`, `#0.0`, `0.0#`, `0`, `#,##0.00`, `#,##0.0`, `#,###.00`, `#.0#`), in
+ * en-US notation: `0` is a required digit, `#` an optional one, `,` turns on thousands grouping.
+ * A blank value is `""`, as `Text(Blank(), …)` is. `lang` (default en-US) swaps the separators for a
+ * comma-decimal language (see `forLanguage`).
+ */
+export function textFormat(value: number | null | undefined, pattern: string, lang: Lang = "en-US"): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "";
+  const [intPart = "", fracPart = ""] = pattern.split(".");
+  const minFrac = (fracPart.match(/0/g) ?? []).length;
+  const maxFrac = fracPart.length;
+  const minInt = (intPart.match(/0/g) ?? []).length;
+  const grouped = intPart.includes(",");
+  const negative = value < 0;
+  const rounded = pfxRound(Math.abs(value), maxFrac);
+  const fixed = rounded.toFixed(maxFrac);
+  let [whole = "", frac = ""] = fixed.split(".");
+  while (frac.length > minFrac && frac.endsWith("0")) frac = frac.slice(0, -1);
+  whole = whole.replace(/^0+/, "");
+  while (whole.length < minInt) whole = `0${whole}`;
+  if (grouped) whole = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  const body = frac ? `${whole}.${frac}` : whole;
+  const text = negative && body !== "" && /[1-9]/.test(body) ? `-${body}` : body;
+  return forLanguage(text, lang);
+}
+
+/** `If(Int(x) = x, Text(x, "#"), Text(x, <alt>))` — the card formula every height / power uses. */
+export const textIntOr = (value: number | null | undefined, alt: string, lang: Lang = "en-US"): string =>
+  value === null || value === undefined ? "" : Number.isInteger(value) ? textFormat(value, "#", lang) : textFormat(value, alt, lang);
 
 /** `Coalesce(a, b, ...)` — first value that is neither blank nor error. */
 export function coalesce<T>(...vals: (T | null | undefined)[]): T | undefined {

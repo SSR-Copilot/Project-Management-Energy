@@ -19,7 +19,6 @@ import { Vsb_bopprojectscontractsesService } from "@/generated/services/Vsb_bopp
 import { Vsb_bopcontractspaymenttargetsesService } from "@/generated/services/Vsb_bopcontractspaymenttargetsesService";
 import { Vsb_bopcontractsdevcocostsesService } from "@/generated/services/Vsb_bopcontractsdevcocostsesService";
 import { Vsb_bopcontractsstandardassumptionsesService } from "@/generated/services/Vsb_bopcontractsstandardassumptionsesService";
-import { Vsb_capexaccountlistsService } from "@/generated/services/Vsb_capexaccountlistsService";
 import { Vsb_capexprojectcontractsService } from "@/generated/services/Vsb_capexprojectcontractsService";
 import { Vsb_capexcostsService } from "@/generated/services/Vsb_capexcostsService";
 import type { Vsb_bopprojectscontractses } from "@/generated/models/Vsb_bopprojectscontractsesModel";
@@ -32,6 +31,7 @@ import { DataError, unwrap } from "@/platform/errors";
 import { logAction, loggedCall } from "@/platform/requestLog";
 import { trace } from "@/platform/telemetry";
 import { deleteRecord, fetchAll, updateRecordIfExists } from "./client";
+import { loadCapexChartRows } from "./capexChart";
 import { DELETE_CONCURRENCY, WRITE_CONCURRENCY, mapLimit } from "./concurrency";
 import { ACTIVE, and, chunk, dateOnly, eq, lookupEq, lookupIn, numberOf } from "./odata";
 import {
@@ -246,8 +246,15 @@ export async function listDevCoLinks(
  * `vsb_cost` is the decimal amount; a row with no cost is left as `undefined` rather than 0 so
  * `sum()` skips it, matching the canvas's `Blank()` handling.
  */
-export async function listCapexCostRows(projectId: string): Promise<CapexCostRow[]> {
-  const contracts = await listDevCoCapexContracts(projectId);
+export async function listCapexCostRows(
+  projectId: string,
+  /**
+   * B2 (S1-07): the project's DevCo CAPEX contracts, when the caller already has them (or their read in flight): the Contracts
+   * screen reads them under their own query key at the same moment, and this function read them a second time. Omitted, it reads them.
+   */
+  devCoContracts?: readonly CapexProjectContract[] | Promise<readonly CapexProjectContract[]>,
+): Promise<CapexCostRow[]> {
+  const contracts = devCoContracts ? await devCoContracts : await listDevCoCapexContracts(projectId);
   const contractIds = contracts.map((c) => c.id);
   if (contractIds.length === 0) return [];
 
@@ -259,6 +266,9 @@ export async function listCapexCostRows(projectId: string): Promise<CapexCostRow
         {
           select: ["vsb_capexcostid", "_vsb_contract_value", "vsb_year", "vsb_month", "vsb_cost"],
           filter: and(lookupIn("vsb_contract", ids), ACTIVE),
+          // B2 (OPT-08a): five narrow columns at the platform's page ceiling: one request per chunk instead of one per
+          // 500 rows. Same rows, same order; only the number of round trips changes (as `loadContractCostSums`).
+          maxPageSize: 5000,
         },
       ),
     ),
@@ -279,19 +289,9 @@ export async function listCapexCostRows(projectId: string): Promise<CapexCostRow
  * `statecode eq 0`, so an inactive account is hidden from the DevCo picker. Not changed here.
  */
 export async function listCapexAccounts(): Promise<AccountRow[]> {
-  const rows = await fetchAll(
-    "list CAPEX accounts",
-    (o) => Vsb_capexaccountlistsService.getAll(o),
-    {
-      select: [
-        "vsb_capexaccountlistid", "vsb_number", "vsb_name", "vsb_order",
-        "_vsb_parentaccount_value", "vsb_accountcategory",
-      ],
-      filter: ACTIVE,
-      orderBy: ["vsb_number asc"],
-    },
-  );
-  return rows.map(toAccountRow);
+  // B2 (OPT-07c): the one shared chart read (`./capexChart`: the same select, ACTIVE filter and `vsb_number asc` order), shared
+  // with the cost book, the tab strip, the Summary totals and Add Cost from Table, and dropped after any admin account write.
+  return (await loadCapexChartRows()).map(toAccountRow);
 }
 
 /**

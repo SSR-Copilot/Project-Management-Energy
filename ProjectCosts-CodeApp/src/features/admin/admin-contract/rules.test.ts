@@ -528,3 +528,41 @@ describe("Gap closure", () => {
     expect(limitFlags(rows).developmentFull).toBe(true);
   });
 });
+
+describe("OPT-27(c) canSave / validateForm accept the values the caller already computed", () => {
+  const tree = buildAccountTree(fixtureAccounts);
+  const visibleIds = [...tree.leaves.keys()];
+
+  it("UT-ADCONTR-OPT-002 passing dirty and selectionCount gives exactly the answers of the old calls, over a matrix of forms", () => {
+    const initial = validForm({ selectedAccountIds: [visibleIds[0]!] });
+    const variants: ContractForm[] = [
+      initial,
+      { ...initial, description: "Changed" },
+      { ...initial, selectedAccountIds: [] },
+      { ...initial, selectedAccountIds: ["hidden-id"] },
+      { ...initial, selectedAccountIds: [visibleIds[0]!, "hidden-id"], monthText: "" },
+      { ...initial, margin: true, marginType: null },
+    ];
+    for (const form of variants) {
+      for (const visible of [undefined, tree.leaves]) {
+        const count = visibleSelectionCount(form.selectedAccountIds, visible);
+        expect(validateForm(form, EN, undefined, visible, count)).toEqual(validateForm(form, EN, undefined, visible));
+        const errors = validateForm(form, EN, undefined, visible);
+        for (const linksAvailable of [true, false]) {
+          for (const forceDirty of [false, true]) {
+            const base = { form, initial, errors, linksAvailable, forceDirty, visible };
+            expect(canSave({ ...base, dirty: isDirty(form, initial), selectionCount: count })).toBe(canSave(base));
+          }
+        }
+      }
+    }
+  });
+
+  it("UT-ADCONTR-OPT-003 a caller-supplied dirty flag is used as given (the screen computes it once)", () => {
+    const initial = validForm();
+    const args = { form: initial, initial, errors: {}, linksAvailable: true };
+    expect(canSave(args)).toBe(false);
+    expect(canSave({ ...args, dirty: true })).toBe(true);
+    expect(canSave({ ...args, dirty: false, forceDirty: false })).toBe(false);
+  });
+});

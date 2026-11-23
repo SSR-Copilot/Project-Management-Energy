@@ -16,6 +16,11 @@
  * past-cost guard on contract deletion.
  */
 
+import { collator } from "@/domain/locale";
+
+/** OPT-29 (B8): `localeCompare(b, "en", { sensitivity: "base" })`, pooled once (UT-COLLATOR-OPT-001). */
+const BASE_EN_COLLATOR = collator("en", { sensitivity: "base" });
+
 /** Verified live option-set values (`.power/schemas/dataverse/capexprojectcontracts...`). */
 export const CHOICE = {
   costPaidType: { devCo: 952850001, spv: 952850002 },
@@ -376,7 +381,7 @@ export function buildInitialSheet(args: {
      */
     const subContracts = (contractsBySub.get(sub.id) ?? [])
       .filter((c) => (costsByContract.get(c.id)?.length ?? 0) > 0)
-      .sort((a, b) => a.name.localeCompare(b.name, "en", { sensitivity: "base" }));
+      .sort((a, b) => BASE_EN_COLLATOR.compare(a.name, b.name));
 
     if (subContracts.length === 0) {
       rows.push({

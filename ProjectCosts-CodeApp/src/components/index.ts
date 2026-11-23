@@ -84,4 +84,5 @@ export type { ScopeHeaderBandProps } from "./ScopeHeaderBand";
 export { useQueryHealth } from "./useQueryHealth";
 export type { QueryHealth, QueryHealthOptions } from "./useQueryHealth";
 export { useBeforeUnload } from "./discardGuard";
+export { useStableCallback } from "./useStableCallback";
 export type { CloseReason, DiscardText } from "./discardText";

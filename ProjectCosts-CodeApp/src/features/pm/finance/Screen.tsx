@@ -46,6 +46,8 @@ import {
   ExpandChevron,
 } from "@/components";
 import { DATE_PICKER_FORMAT, dateFromIso, type CanvasDateFormat } from "@/domain/canvasDate";
+import { localDayOf } from "@/domain/dates";
+import { rowStr as str } from "@/data/rowValues";
 import { useSession } from "@/app/SessionContext";
 import { CHOICE_FINANCE } from "@/data/dataverseNames";
 import { media, palette, space } from "@/theme/tokens";
@@ -453,13 +455,8 @@ const FINANCE_PANEL = "pm-canvas-panel finance-canvas-panel";
 /* ═══════════════════════════════════════════════════════════════ value reads ══ */
 
 const num = (v: unknown): number | null => (typeof v === "number" ? v : null);
-const str = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
 /** A Date Only string from the row as a LOCAL day (rule 18). */
-const day = (v: unknown): Date | null => {
-  if (typeof v !== "string" || v.length < 10) return null;
-  const [y, m, d] = v.slice(0, 10).split("-").map(Number);
-  return y && m && d ? new Date(y, m - 1, d) : null;
-};
+const day = localDayOf; // OPT-31 (B8): the one definition is `domain/dates.localDayOf` (UT-DATES-OPT-004)
 const label = (map: Readonly<Record<number, string>>, v: number | null): string =>
   v === null ? "" : map[v] ?? "";
 const options = (map: Readonly<Record<number, string>>): { value: number; name: string }[] =>

@@ -62,11 +62,47 @@ describe("D123 — OPEX reads on every visit", () => {
     await waitFor(() => expect(repo.listOpexDeviceTypes).toHaveBeenCalledTimes(2));
   });
 
-  it("UT-OPEXLOAD-004 Add Standard Contract also refreshes the device cards (`Refresh(DeviceTypesInProjects)`)", async () => {
+  it("UT-OPEXLOAD-004 an O&M Add Standard Contract also refreshes the device cards (`Refresh(DeviceTypesInProjects)`)", async () => {
     const client = newClient();
     const invalidate = vi.spyOn(client, "invalidateQueries");
     const { result } = renderHook(() => useAddStandardContract(), { wrapper: wrapperFor(client) });
-    await act(async () => { await result.current.mutateAsync({} as never); });
+    await act(async () => { await result.current.mutateAsync({ mode: "om" } as never); });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["opex-device-types", "p-1"] });
+  });
+
+  it("UT-OPEXLOAD-005 an Other OPEX or Land Lease import leaves the device cards alone (B2, OPT-26: only O&M reads them)", async () => {
+    for (const mode of ["other", "land"]) {
+      const client = newClient();
+      const invalidate = vi.spyOn(client, "invalidateQueries");
+      const { result } = renderHook(() => useAddStandardContract(), { wrapper: wrapperFor(client) });
+      await act(async () => { await result.current.mutateAsync({ mode } as never); });
+      expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ["opex-device-types", "p-1"] });
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ["cost-book", "p-1", "none"] });
+    }
+  });
+
+  it("UT-OPEXLOAD-006 the device-type query does not run when disabled (Other OPEX) and runs when enabled (O&M)", async () => {
+    const client = newClient();
+    const off = renderHook(() => useOpexDeviceTypes("p-1", false), { wrapper: wrapperFor(client) });
+    await act(async () => { await Promise.resolve(); });
+    expect(repo.listOpexDeviceTypes).not.toHaveBeenCalled();
+    expect(off.result.current.isLoading).toBe(false);
+    renderHook(() => useOpexDeviceTypes("p-1", true), { wrapper: wrapperFor(client) });
+    await waitFor(() => expect(repo.listOpexDeviceTypes).toHaveBeenCalledTimes(1));
+  });
+
+  it("UT-OPEXLOAD-007 the OPEX book has its own key under the \"none\" prefix and asks the repository for the OPEX scope", async () => {
+    const client = newClient();
+    const { result } = renderHook(() => useCostBook(undefined, { everyVisit: true, scope: "opex" }), { wrapper: wrapperFor(client) });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(repo.getCostBook).toHaveBeenCalledWith("p-1", undefined, expect.objectContaining({ scope: "opex" }));
+    expect(client.getQueryCache().find({ queryKey: ["cost-book", "p-1", "none", "opex"] })).toBeDefined();
+    // Every existing `["cost-book", project, "none"]` invalidation still reaches it, by prefix.
+    expect(client.getQueryCache().findAll({ queryKey: ["cost-book", "p-1", "none"] })).toHaveLength(1);
+    // Without a scope the key and the call are the full book's, as before.
+    const full = renderHook(() => useCostBook(undefined), { wrapper: wrapperFor(client) });
+    await waitFor(() => expect(full.result.current.data).toBeDefined());
+    expect(client.getQueryCache().find({ queryKey: ["cost-book", "p-1", "none"], exact: true })).toBeDefined();
+    expect(repo.getCostBook).toHaveBeenLastCalledWith("p-1", undefined, expect.not.objectContaining({ scope: expect.anything() }));
   });
 });

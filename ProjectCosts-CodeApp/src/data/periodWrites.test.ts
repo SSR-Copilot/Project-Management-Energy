@@ -125,16 +125,15 @@ vi.mock("@/generated/services/Vsb_countryinflationprofilesService", () => ({
 }));
 
 const {
-  addStandardContract, deletePeriod, nextLandLeaseSlot, opexStandardName, savePeriod,
+  addStandardContract, deletePeriod, opexStandardName, savePeriod,
 } = await import("./periodWrites");
 const { standardCostName } = await import("@/features/cost/periods/opexRules");
-const { mapOpexRow, mapLandLeasePeriodRow } = await import("./costBook");
-const { loadLeaseBook } = await import("./landLease");
+const { mapOpexRow } = await import("./costBook");
+const { invalidateCurrencies } = await import("./currencies");
 
 /* ══════════════════════════════════════════════════════════════ fixtures ══ */
 
 const QUELLENDORF = "ac3168e6-2b7c-ef11-ac20-6045bda08851";
-const PROJECT_NEW_DATA = "910d8ed0-282a-ef11-840a-6045bd9e5ce7";
 const GERMANY = "1cf4a2b6-d2d0-ee11-9079-000d3ab6fed7";
 const BUSINESS_UNIT = "7f4aade5-2b7c-ef11-ac20-000d3a466ab7";
 const EURO = "b8b1e37d-1f57-ea11-a811-000d3a4a9d2f";
@@ -147,10 +146,6 @@ const OTHER_SUBACCOUNT = "a24d0c2b-ed2a-ee52-ac21-b4b2eb73e752";
 const GENERATOR_TYPE = "367d82b9-0643-e55f-b768-0436342290ba";
 const DEVICE_WTG_1630 = "1b1cb4ed-0b64-effb-b30b-6212d05ad0ff";
 
-/** Two of the twelve `Locations` headers on Project New Data. */
-const LOCATIONS = "cfc603b0-d2d0-ee11-9079-000d3abd8704";
-const HDR_COST101 = "6f189e32-3c0a-f011-bae2-6045bd882926";
-
 const CTX = {
   projectId: QUELLENDORF,
   owningBusinessUnitId: BUSINESS_UNIT,
@@ -160,7 +155,8 @@ const CTX = {
 /** The reference tables `resolveOpexGroupTarget` walks, as VSBCloud_Dev has them. */
 function opexReferenceRows() {
   return {
-    "list transaction currencies": [{ transactioncurrencyid: EURO, currencyname: "Euro" }],
+    // OPT-11 (B3): the save-time currency lookup now reads the shared currency table (ACTIVE view), under the shared read's label.
+    "list transaction currencies (Cost reads)": [{ transactioncurrencyid: EURO, currencyname: "Euro" }],
     "list OPEX accounts": [
       { vsb_opexaccountid: OM_ACCOUNT, vsb_name: "Operation & Maintenance", vsb_order: 1 },
       { vsb_opexaccountid: OTHER_ACCOUNT, vsb_name: "Other OPEX Costs", vsb_order: 2 },
@@ -209,23 +205,12 @@ const OM_PERIOD: CostPeriod = {
   isStartDateStandard: false,
 };
 
-const LAND_PERIOD: CostPeriod = {
-  ...OM_PERIOD,
-  mode: "land",
-  group: "Locations",
-  description: "Cost 101",
-  contractName: "Cost 101",
-  threshold: false,
-  align: false,
-  external: false,
-  secured: true,
-  allWtgAllocated: false,
-};
-
 const created = (table: string) => writes.find((w) => w.op === "create" && w.table === table);
 const fieldsOf = (w: Write | undefined) => (w?.fields ?? {}) as Record<string, unknown>;
 
 beforeEach(() => {
+  // B2 (OPT-07b/c): the currency table and the chart are read through short-lived shared reads; each case starts with them empty.
+  invalidateCurrencies();
   rowsByLabel = {};
   queriedBy = {};
   writes = [];
@@ -595,200 +580,21 @@ describe("deleteOpexPeriod", () => {
 
 /* ══════════════════════════════════════════════════════════════ Land Lease ══ */
 
-/** The reference rows a Land Lease save walks. */
-function landReferenceRows(header?: Record<string, unknown>) {
-  return {
-    "list transaction currencies": [{ transactioncurrencyid: EURO, currencyname: "Euro" }],
-    "list Land Lease subaccounts for a period save": [
-      { vsb_landleasesubaccountid: LOCATIONS, vsb_name: "Locations" },
-    ],
-    "read a Land Lease header": header ? [header] : [],
-    "list Land Lease period slots": [],
-  } as Record<string, unknown[]>;
-}
-
-describe("saveLandLeasePeriod", () => {
-  const LAND_CTX = { ...CTX, projectId: PROJECT_NEW_DATA, projectName: "Project New Data" };
-
-  it("UT-PWRITE-009 creates a CONTRACT plus its first period when there is no contractId", async () => {
-    /*
-     * "Add Contract Type" is not a new sub-account — `vsb_landleasesubaccounts` is nine rows of
-     * shared reference data. The canvas command (`LandLeaseCostScreenCode.txt:388`) only opens
-     * the panel; the SAVE creates a `vsb_landleaseprojectcosts` header
-     * (`If(IsBlank(locSelectedLandLeaseCost), Defaults(…), …)`, `:5895`).
-     */
-    rowsByLabel = landReferenceRows();
-    NEW_ID.llcost = [HDR_COST101];
-    NEW_ID.llperiod = ["c41e4d8f-1f57-ea11-a811-000d3a4a9d2f"];
-
-    const saved = await savePeriod(LAND_CTX, LAND_PERIOD, true);
-
-    const header = fieldsOf(created("llcost"));
-    expect(header.vsb_name).toBe("Project New Data-Locations-Cost 101");
-    expect(header["vsb_Project@odata.bind"]).toBe(`/vsb_projects(${PROJECT_NEW_DATA})`);
-    expect(header["vsb_Subaccount@odata.bind"]).toBe(`/vsb_landleasesubaccounts(${LOCATIONS})`);
-    expect(header["owningbusinessunit@odata.bind"]).toBe(`/businessunits(${BUSINESS_UNIT})`);
-    // `vsb_secured` is a REQUIRED picklist; Yes 952850000 / No 952850001, measured 16 Sep.
-    expect(header.vsb_secured).toBe(952850000);
-
-    const period = fieldsOf(created("llperiod"));
-    // The period's `vsb_name` IS the Description column the table shows (`:1642`).
-    expect(period.vsb_name).toBe("Cost 101");
-    expect(period.vsb_period).toBe(952850000);
-    expect(period["vsb_ProjectCost@odata.bind"]).toBe(`/vsb_landleaseprojectcosts(${HDR_COST101})`);
-    expect(period["owningbusinessunit@odata.bind"]).toBe(`/businessunits(${BUSINESS_UNIT})`);
-    // The header must exist before the period that points at it — there is no `$batch`.
-    expect(writes.findIndex((w) => w.table === "llcost"))
-      .toBeLessThan(writes.findIndex((w) => w.table === "llperiod"));
-
-    expect(saved.contractId).toBe(HDR_COST101);
-    expect(saved.periodIndex).toBe(1);
-  });
-
-  it("UT-PWRITE-010 leaves the contract ALONE when a later period is added", async () => {
-    // `IsBlank(locSelectedLandLeaseCost) || locSelectedLandLeasePeriod.Period = 'Period 1'` —
-    // on Add Period the canvas' selected period is Blank, so neither test passes and the header
-    // is untouched. Patching it here let an "add period 3" rewrite the contract's currency.
-    rowsByLabel = landReferenceRows({
-      vsb_landleaseprojectcostid: HDR_COST101,
-      vsb_allwtgallocated: true,
-      vsb_secured: 952850000,
-      vsb_duedateonetimepayment: "2027-06-01",
-      vsb_amountonetimepayment: 10_000,
-    });
-    rowsByLabel["list Land Lease period slots"] = [
-      { vsb_landleaseperiodid: "p1", vsb_period: 952850000 },
-    ];
-    NEW_ID.llperiod = ["d41e4d8f-1f57-ea11-a811-000d3a4a9d2f"];
-
-    const saved = await savePeriod(
-      LAND_CTX,
-      { ...LAND_PERIOD, description: "Cost 101 - 2", contractId: HDR_COST101, currency: "" },
-      true,
-    );
-
-    expect(writes.filter((w) => w.table === "llcost")).toEqual([]);
-    expect(fieldsOf(created("llperiod")).vsb_period).toBe(952850001);
-    expect(saved.periodIndex).toBe(2);
-    // The header's flags come back on the saved period so the grid's Allocation/OTP/Secured
-    // cells are right without a refetch.
-    expect(saved.allWtgAllocated).toBe(true);
-    expect(saved.hasOneTimePayment).toBe(true);
-    expect(saved.secured).toBe(true);
-  });
-
-  it("UT-PWRITE-011 lets Period 1 own the contract's shared fields, and only Period 1", async () => {
-    const header = {
-      vsb_landleaseprojectcostid: HDR_COST101, vsb_secured: 952850001,
-      vsb_allwtgallocated: false,
-    };
-
-    rowsByLabel = landReferenceRows(header);
-    await savePeriod(
-      LAND_CTX,
-      {
-        ...LAND_PERIOD, id: "p1", contractId: HDR_COST101, periodIndex: 1, currency: "Euro",
-        // Renamed in the panel. The canvas writes the one Description box into BOTH the
-        // contract's `Description` and the period's `Name` (`:5895`), so renaming Period 1
-        // renames the contract — reading `contractName` back instead would make it a no-op.
-        description: "Cost 101 renamed", contractName: "Cost 101",
-      },
-      false,
-    );
-    const patched = fieldsOf(writes.find((w) => w.op === "update" && w.table === "llcost"));
-    expect(patched.vsb_description).toBe("Cost 101 renamed");
-    expect(patched.vsb_name).toBe("Project New Data-Locations-Cost 101 renamed");
-    expect(patched["vsb_Currency@odata.bind"]).toBe(`/transactioncurrencies(${EURO})`);
-    expect(fieldsOf(writes.find((w) => w.op === "update" && w.table === "llperiod")).vsb_name)
-      .toBe("Cost 101 renamed");
-
-    writes = [];
-    rowsByLabel = landReferenceRows(header);
-    await savePeriod(
-      LAND_CTX,
-      { ...LAND_PERIOD, id: "p3", contractId: HDR_COST101, periodIndex: 3, currency: "Euro" },
-      false,
-    );
-    expect(writes.filter((w) => w.table === "llcost")).toEqual([]);
-    expect(writes.filter((w) => w.table === "llperiod").map((w) => w.op)).toEqual(["update"]);
-  });
-
-  it("UT-PWRITE-012 does not rewrite vsb_period on an edit", async () => {
-    // `Period: If(locRightPanelState = "New", Switch(…), locSelectedLandLeasePeriod.Period)` —
-    // an edit keeps the slot it already has, so a re-save cannot shuffle the chain.
-    rowsByLabel = landReferenceRows({
-      vsb_landleaseprojectcostid: HDR_COST101, vsb_secured: 952850001,
-    });
-    await savePeriod(
-      LAND_CTX,
-      { ...LAND_PERIOD, id: "p2", contractId: HDR_COST101, periodIndex: 2 },
-      false,
-    );
-    const update = writes.find((w) => w.op === "update" && w.table === "llperiod");
-    expect(update?.fields).not.toHaveProperty("vsb_period");
-  });
-});
-
-describe("nextLandLeaseSlot", () => {
-  it("UT-PWRITE-013 takes the predecessor's slot + 1, fills a gap, and stops at nine", () => {
-    /*
-     * `Switch(locParentLandLeasePeriod.Period, Period1, Period2, … Period8, Period9)`. The canvas
-     * never collides because Add Period is only enabled on the LAST period (`:260-286`). This
-     * additionally FILLS a gap left by a delete, which the canvas would not: handing out a
-     * duplicate `vsb_period` makes two periods sort identically and the chain unreadable.
-     */
-    expect(nextLandLeaseSlot([], undefined)).toBe(1);
-    expect(nextLandLeaseSlot([1], 2)).toBe(2);
-    expect(nextLandLeaseSlot([1, 2, 3])).toBe(4);
-    // 2 was deleted; the next period reuses it rather than becoming a fourth slot-4.
-    expect(nextLandLeaseSlot([1, 3])).toBe(2);
-    // A preferred slot that is already taken is ignored, not written over.
-    expect(nextLandLeaseSlot([1, 2], 2)).toBe(3);
-    expect(() => nextLandLeaseSlot([1, 2, 3, 4, 5, 6, 7, 8, 9]))
-      .toThrow(/maximum of 9 periods/);
-  });
-});
-
-describe("deleteLandLeasePeriod", () => {
-  it("UT-PWRITE-014 deletes the whole contract from Period 1 — allocations, periods, header", async () => {
-    /*
-     * `:360-384` routes Delete on the slot, and Period 1 opens "Delete Land Lease?", whose
-     * `OnConfirm` (`:6076-6087`) removes `Land Lease Allocation WTGS`, then `Land Lease Periods`,
-     * then the `Land Lease Project Costs` row. The ALLOCATIONS go first: `ProjectDocs/app-docs/01-BUGS-FOUND.md`
-     * S-5 records them as the table that gets missed, and a stranded allocation points at a
-     * header that no longer exists.
-     */
-    rowsByLabel = {
-      "list Land Lease WTG allocations to delete": [
-        { vsb_landleaseallocationwtgid: "alloc-1" },
-        { vsb_landleaseallocationwtgid: "alloc-2" },
-      ],
-      "list Land Lease periods to delete": [
-        { vsb_landleaseperiodid: "p1" }, { vsb_landleaseperiodid: "p2" },
-      ],
-    };
-
-    await deletePeriod({ ...LAND_PERIOD, id: "p1", contractId: HDR_COST101, periodIndex: 1 });
-
-    expect(writes.map((w) => `${w.table}:${w.id}`)).toEqual([
-      "llalloc:alloc-1", "llalloc:alloc-2", "llperiod:p1", "llperiod:p2", `llcost:${HDR_COST101}`,
-    ]);
-  });
-
-  it("UT-PWRITE-015 deletes a later period alone and leaves the contract standing", async () => {
-    await deletePeriod({ ...LAND_PERIOD, id: "p2", contractId: HDR_COST101, periodIndex: 2 });
-    expect(writes).toEqual([{ op: "delete", table: "llperiod", id: "p2" }]);
-  });
-
-  it("UT-PWRITE-032 a delete Dataverse refuses rejects instead of resolving as done (CA-27, rule 14)", async () => {
-    refusedDeletes = new Set(["p2"]);
-    try {
-      await expect(deletePeriod({ ...LAND_PERIOD, id: "p2", contractId: HDR_COST101, periodIndex: 2 }))
-        .rejects.toThrow(/delete Land Lease period failed/);
-      expect(writes).toEqual([]);
-    } finally {
-      refusedDeletes = new Set();
-    }
+/*
+ * OPT-34 (B3): the slot-based Land Lease branch of this module (saveLandLeasePeriod, deleteLandLeasePeriod, addLandLeaseStandardContract and
+ * their helpers) had no caller outside these tests: the Land Lease screen writes through `applyLeaseWrites` (`data/landLease.test.ts`,
+ * `landLease.writes.test.ts`, `landLeaseRules.test.ts`) and, since B2, the OPEX book holds no Land Lease period. It was removed together
+ * with the tests that pinned only it (UT-PWRITE-009 to 015, 019, 021, 026 to 029, 032). What stays is the refusal below.
+ */
+describe("a Land Lease period is not written through the OPEX period writes", () => {
+  it("UT-PWRITE-050 savePeriod, deletePeriod and addStandardContract refuse mode \"land\" and send nothing (OPT-34)", async () => {
+    const land = { ...OM_PERIOD, mode: "land" as const, group: "Locations" };
+    await expect(savePeriod(CTX, land, true)).rejects.toThrow(/applyLeaseWrites/);
+    await expect(savePeriod(CTX, land, false)).rejects.toThrow(/applyLeaseWrites/);
+    await expect(deletePeriod(land)).rejects.toThrow(/applyLeaseWrites/);
+    await expect(addStandardContract(CTX, { mode: "land", group: "Locations", codDate: "2027-03-24" })).rejects.toThrow(/applyLeaseWrites/);
+    expect(writes).toEqual([]);
+    expect(queriedBy).toEqual({});
   });
 });
 
@@ -951,42 +757,6 @@ describe("addStandardContract", () => {
     expect(seeded[1]?.startDate).toBe("2032-03-24");
   });
 
-  it("UT-PWRITE-019 seeds a Land Lease contract as one header plus Period1..N", async () => {
-    // `LandLeaseCostScreenCode.txt:388` — one `Land Lease Project Costs` row carrying the
-    // Secured / Allocation / one-time-payment values, then one `Land Lease Periods` row per
-    // assumption, slotted in `Period` order.
-    rowsByLabel = {
-      ...landReferenceRows(),
-      "check for an existing Land Lease standard contract": [],
-      "list OPEX / Land Lease standard assumptions": [
-        assumption(1, { vsb_secured: true, vsb_allwtgallocated: true,
-          vsb_amountonetimepayment: 10_000, vsb_duedateonetimepayment: "06/2027" }),
-        assumption(2),
-      ],
-    };
-    NEW_ID.llcost = [HDR_COST101];
-    NEW_ID.llperiod = [
-      "c41e4d8f-1f57-ea11-a811-000d3a4a9d2f", "d41e4d8f-1f57-ea11-a811-000d3a4a9d2f",
-    ];
-
-    const seeded = await addStandardContract(
-      { ...CTX, projectId: PROJECT_NEW_DATA, projectName: "Project New Data" },
-      { ...ARGS, mode: "land", group: "Locations" },
-    );
-
-    const header = fieldsOf(created("llcost"));
-    expect(header.vsb_isstandardcontract).toBe(true);
-    expect(header.vsb_secured).toBe(952850000);
-    expect(header.vsb_allwtgallocated).toBe(true);
-    expect(header.vsb_amountonetimepayment).toBe(10_000);
-
-    const periods = writes.filter((w) => w.op === "create" && w.table === "llperiod");
-    expect(periods.map((w) => fieldsOf(w).vsb_period)).toEqual([952850000, 952850001]);
-    expect(seeded.map((p) => p.startDate)).toEqual(["2027-03-24", "2032-03-24"]);
-    expect(seeded.every((p) => p.contractId === HDR_COST101)).toBe(true);
-    // Every seeded period reports the header's flags, so the grid is right before any refetch.
-    expect(seeded.every((p) => p.secured === true && p.hasOneTimePayment === true)).toBe(true);
-  });
 });
 
 /* ═══════════════════════════════════════════════════════════ round trips ══ */
@@ -1106,230 +876,6 @@ describe("period round trip", () => {
     expect(reloadedOff.threshold).toBe(false);
     expect(reloadedOff.thresholdType).toBeUndefined();
     expect(reloadedOff.thresholdIndividual).toBeNull();
-  });
-
-  /**
-   * Drives a Land Lease save's OWN payloads back through the REAL loader.
-   *
-   * `loadLeaseBook` (`./landLease.ts`) is the app's only Land Lease reader and
-   * `mapLandLeasePeriodRow` is its projection into the shared book, so feeding the created rows
-   * back under that reader's query labels exercises both halves rather than hand-mapping the
-   * payload — which is how the two halves drifted apart twice before.
-   */
-  async function reloadLandLease(args: {
-    periodId: string;
-    allocations?: Record<string, unknown>[];
-  }) {
-    const headerFields = fieldsOf(created("llcost"));
-    const periodFields = fieldsOf(created("llperiod"));
-    rowsByLabel = {
-      "list Land Lease subaccounts": [
-        { vsb_landleasesubaccountid: LOCATIONS, vsb_name: "Locations", vsb_order: 1 },
-      ],
-      "list Land Lease project costs": [
-        { ...headerFields, vsb_landleaseprojectcostid: HDR_COST101,
-          _vsb_subaccount_value: LOCATIONS, _vsb_currency_value: EURO },
-      ],
-      "list Land Lease periods": [
-        { ...periodFields, vsb_landleaseperiodid: args.periodId,
-          _vsb_projectcost_value: HDR_COST101 },
-      ],
-      "list Land Lease WTG allocations": args.allocations ?? [],
-      "list transaction currencies for Land Lease": [
-        { transactioncurrencyid: EURO, currencyname: "Euro", isocurrencycode: "EUR" },
-      ],
-    };
-    const book = await loadLeaseBook(PROJECT_NEW_DATA);
-    const period = book.periods[0];
-    const header = book.costs[0];
-    const allocated = book.allocations
-      .filter((a) => a.projectCostId === HDR_COST101)
-      .map((a) => a.generatorInProjectId as string)
-      .sort();
-    return mapLandLeasePeriodRow(
-      period as never, header as never, "Locations", header?.currencyName ?? "", allocated,
-    );
-  }
-
-  it("UT-PWRITE-021 a Land Lease period survives save and reload unchanged", async () => {
-    rowsByLabel = landReferenceRows();
-    NEW_ID.llcost = [HDR_COST101];
-    const PERIOD_ID = "c41e4d8f-1f57-ea11-a811-000d3a4a9d2f";
-    NEW_ID.llperiod = [PERIOD_ID];
-
-    await savePeriod(
-      { ...CTX, projectId: PROJECT_NEW_DATA, projectName: "Project New Data" },
-      { ...LAND_PERIOD, description: "Cost 101", contractName: "Cost 101" },
-      true,
-    );
-
-    const reloaded = await reloadLandLease({ periodId: PERIOD_ID });
-
-    expect(reloaded).toMatchObject({
-      // The DESCRIPTION column is the period's `vsb_name` …
-      description: "Cost 101",
-      // … and the contract name is the header's `vsb_description`.
-      contractName: "Cost 101",
-      contractId: HDR_COST101,
-      periodIndex: 1,
-      group: "Locations",
-      currency: "Euro",
-      years: 5, months: 0,
-      fixed: 12_000, perMwh: 4.1, perWtg: 67_500,
-      aggregation: "SUM", frequency: 1,
-      inflation: true, countryInflation: false, inflationPercent: 2, inflationYear: 2024,
-      secured: true,
-      // Land Lease has no threshold/align/external columns, so they read back false whatever
-      // the panel was showing.
-      threshold: false, align: false, external: false,
-    });
-  });
-
-  it("UT-PWRITE-026 a Land Owner and the three one-time payments survive the round trip", async () => {
-    /*
-     * The seven header columns the loader never selected and the writer never wrote, which made
-     * the panel's whole One-Time Payment section cosmetic. Measured on VSBCloud_Dev, 16 Sep:
-     * 12 of 416 headers carry a Land Owner, 27 a first amount, 2 a second, 2 a third and 29 a
-     * first due date — and the due dates are FREE TEXT in `MM/YYYY`, not dates.
-     */
-    rowsByLabel = landReferenceRows();
-    NEW_ID.llcost = [HDR_COST101];
-    const PERIOD_ID = "c41e4d8f-1f57-ea11-a811-000d3a4a9d2f";
-    NEW_ID.llperiod = [PERIOD_ID];
-
-    await savePeriod(
-      { ...CTX, projectId: PROJECT_NEW_DATA, projectName: "Project New Data" },
-      {
-        ...LAND_PERIOD,
-        landOwner: "Schmidt",
-        amountOneTimePayment: 10_000,
-        amountOneTimePayment2: 2_500,
-        amountOneTimePayment3: null,
-        dueDateOneTimePayment: "06/2027",
-        dueDateOneTimePayment2: "06/2028",
-        dueDateOneTimePayment3: null,
-      },
-      true,
-    );
-
-    const header = fieldsOf(created("llcost"));
-    expect(header.vsb_landowner).toBe("Schmidt");
-    expect(header.vsb_amountonetimepayment).toBe(10_000);
-    expect(header.vsb_duedateonetimepayment).toBe("06/2027");
-    // A blank payment is written as an explicit null, so switching one off clears the column
-    // rather than leaving the previous value behind.
-    expect(header.vsb_amountonetimepayment3).toBeNull();
-    expect(header.vsb_duedateonetimepayment3).toBeNull();
-
-    const reloaded = await reloadLandLease({ periodId: PERIOD_ID });
-    expect(reloaded).toMatchObject({
-      landOwner: "Schmidt",
-      amountOneTimePayment: 10_000,
-      amountOneTimePayment2: 2_500,
-      amountOneTimePayment3: null,
-      dueDateOneTimePayment: "06/2027",
-      dueDateOneTimePayment2: "06/2028",
-      dueDateOneTimePayment3: null,
-      // `LandLeaseCostScreenCode.txt:1010` — the OTP cell tests only the FIRST pair.
-      hasOneTimePayment: true,
-    });
-  });
-
-  it("UT-PWRITE-027 a blank Land Lease rate stays blank through the round trip", async () => {
-    // `landLeaseRules.formatGrouped` prints a stored `0` and BLANKS a null, and
-    // `firstPeriodHasRate` gates `Add Period` on "any rate non-blank" — so a `?? 0` anywhere on
-    // this path printed `0` in five columns the canvas leaves empty and pinned that gate open.
-    rowsByLabel = landReferenceRows();
-    NEW_ID.llcost = [HDR_COST101];
-    const PERIOD_ID = "c41e4d8f-1f57-ea11-a811-000d3a4a9d2f";
-    NEW_ID.llperiod = [PERIOD_ID];
-
-    await savePeriod(
-      { ...CTX, projectId: PROJECT_NEW_DATA, projectName: "Project New Data" },
-      { ...LAND_PERIOD, fixed: null, revenue: 0, perMwh: null, perMw: null, perWtg: null },
-      true,
-    );
-    expect(fieldsOf(created("llperiod")).vsb_fixedcosts).toBeNull();
-
-    const reloaded = await reloadLandLease({ periodId: PERIOD_ID });
-    expect(reloaded.fixed).toBeNull();
-    expect(reloaded.perMwh).toBeNull();
-    expect(reloaded.perWtg).toBeNull();
-    // A STORED zero is a different answer from blank and still reads back as zero.
-    expect(reloaded.revenue).toBe(0);
-  });
-
-  it("UT-PWRITE-028 reconciles the contract's WTG allocations, creating before deleting", async () => {
-    /*
-     * `vsb_landleaseallocationwtgs` was written only on DELETE — nothing created, updated or
-     * read one — so the WTG picker had no options and `canSaveLandLease`'s PV/Wind allocation
-     * clause could only be met by "allocate to all". Creates run before deletes, so an
-     * interruption leaves an OVER-allocated contract rather than a silently under-allocated one.
-     */
-    const GEN_1 = "11111111-1111-1111-1111-111111111111";
-    const GEN_2 = "22222222-2222-2222-2222-222222222222";
-    const GEN_3 = "33333333-3333-3333-3333-333333333333";
-    const ALLOC_STALE = "44444444-4444-4444-4444-444444444444";
-
-    rowsByLabel = {
-      ...landReferenceRows({
-        vsb_landleaseprojectcostid: HDR_COST101, vsb_secured: 952850000,
-      }),
-      // The contract already holds GEN_1 and a stale GEN_3.
-      "list Land Lease WTG allocations to reconcile": [
-        { vsb_landleaseallocationwtgid: "55555555-5555-5555-5555-555555555555",
-          _vsb_projectcost_value: HDR_COST101, _vsb_generatorinproject_value: GEN_1 },
-        { vsb_landleaseallocationwtgid: ALLOC_STALE,
-          _vsb_projectcost_value: HDR_COST101, _vsb_generatorinproject_value: GEN_3 },
-      ],
-    };
-
-    await savePeriod(
-      { ...CTX, projectId: PROJECT_NEW_DATA, projectName: "Project New Data" },
-      {
-        ...LAND_PERIOD, id: "c41e4d8f-1f57-ea11-a811-000d3a4a9d2f",
-        contractId: HDR_COST101, periodIndex: 1,
-        allocatedGeneratorIds: [GEN_1, GEN_2],
-      },
-      false,
-    );
-
-    const allocWrites = writes.filter((w) => w.table === "llalloc");
-    // GEN_1 is already there and is NOT rewritten; GEN_2 is created; GEN_3 is removed.
-    expect(allocWrites.map((w) => w.op)).toEqual(["create", "delete"]);
-    expect(fieldsOf(allocWrites[0])["vsb_GeneratorInProject@odata.bind"])
-      .toBe(`/vsb_generatorinprojects(${GEN_2})`);
-    expect(fieldsOf(allocWrites[0])["vsb_ProjectCost@odata.bind"])
-      .toBe(`/vsb_landleaseprojectcosts(${HDR_COST101})`);
-    // `ProjectDocs/app-docs/01-BUGS-FOUND.md` S-5 — the owning business unit is bound on this table too.
-    expect(fieldsOf(allocWrites[0])["owningbusinessunit@odata.bind"])
-      .toBe(`/businessunits(${BUSINESS_UNIT})`);
-    expect(allocWrites[1]?.id).toBe(ALLOC_STALE);
-  });
-
-  it("UT-PWRITE-029 leaves the allocations alone when the caller has no opinion", async () => {
-    // `undefined` is not `[]`: writing `[]` would DELETE every allocation on the contract, which
-    // is the stranded/lost-allocation failure `ProjectDocs/app-docs/01-BUGS-FOUND.md` S-5 records.
-    rowsByLabel = {
-      ...landReferenceRows({
-        vsb_landleaseprojectcostid: HDR_COST101, vsb_secured: 952850000,
-      }),
-      "list Land Lease WTG allocations to reconcile": [
-        { vsb_landleaseallocationwtgid: "55555555-5555-5555-5555-555555555555",
-          _vsb_projectcost_value: HDR_COST101,
-          _vsb_generatorinproject_value: "11111111-1111-1111-1111-111111111111" },
-      ],
-    };
-
-    await savePeriod(
-      { ...CTX, projectId: PROJECT_NEW_DATA, projectName: "Project New Data" },
-      {
-        ...LAND_PERIOD, id: "c41e4d8f-1f57-ea11-a811-000d3a4a9d2f",
-        contractId: HDR_COST101, periodIndex: 1,
-      },
-      false,
-    );
-    expect(writes.filter((w) => w.table === "llalloc")).toEqual([]);
   });
 
   it("UT-PWRITE-022 an Other OPEX period survives save and reload unchanged", async () => {

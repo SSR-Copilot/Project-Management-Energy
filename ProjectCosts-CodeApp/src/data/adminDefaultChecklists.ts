@@ -7,26 +7,22 @@
  * TABLES. The three checklist tables (tasks, country/technology tabs, default approvals) are
  * read and written through the generated services. Their entity sets, columns and row shapes
  * live in ONE shared place, `data/adminChecklistTables.ts` (also used by Project Gates);
- * this module maps that repository's models onto this screen's models. Clusters (`vsb_projectstates`) use the generated
- * `Vsb_projectstatesService`.
+ * this module maps that repository's models onto this screen's models. Clusters (`vsb_projectstates`) are a view of the ONE shared
+ * `Project States` read (`checklistClusterView`, OPT-07d; the screen's hook uses `projectStatesQueryOptions`), not a read of their own.
  *
  * WRITE MODEL. Nothing here changes the cache optimistically: the sync flow
  * `SynchroniseProjectTaskList-Add_Update` reads the committed row, so the UI must reflect only
  * what Dataverse accepted.
  */
-import { Vsb_projectstatesService } from "@/generated/services/Vsb_projectstatesService";
-import { fetchAll } from "./client";
-import { f } from "./odata";
+import type { SharedProjectState } from "./generalData";
 import { RowWriteError } from "./adminRowWrites";
 import { forEachLimit } from "./concurrency";
 import {
-  checklistTables, isLockingApproval, taskBinds, type ChecklistApproval, type ChecklistTablesRepository,
+  checklistTables, isLockingApproval, LOCK_COLUMNS, taskBinds, type ChecklistApproval, type ChecklistTablesRepository,
 } from "./adminChecklistTables";
 import { owningBusinessUnitBind } from "@/data/odata";
 
 /* ═══════════════════════════════════════════════════════════════ tables ══ */
-
-export const CLUSTER_SELECT = ["vsb_projectstateid", "vsb_name", "vsb_order"] as const;
 
 /**
  * Write shape for `vsb_projectdefaultchecklistses` (navigation properties = SchemaName).
@@ -99,7 +95,6 @@ export interface OrderPatch {
  */
 export interface ChecklistRepository {
   listTabs(): Promise<ChecklistTab[]>;
-  listClusters(): Promise<ChecklistCluster[]>;
   listTasks(tabId: string): Promise<ChecklistTask[]>;
   /** Task approvals that lock their task (mode is not "Only Notifications", or null). */
   listLocks(): Promise<Pick<ChecklistApproval, "checklistId" | "mode">[]>;
@@ -137,16 +132,6 @@ export function createChecklistRepository(tables: ChecklistTablesRepository = ch
       (await tables.listChecklistHeaders({ operation: "Load checklist country/technology tabs" }))
         .map((h) => ({ id: h.id, name: h.name, order: h.order, owningBusinessUnitId: h.owningBusinessUnitId })),
 
-    /** The visible project states (clusters) for the scope. */
-    listClusters: async () => {
-      const rows = await fetchAll("Load checklist clusters", Vsb_projectstatesService.getAll, {
-        select: [...CLUSTER_SELECT],
-        filter: f.eq("vsb_isvisibleonchecklist", true),
-        orderBy: ["vsb_order asc"],
-      });
-      return rows.map((r) => ({ id: r.vsb_projectstateid, name: r.vsb_name ?? "", order: r.vsb_order ?? null }));
-    },
-
     /**
      * ONE query per tab (the canvas ran one per cluster). The shared reader's
      * `vsb_todelete` clause is null-safe, so it means what Power Fx `Not('To Delete' = true)` meant.
@@ -172,7 +157,8 @@ export function createChecklistRepository(tables: ChecklistTablesRepository = ch
      * explicit null clause.
      */
     listLocks: () =>
-      tables.listChecklistApprovals({ lockingOnly: true, operation: "Load Project Gate checklist approvals" }),
+      // OPT-08(c): only the id, the task and the mode are kept, so only those columns are read (no JSON participant columns).
+      tables.listChecklistApprovals({ lockingOnly: true, select: LOCK_COLUMNS, operation: "Load Project Gate checklist approvals" }),
 
     // V9 (reusable components E9): this screen names its writes with the capitalised
     // pre-batch-2 operation texts again, so an error reads "Create checklist item failed: …".
@@ -195,8 +181,22 @@ export function loadTabs(repo: ChecklistRepository = dataverseChecklistRepositor
   return repo.listTabs();
 }
 
-export function loadClusters(repo: ChecklistRepository = dataverseChecklistRepository): Promise<ChecklistCluster[]> {
-  return repo.listClusters();
+/**
+ * OPT-07d: the visible project states (clusters) as a VIEW of the shared `Project States` list (`SharedProjectState[]`, D159), instead of a
+ * read of their own. It reproduces the old read exactly: `vsb_isvisibleonchecklist eq true` (inactive rows included, as the old read had
+ * no state filter), ordered by `vsb_order` ascending with a missing order FIRST (the server's NULLS FIRST; the shared list maps a missing
+ * order to 0, so the raw order is used), ties in the shared list's row order (stable sort), `order` kept as stored (null when missing).
+ */
+export function checklistClusterView(states: readonly SharedProjectState[]): ChecklistCluster[] {
+  return states
+    .filter((s) => s.isVisibleOnChecklist)
+    .map((s, index) => ({ s, index }))
+    .sort((a, b) => {
+      const ka = a.s.orderRaw ?? Number.NEGATIVE_INFINITY;
+      const kb = b.s.orderRaw ?? Number.NEGATIVE_INFINITY;
+      return ka === kb ? a.index - b.index : ka < kb ? -1 : 1;
+    })
+    .map(({ s }) => ({ id: s.id, name: s.name, order: s.orderRaw }));
 }
 
 export async function loadTasks(

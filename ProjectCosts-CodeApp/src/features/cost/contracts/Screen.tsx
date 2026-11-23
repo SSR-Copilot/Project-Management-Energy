@@ -64,7 +64,7 @@ import { permissionMessage, serverEnforcedProvider } from "@/platform/privileges
 import {
   CLOSING_DATE_TYPE, CONTRACT_TYPE, COMMENT_MAX_LENGTH, MARGIN_TYPE, MSG,
   NOTE_MAX_LENGTH, TOTAL_COSTS_TYPE,
-  canSaveContract, canSavePaymentTarget, cardShowsClosingCosts, cardTotalLabel,
+  canSaveContractFromErrors, canSavePaymentTarget, cardShowsClosingCosts, cardTotalLabel,
   contractCardTitle, contractCommands, contractErrors, contractSelectionAfterDelete,
   gatedContractCommands, longAbbreviatedDate,
   PAYMENT_TARGET_DESCRIPTION_MAX_LENGTH,
@@ -1042,7 +1042,7 @@ function ContractsScreenBody() {
         footer={<PanelButtons
           onSave={() => { void saveContractNow(); }}
           onCancel={() => setPanel("none")}
-          disabled={!canSaveContract({ form, tree, recalculated, locale }) || busy || !ready.contractForm} />}
+          disabled={!canSaveContractFromErrors({ form, tree, recalculated, locale, errors }) || busy || !ready.contractForm} />}
       >
         <div className="canvas-panel-columns">
           <div className="canvas-panel-column">

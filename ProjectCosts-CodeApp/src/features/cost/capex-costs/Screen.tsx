@@ -43,12 +43,12 @@ import { costLocation } from "@/app/deepLinks";
 import { useSession } from "@/app/SessionContext";
 import { palette, space } from "@/theme/tokens";
 import { parseNumber } from "@/domain/numeric";
-import { CLUSTERS, type CostLine } from "../costing/model";
+import { CLUSTERS, type CostAccount, type CostLine } from "../costing/model";
 import {
   useCapexCategories, useCapexComments, useCapexTotals, useCapexWrites, useCostBook,
   useMilestoneDurations, useProjectStates, useStandardAssumptions,
 } from "../costing/useCostBook";
-import { commentCosts, commentThreads, gridCommentIndicators } from "./comments";
+import { commentCosts, commentThreads, gridCommentIndicators, referencedCostIds } from "./comments";
 import { costLabel, currencyCode } from "../contracts/rules";
 import { PcfGrid } from "./PcfGrid";
 import { CommentsPanel } from "./CommentsPanel";
@@ -233,6 +233,11 @@ const useStyles = makeStyles({
   monthInput: { width: "100%", minWidth: "0" },
 });
 
+/** The accounts of one category tab, memoised on the book's accounts (OPT-25, D160): one array identity per (book, tab). */
+function useCategoryAccounts(accounts: readonly CostAccount[] | undefined, category: number): CostAccount[] {
+  return useMemo(() => (accounts ? accountsInCategory(accounts, category) : []), [accounts, category]);
+}
+
 export default function CapexCostsScreen() {
   const styles = useStyles();
   const notify = useNotify();
@@ -394,8 +399,9 @@ export default function CapexCostsScreen() {
    * cannot run conditionally, so this is computed defensively (empty before `book` loads) and
    * called unconditionally, ahead of the loading/error guards below.
    */
-  const categoryAccounts = book ? accountsInCategory(book.accounts, category) : [];
-  const subaccountIds = categoryAccounts.filter(a => a.parentId).map(a => a.id);
+  // OPT-25: memoised, so a panel keystroke hands the grid and the standard-assumption query the SAME array.
+  const categoryAccounts = useCategoryAccounts(book?.accounts, category);
+  const subaccountIds = useMemo(() => categoryAccounts.filter(a => a.parentId).map(a => a.id), [categoryAccounts]);
   const std = useStandardAssumptions(subaccountIds);
   /** `Project States` — the "Link to Milestone" dropdown's `Items`. Ten rows, session-cached. */
   const projectStates = useProjectStates();
@@ -415,10 +421,12 @@ export default function CapexCostsScreen() {
    */
   const contractIds = useMemo(() => (book?.lines ?? []).map(l => l.id), [book]);
   const comments = useCapexComments(contractIds);
-  const commentFlags = useMemo(
-    () => gridCommentIndicators(commentThreads(comments.data ?? []), commentCosts(book?.lines), year),
-    [book, comments.data, year],
-  );
+  const bookLines = book?.lines;
+  const commentFlags = useMemo(() => {
+    const threads = commentThreads(comments.data ?? []);
+    // OPT-25 (D160): project only the payments a thread links to, not one object per payment.
+    return gridCommentIndicators(threads, commentCosts(bookLines, referencedCostIds(threads)), year);
+  }, [bookLines, comments.data, year]);
 
   const chooseCategory = (i: number) => {
     const next = new URLSearchParams(search);

@@ -12,6 +12,7 @@ import { queryOptions } from "@tanstack/react-query";
 import {
   listCountries, loadProjectPage, loadProjectStateOrder,
 } from "@/data/projects";
+import { projectStateLookup } from "@/data/projectStateLookup";
 import { EMPTY_APPLIED_CAPACITY, resolveAppliedCapacity, type ProjectFilter, type SortState } from "./rules";
 
 /** How long a fetched page counts as fresh — for the page on screen AND the prefetched next one. */
@@ -80,6 +81,7 @@ export { projectStatesQueryOptions } from "@/data/projectStates";
  */
 export const projectStateOrderOptions = (clusterStateId: string | null) => queryOptions({
   queryKey: ["projectStateOrder", clusterStateId ?? "none"] as const,
-  queryFn: () => loadProjectStateOrder(clusterStateId),
+  // OPT-07d: the order comes from the shared `Project States` entry when it holds the state, else the single-row read.
+  queryFn: ({ client }) => loadProjectStateOrder(clusterStateId, projectStateLookup(client)),
   staleTime: 30 * 60 * 1000,
 });
