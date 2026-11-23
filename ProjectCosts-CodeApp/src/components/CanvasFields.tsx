@@ -12,6 +12,14 @@ import { Button, Dropdown, Option, Text, makeStyles, mergeClasses, tokens } from
 import { CheckmarkRegular, DismissRegular } from "@fluentui/react-icons";
 import { useBrandButtonStyles, usePanelFooterHoverStyles } from "@/theme/buttonStyles";
 import { palette } from "@/theme/tokens";
+
+/**
+ * The brand Save's caption: the PowerCAT `ActionButton` `FontSize: =16` (e.g. `pcf_but_Admin_Checklist_Form_Buttons_Save`,
+ * ADCS:1260) in the v8 ActionButton's regular weight; Fluent's 14 px semibold was visibly smaller and bolder
+ * (user, 23 Nov 2026). Inline, because Fluent's size class is inserted after ours and wins at equal specificity.
+ * Cancel has no `FontSize`, so it stays at 14 px.
+ */
+const BRAND_SAVE_FONT = { fontSize: "16px", fontWeight: 400 } as const;
 import { useFormPanel } from "./formPanelContext";
 import { useStandardValueClass, type StandardProp } from "./standardValue";
 
@@ -66,6 +74,13 @@ const useStyles = makeStyles({
   },
   /** `look="brand"` (the Application Settings pair): the buttons keep canvas.css's 96 px band chrome. */
   brandButton: { minWidth: "96px" },
+  /** See `BRAND_SAVE_FONT`: the ✓ follows the 16 px caption. */
+  /**
+   * The brand Save is the PowerCAT `ActionButton` with `FontSize: =16` (e.g. `pcf_but_Admin_Checklist_Form_Buttons_Save`,
+   * ADCS:1260), drawn in the v8 ActionButton's regular weight; Fluent's 14 px semibold was visibly smaller and
+   * bolder (user, 23 Nov 2026). Cancel has no `FontSize`, so it stays at 14 px.
+   */
+  brandSave: { "& .fui-Button__icon": { fontSize: "16px" } },
   /** `gap={20}`: CAPEX Accounts places Save at `Cancel.X - Self.Width - 20` (CAX:1440); the extra 10 px is a left margin on Cancel. */
   wideGap: { marginLeft: "10px" },
   /** `hint`: left-aligned, grows, overrides the footer's `> *:first-child { margin-left: auto }` (Costs period drawer). */
@@ -83,6 +98,21 @@ const useStyles = makeStyles({
     borderTopColor: "transparent", borderRightColor: "transparent",
     borderBottomColor: "transparent", borderLeftColor: "transparent",
     "& .fui-Button__icon": { color: palette.black },
+  },
+  /**
+   * `look="brand"` (Application Settings) only: Fluent paints its disabled state through `:disabled` rules, which
+   * out-rank the plain class above, so the PowerCAT look is pinned there too — no fill, the caption in the theme's
+   * disabled text (Fluent v8 `disabledText` = `palette.neutralTertiary`, #595959 in `gblAppThemeJson`, App.pa.yaml:29)
+   * and a black ✓ (`pcf_but_…_Buttons_Save`, `IconColor: If(DisplayMode = Disabled, black, …)`; user screenshots,
+   * 23 Nov 2026). The `look="canvas"` panels keep their look.
+   */
+  saveSubtleDisabledBrand: {
+    ":disabled": {
+      backgroundColor: "transparent", color: palette.neutralTertiary,
+      borderTopColor: "transparent", borderRightColor: "transparent",
+      borderBottomColor: "transparent", borderLeftColor: "transparent",
+    },
+    ":disabled .fui-Button__icon": { color: palette.black },
   },
   /**
    * `pcf_btn_…_Buttons_Cancel_2` (`:17994-18044`) is a PowerCAT `Icon` button, NOT a Fluent
@@ -318,12 +348,22 @@ export function PanelButtons({
   const footerHover = usePanelFooterHoverStyles();
   const { requestClose } = useFormPanel();
   const isBrand = look === "brand";
-  const subtle = Boolean(!isBrand && subtleWhenDisabled && disabled);
+  /*
+   * A disabled Save is the PowerCAT `ActionButton` disabled look — transparent, grey caption, black ✓ — on
+   * `look="canvas"` when asked (`subtleWhenDisabled`) and ALWAYS on `look="brand"`: every Application Settings
+   * panel's Save is that PowerCAT button (`pcf_but_…_Buttons_Save`, `IconColor: If(DisplayMode = Disabled,
+   * black, …)`, no fill when disabled), and Fluent's grey filled primary was not it (user screenshots, 23 Nov
+   * 2026). While a save runs the button keeps its primary look, as the canvas shows its loading pop-up then.
+   */
+  const subtle = Boolean(disabled && !saving && (isBrand || subtleWhenDisabled));
   const saveCaption = saving && savingLabel ? savingLabel : isBrand ? saveLabel : "Save";
   const cancel = onCancel ?? (() => requestClose("cancel"));
   return <>
     {hint ? <Text className={styles.hint} aria-live="polite">{hint}</Text> : null}
-    <Button className={isBrand ? mergeClasses(styles.brandButton, footerHover.hover) : mergeClasses(styles.save, subtle && styles.saveSubtleDisabled)}
+    <Button className={isBrand ? mergeClasses(styles.brandButton, styles.brandSave, footerHover.hover, subtle && styles.saveSubtleDisabled, subtle && styles.saveSubtleDisabledBrand) : mergeClasses(styles.save, subtle && styles.saveSubtleDisabled)}
+      // The brand Save caption is `FontSize: =16` in the regular weight (see `brandSave`); inline, because Fluent's
+      // size class is inserted after ours and would otherwise win at equal specificity.
+      {...(isBrand ? { style: BRAND_SAVE_FONT } : {})}
       appearance={subtle ? "subtle" : "primary"} icon={<CheckmarkRegular />}
       onClick={onSave} disabled={saving ? true : disabled} title={saveTooltip} aria-label={saveLabel} data-testid={saveTestId}>{saveCaption}</Button>
     {extra}

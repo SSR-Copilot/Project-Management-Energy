@@ -384,6 +384,17 @@ describe("CAPEXAccountsSettingsScreen", () => {
     await user.click(await screen.findByTestId(`pcf_Account_AccountCardBody_SubAccountsCommandBar-${IDS.land}-newSubaccount`));
     expect(await screen.findByText("New Subaccount")).toBeInTheDocument();
     expect(screen.getByText("80000_")).toBeInTheDocument();
+    // The prefix is a separate label OUTSIDE the input box (`lbl_…_AccountNumberAsPrefix`, CA:1687-1717), sitting
+    // on the input's row; the input is pushed right by the canvas 9 px per character.
+    const prefixLabel = screen.getByTestId("lbl_Account_RightPanel_NewEditSubaccount_BodyContent_AccountNumberAsPrefix");
+    expect(prefixLabel.closest(".fui-Input")).toBeNull();
+    const numberBlock = prefixLabel.parentElement as HTMLElement;
+    expect(numberBlock.style.getPropertyValue("--prefix-w")).toBe(`${"80000_".length * 9}px`);
+    expect(getComputedStyle(prefixLabel).position).toBe("absolute");
+    // The disabled Main Account box is white with a grey outline (modern TextInput disabled, CA:1611), unlike the
+    // editable grey-filled inputs.
+    const mainAccount = screen.getByTestId("txt_Account_RightPanel_NewEditSubaccount_BodyContent_AccountName");
+    expect(mainAccount).toBeDisabled();
     await user.type(screen.getByTestId("txt_Account_RightPanel_NewEditSubaccount_BodyContent_Number"), " 4 ");
     await user.type(screen.getByTestId("txt_Account_RightPanel_NewEditSubaccount_BodyContent_Name"), "Extra");
     await user.click(hiddenButton("Save"));
@@ -941,6 +952,14 @@ describe("CAPEXAccountsSettingsScreen", () => {
     // Digits only (SOURCE DEFECT fix kept, D153): a sign, which the canvas let through, shows the message.
     await user.type(screen.getByTestId("txt_Account_RightPanel_NewEditAccount_BodyContent_Number"), "-5");
     expect(screen.getByText(MSG.accountNotNumeric)).toBeInTheDocument();
+    // Captions are Semibold (canvas `Weight: Semibold`) through a rule that out-ranks canvas.css's regular weight;
+    // jsdom resolves descendant selectors, so the computed style shows what the browser applies.
+    const nameLabel = name.closest(".fui-Field")!.querySelector("label") as HTMLElement;
+    expect(getComputedStyle(nameLabel).fontWeight).toMatch(/^(600|semibold|var\(--fontWeightSemibold\))$/);
+    // The disabled Category dropdown is a white box with a grey outline (modern DropDown, CA:1074-1083), not the
+    // panel's filled grey input.
+    const dropdown = category.closest(".fui-Dropdown") as HTMLElement;
+    expect(getComputedStyle(dropdown).backgroundColor).toMatch(/var\(--colorNeutralBackground1\)|rgb\(255, 255, 255\)|#fff/i);
   });
 
   it("UT-ADCAPEX-953 the account form starts at the panel's own 20 px padding and lays each field in a 70 px block (CA:1049, 1063)", async () => {

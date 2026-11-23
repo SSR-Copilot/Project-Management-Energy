@@ -175,4 +175,28 @@ describe("PanelButtons look=brand hover (D85)", () => {
       expect(hover["border-top-color"]).toBe("rgb(204, 226, 241)");
     }
   });
+
+  // Canvas `pcf_but_…_Buttons_Save` is a PowerCAT `ActionButton`: disabled it has no fill and a black ✓
+  // (`IconColor: If(Self.DisplayMode = Disabled, black, white)`), with the caption in the disabled grey.
+  it("UT-PANELFTR-012 a disabled brand Save is transparent with a black ✓; saving keeps the primary look", () => {
+    const { unmount } = render(<InPanel disabled />);
+    const save = button("Save");
+    expect(save).toBeDisabled();
+    // `FontSize: =16`, regular weight (the PowerCAT ActionButton), inline so Fluent's size class cannot win; Cancel stays 14 px.
+    expect(save.style.fontSize).toBe("16px");
+    expect(save.style.fontWeight).toBe("400");
+    expect(button("Cancel").style.fontSize).toBe("");
+    const rules = Array.from(document.styleSheets).flatMap((s) => Array.from(s.cssRules ?? [])).map((r) => r.cssText)
+      .filter((t) => Array.from(save.classList).some((c) => t.includes(`.${c}`)));
+    expect(rules.some((t) => /background-color: transparent/.test(t))).toBe(true);
+    expect(rules.some((t) => t.includes(".fui-Button__icon") && /color: (#0b0b0b|rgb\(11, 11, 11\))/.test(t))).toBe(true);
+    // Pinned under `:disabled`, where Fluent paints its own disabled grey: the theme's disabled text (#595959) and a black ✓.
+    expect(rules.some((t) => t.includes(":disabled") && !t.includes(".fui-Button__icon") && /color: (#595959|rgb\(89, 89, 89\))/.test(t))).toBe(true);
+    expect(rules.some((t) => t.includes(":disabled .fui-Button__icon") && /color: (#0b0b0b|rgb\(11, 11, 11\))/.test(t))).toBe(true);
+    unmount();
+    render(<InPanel saving />);
+    const savingRules = Array.from(document.styleSheets).flatMap((s) => Array.from(s.cssRules ?? [])).map((r) => r.cssText)
+      .filter((t) => Array.from(button("Save").classList).some((c) => t.includes(`.${c}`)));
+    expect(savingRules.some((t) => /background-color: transparent/.test(t))).toBe(false);
+  });
 });
