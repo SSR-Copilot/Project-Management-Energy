@@ -171,7 +171,9 @@ export async function loadProject(projectId: string): Promise<ProjectContext | u
         "vsb_approvalstates",
         "_owningbusinessunit_value",
       ],
-      filter: and(`vsb_projectid eq ${guid(projectId)}`, ACTIVE),
+      // Any state: the canvas `LookUp(Projects, Project = GUID(Param(…)))` has no status clause, so an
+      // inactive project opens there; here it answered "not found" on every screen (audit, 23 Nov 2026).
+      filter: `vsb_projectid eq ${guid(projectId)}`,
       top: 1,
     },
   );

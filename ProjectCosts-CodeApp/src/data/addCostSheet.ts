@@ -43,7 +43,7 @@ import { Vsb_capexprojectcontractsService } from "@/generated/services/Vsb_capex
 import { Vsb_capexcostsService } from "@/generated/services/Vsb_capexcostsService";
 import { DataError, isRecordGone, unwrap } from "@/platform/errors";
 import { deleteRecord, fetchAll } from "./client";
-import { ACTIVE, and, bind, chunk, idIn, lookupEq, lookupIn, numberOf } from "./odata";
+import { and, bind, chunk, idIn, lookupEq, lookupIn, numberOf } from "./odata";
 import { forEachLimit, mapLimit } from "./concurrency";
 import { loadCostAccounts, loadPayerDefaults } from "./costBook";
 import {
@@ -141,8 +141,10 @@ export async function loadAddCostSheetData(
     loadPayerDefaults(),
     loadContracts(
       "list Add Cost from Table contracts",
+      // Any state (audit, 23 Nov 2026): the canvas `Filter('CAPEX Project Contracts', Project…)` has no
+      // status clause, so an inactive contract is matched by name here instead of being re-created.
       chunk(subIds).map((ids) =>
-        and(lookupEq("vsb_project", projectId), lookupIn("vsb_account", ids), ACTIVE)),
+        and(lookupEq("vsb_project", projectId), lookupIn("vsb_account", ids))),
     ),
   ]);
 
@@ -193,7 +195,7 @@ async function refreshSnapshot(contractIds: readonly string[]): Promise<{
   const [contracts, costs] = await Promise.all([
     loadContracts(
       "refresh Add Cost from Table contracts",
-      batches.map((ids) => and(idIn(CAPEX_CONTRACTS.primaryKey, ids), ACTIVE)),
+      batches.map((ids) => idIn(CAPEX_CONTRACTS.primaryKey, ids)),
     ),
     loadCostsForContracts(contractIds),
   ]);
@@ -216,7 +218,7 @@ async function loadCostsForContracts(contractIds: readonly string[]): Promise<Ex
         (o) => Vsb_capexcostsService.getAll(o),
         {
           select: ["vsb_capexcostid", "_vsb_contract_value", "vsb_year", "vsb_month", "vsb_cost"],
-          filter: and(lookupIn("vsb_contract", ids), ACTIVE),
+          filter: lookupIn("vsb_contract", ids),
         },
       ),
     ),

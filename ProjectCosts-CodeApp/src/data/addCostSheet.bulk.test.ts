@@ -1190,12 +1190,12 @@ describe("saveAddCostSheetBulk â€” the evaluator's findings F-A, F-B, F-C (D51 Â
     // The stored total (250) differs from the planned 150, so the total is written.
     const c1 = targetsOf(ES_CONTRACTS).find((t) => t.vsb_capexprojectcontractid === C1);
     expect(c1?.vsb_totalcost).toBe(150);
-    // The refresh reads use the sheet load's columns, by id, active only.
+    // The refresh reads use the sheet load's columns, by id, in every state (the canvas has no status clause).
     const refresh = reads.find((r) => r.label === REFRESH_CONTRACTS)?.options as { select: string[]; filter: string };
     expect(refresh.select).toContain("vsb_totalcost");
     expect(refresh.select).toContain("vsb_iseditedfrompcf");
     expect(refresh.filter).toContain(`vsb_capexprojectcontractid eq ${C1}`);
-    expect(refresh.filter).toContain("statecode eq 0");
+    expect(refresh.filter).not.toContain("statecode");
   });
 
   it("UT-ACSHEET-BULK-042 the refresh reads run in parallel before planning, chunked at 40, and are counted in the log", async () => {

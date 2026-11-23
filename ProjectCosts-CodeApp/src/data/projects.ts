@@ -71,7 +71,9 @@ export interface ProjectPageRequest {
  */
 export async function loadProjectPage(req: ProjectPageRequest): Promise<ProjectPage> {
   const pageSize = req.pageSize ?? PAGE_SIZE;
-  const base = and(buildProjectFilter(req.filter, req.locale), req.scopeFilter, ACTIVE);
+  // Any state (D45 G2, decided 23 Nov 2026): the canvas `Filter(Projects, …)` has no status clause, so the
+  // Overview lists inactive projects too, and its Total Rows and page count agree with the canvas.
+  const base = and(buildProjectFilter(req.filter, req.locale), req.scopeFilter);
   /*
    * SOURCE DEFECT (code app only, no canvas parity involved: the canvas never paged on the
    * server, it `ClearCollect`s and pages a local collection; see `countedPage` in `client.ts`).
