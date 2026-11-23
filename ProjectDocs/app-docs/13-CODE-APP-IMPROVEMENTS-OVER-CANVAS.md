@@ -432,6 +432,7 @@ Branch `feature/azure-maps-integration`; details in `18-AZURE-MAPS-IN-THE-CODE-A
 | General Data | After a token failure the app waits 60 s before calling the flow again: panning a broken map no longer starts a flow run per tile (UT-AZMAP-006) | new |
 | General Data | A map that cannot load at all (SDK chunk, WebGL, a CSP block) is caught by an error boundary around the map: "The map cannot be displayed. Please reload the page." in the map area, the form and Save unaffected (UT-GDATA-911; found when UT-ROUTES-020/021 crashed the whole route without it) | new |
 | General Data | The Azure Maps SDK's "Feedback" link (bottom right, to Microsoft's map-feedback site) is hidden (`showFeedbackLink: false`); the © TomTom / Microsoft attribution stays, as the map data's licence requires (23 Nov 2026, user request) | new |
+| General Data | The map now has the canvas's compass (rotate left / right, reset north) and pitch (tilt up / down, 2D / 3D) controls beside zoom, top right in the canvas order; the canvas `Map@1.8.27` leaves `ShowCompass` / `ShowPitchControl` at their default (on), and the code app had only zoom (23 Nov 2026, user request) | reproduced |
 
 ## Cluster Checklist, Move to Cluster: loading and layers (6 Nov 2026, D105) — fixed / kept
 
