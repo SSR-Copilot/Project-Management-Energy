@@ -82,8 +82,13 @@ const useStyles = makeStyles({
    * rule under its body (the shared `account` body draws one).
    */
   body: { borderBottomStyle: "none" },
-  /** `pcf_Account_AccountCardBody_SubAccounts.Width: =Min(…, 900)`; rows 32 px (`TotalRecords*32`). */
-  table: { tableLayout: "fixed", width: "100%", maxWidth: "900px" },
+  /**
+   * `pcf_Account_AccountCardBody_SubAccounts.Width: =Min(…, 900)`; rows 32 px (`TotalRecords*32`).
+   * `Height: =Max(Self.Y + Self.TotalRecords*32, 30)` (CA:521-530) adds the grid's own Y — the 40 px command bar
+   * plus the body's 5 px `LayoutGap` — to the rows, so the canvas grid runs 45 px past its last row before the
+   * body's 10 px bottom padding and the next card (user screenshot, 23 Nov 2026). Reproduced as a bottom margin.
+   */
+  table: { tableLayout: "fixed", width: "100%", maxWidth: "900px", marginBottom: "45px" },
   row: { height: "32px" },
   cell: { boxSizing: "border-box", paddingLeft: CELL_PAD_LEFT, paddingRight: CELL_PAD_RIGHT },
   /** Number `ColWidth: 80`. */

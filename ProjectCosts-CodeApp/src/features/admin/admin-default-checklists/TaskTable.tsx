@@ -26,7 +26,7 @@ import {
   makeStyles, mergeClasses, tokens,
 } from "@fluentui/react-components";
 import { DeleteRegular } from "@fluentui/react-icons";
-import { ActivateOrdersIcon, DeactivateOrdersIcon, DisabledReason, EditIcon, InlineEmpty, RowActions } from "@/components";
+import { ActivateOrdersIcon, DeactivateOrdersIcon, DisabledReason, EditIcon, RowActions } from "@/components";
 import type { ChecklistTask } from "@/data/adminDefaultChecklists";
 import { palette } from "@/theme/tokens";
 import { useRowActionStyles } from "@/theme/buttonStyles";
@@ -158,11 +158,9 @@ export function TaskTable({
   const styles = useStyles();
   const feedback = useRowActionStyles();
 
-  if (tasks.length === 0) {
-    // NEW — no canvas equivalent: the canvas gallery simply rendered no rows.
-    return <InlineEmpty padding={8}>No tasks in this cluster yet.</InlineEmpty>;
-  }
-
+  // An empty cluster shows the column header band and no rows, as the canvas does
+  // (`con_Header_TasksInClusterDefaultChecklist_AdminScreen` has no Visible condition, L377; the gallery
+  // just has no items). The port's "No tasks in this cluster yet." text was removed (the user, 23 Nov 2026).
   return (
     <div className={styles.scroller}>
       <Table

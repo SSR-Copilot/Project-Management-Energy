@@ -18,9 +18,13 @@
  */
 import type { TechnologyOption } from "./technology";
 
-/** Stripes for the inline SVG flag, top-to-bottom (`h`) or left-to-right (`v`). */
+/**
+ * Stripes for the inline SVG flag, top-to-bottom (`h`) or left-to-right (`v`). An `emblem`
+ * is drawn centred over the stripes: `"hr-shield"` is the Croatian red-and-white chequered
+ * shield (šahovnica), without which the tricolour reads as the Netherlands.
+ */
 export type FlagSpec =
-  | { kind: "h"; colors: readonly string[] }
+  | { kind: "h"; colors: readonly string[]; emblem?: "hr-shield" }
   | { kind: "v"; colors: readonly string[] }
   | { kind: "nordic"; background: string; cross: string };
 
@@ -41,7 +45,7 @@ export const PICKER_COUNTRIES: readonly PickerCountryConfig[] = [
   { name: "Poland", order: 3, iso2: "PL", flag: { kind: "h", colors: ["#FFFFFF", "#DC143C"] } },
   { name: "Italy", order: 4, iso2: "IT", flag: { kind: "v", colors: ["#009246", "#FFFFFF", "#CE2B37"] } },
   { name: "Finland", order: 5, iso2: "FI", flag: { kind: "nordic", background: "#FFFFFF", cross: "#003580" } },
-  { name: "Croatia", order: 6, iso2: "HR", flag: { kind: "h", colors: ["#FF0000", "#FFFFFF", "#171796"] } },
+  { name: "Croatia", order: 6, iso2: "HR", flag: { kind: "h", colors: ["#FF0000", "#FFFFFF", "#171796"], emblem: "hr-shield" } },
 ];
 
 /** The canvas exclusion (Costs' deny-list; a no-op for the allow-list screens). */

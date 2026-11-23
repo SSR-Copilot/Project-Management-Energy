@@ -261,7 +261,8 @@ export function ApprovalsPanel({
           * `tog_…_Fields_Active` (`Toggle@1.1.5`, `Label: ="Gate active"`); `DisplayMode` is View for the Draft
           * gate in the gate editor (PGAS:2961-2967).
           * SOURCE DEFECT fix kept (D153): the canvas then shows the stored 'Gate active', which can read OFF while
-          * Save writes `true` for Draft; this app shows it ON (what Save writes) with the hint below.
+          * Save writes `true` for Draft; this app shows it ON (what Save writes). The explanatory hint under it
+          * ("The Draft gate is always active.") was removed at the user's request (23 Nov 2026).
           */}
         <div className={mergeClasses(styles.block, styles.toggleBlock)}>
           <Switch
@@ -272,7 +273,6 @@ export function ApprovalsPanel({
             aria-label={LABELS.gateActive}
             data-testid="tog_Admin_ProjectGates_Approvals_Form_Fields_Active"
           />
-          {draftLocked ? <Text size={200}>The Draft gate is always active.</Text> : null}
         </div>
 
         {/* `rad_…_ApprovalMode`; its required asterisk is `Visible: =false` in the canvas, so none here. */}

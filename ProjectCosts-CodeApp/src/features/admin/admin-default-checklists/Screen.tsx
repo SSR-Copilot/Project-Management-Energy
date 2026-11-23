@@ -249,8 +249,9 @@ export default function CheckListSettingsScreen() {
               args: { tab, clusterId: current.clusterId, form: current.form, order: nextOrder(groups.get(current.clusterId) ?? []) },
             })
           : saveTask.mutateAsync({ mode: "edit", id: current.taskId, form: current.form, tab }));
+      // No success toast: the canvas writes "Checklist item was successfully saved." into its
+      // loading dialog and blanks it in the same handler (L1351-1361), so nothing is ever shown.
       editor.close();
-      notify.success(successText.save);
     } catch (error) {
       if (error instanceof TaskStatusNotSetError) {
         // The create landed but its status write failed. The row exists, so the panel switches

@@ -26,7 +26,7 @@
  * 8 pt Semibold in `palette.Error` with no icon and no red box, and no `{Len}/55` counter under
  * Name (the canvas sets `MaxLength: =55` but shows no counter).
  */
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { Text, makeStyles, mergeClasses, tokens } from "@fluentui/react-components";
 import {
   ChoiceField, FormPanel, PanelMessages, ReadOnlyField, ReorderPanel as SharedReorderPanel, TextField,
@@ -53,10 +53,29 @@ const useStyles = makeStyles({
   form: {
     display: "flex", flexDirection: "column", rowGap: "0",
     "& .fui-Field": { minHeight: "70px", rowGap: "0", alignContent: "start" },
-    // `lbl_…_Category` / `_Number` / `_Name` (and the subaccount captions): `Weight: Semibold`, 22 px high.
-    "& .fui-Field__label": {
+    /*
+     * `lbl_…_Category` / `_Number` / `_Name` (and the subaccount captions): `Weight: Semibold`, 22 px high. The
+     * selector carries `.fui-Field` too (0-3-0): `& .fui-Field__label` alone (0-2-0) lost to canvas.css's
+     * `.canvas-panel .fui-Field label { font-weight: 400 }` (0-2-1), so the captions rendered regular (user
+     * screenshot, 23 Nov 2026) — the same fix Check List Settings and Project Gates carry.
+     */
+    "& .fui-Field .fui-Field__label": {
       display: "inline-flex", alignItems: "baseline", fontWeight: tokens.fontWeightSemibold,
       minHeight: "22px", paddingBottom: "5px", boxSizing: "content-box",
+    },
+    /*
+     * `drp_Account_RightPanel_NewEditAccount_BodyContent_Category` is a modern `DropDown@0.0.45`, always
+     * `DisplayMode.Disabled` (CA:1074-1083): a WHITE box with a grey outline, not the panel's filled grey input.
+     * canvas.css's `.canvas-panel :is(.fui-Input,.fui-Dropdown,.fui-Textarea) { background: #f4f4f4; border: 0 }`
+     * (0-2-0) out-ranked the shared `ChoiceField` disabled look (0-1-0), so the box rendered grey (user screenshot,
+     * 23 Nov 2026); this (0-3-0) restores the canvas look in both the New and the Edit Account panel.
+     */
+    "& .fui-Field .fui-Dropdown": {
+      backgroundColor: tokens.colorNeutralBackground1,
+      borderTopWidth: "1px", borderRightWidth: "1px", borderBottomWidth: "1px", borderLeftWidth: "1px",
+      borderTopStyle: "solid", borderRightStyle: "solid", borderBottomStyle: "solid", borderLeftStyle: "solid",
+      borderTopColor: tokens.colorNeutralStrokeDisabled, borderRightColor: tokens.colorNeutralStrokeDisabled,
+      borderBottomColor: tokens.colorNeutralStrokeDisabled, borderLeftColor: tokens.colorNeutralStrokeDisabled,
     },
     /*
      * `lbl_…_Asterisk`: a `Label@2.5.1` "*", `Color: palette.Error`, `FontWeight: Semibold`,
@@ -74,8 +93,35 @@ const useStyles = makeStyles({
    * `FontWeight: Semibold`, `Color: palette.Error`, `PaddingTop: =3`.
    */
   error: { fontSize: pt(8), fontWeight: tokens.fontWeightSemibold, color: palette.Error, paddingTop: "3px" },
-  /** `lbl_…_AccountNumberAsPrefix`: `Size: =10`, `Color: gblAppStyles.Label.Color` (black). */
-  prefix: { fontSize: pt(10), color: palette.black },
+  /**
+   * The Subaccount Number block: the 10 pt prefix label (`lbl_…_AccountNumberAsPrefix`, `Size: =10`, black, CA:1687-1717)
+   * sits at the caption's X on the input's row, and the input starts after it. The caption is 22 px + 5 px above
+   * the 32 px input (the 70 px field block), so the prefix is placed at that row and the input is pushed right by
+   * the prefix's canvas width (`--prefix-w`, 9 px per character).
+   */
+  numberField: {
+    position: "relative",
+    "& .fui-Input": { marginLeft: "var(--prefix-w)" },
+  },
+  prefixOutside: {
+    position: "absolute", left: 0, top: "27px", height: "32px", lineHeight: "32px",
+    paddingLeft: "1px", paddingRight: "1px", width: "var(--prefix-w)", boxSizing: "border-box",
+    fontSize: pt(10), color: palette.black, whiteSpace: "nowrap",
+  },
+  /*
+   * `txt_…_AccountName` (Main Account) and the Edit-mode `txt_…_Number` are `DisplayMode.Disabled` modern TextInputs
+   * (CA:1611, 1758-1766): a WHITE box with a grey outline, as the disabled Category dropdown, not the panel's filled
+   * grey input (user screenshot, 23 Nov 2026). Only the disabled inputs; the editable ones keep the grey fill.
+   */
+  disabledInput: {
+    "& .fui-Field .fui-Input:has(> input:disabled)": {
+      backgroundColor: tokens.colorNeutralBackground1,
+      borderTopWidth: "1px", borderRightWidth: "1px", borderBottomWidth: "1px", borderLeftWidth: "1px",
+      borderTopStyle: "solid", borderRightStyle: "solid", borderBottomStyle: "solid", borderLeftStyle: "solid",
+      borderTopColor: tokens.colorNeutralStrokeDisabled, borderRightColor: tokens.colorNeutralStrokeDisabled,
+      borderBottomColor: tokens.colorNeutralStrokeDisabled, borderLeftColor: tokens.colorNeutralStrokeDisabled,
+    },
+  },
   /**
    * `lbl_Account_RightPanel_Ordering_BodyContent` (CA:2119-2149): `Color: Grayscale10`,
    * `FontWeight: Lighter`, `Size: Medium` (11 pt).
@@ -207,7 +253,7 @@ export function SubaccountPanel({
         cancelTestId: "pcf_Account_RightPanel_NewEditSubaccount_BodyButtons_Cancel",
       }}
     >
-      <div className={mergeClasses(styles.form, noInvalidOutline.root)}>
+      <div className={mergeClasses(styles.form, styles.disabledInput, noInvalidOutline.root)}>
         <PanelMessages error={error} />
         {/*
           * Captions: `lbl_…_AccountMain.Text` "Main Account", `lbl_…_Number.Text` "Subaccount
@@ -220,17 +266,22 @@ export function SubaccountPanel({
           testId="txt_Account_RightPanel_NewEditSubaccount_BodyContent_AccountName"
         />
         {isNew ? (
-          <TextField skin="plain"
-            label="Subaccount Number" required value={suffix} onChange={setSuffix}
-            error={suffixMessage} errorClassName={styles.error} validationIcon={null}
-            // `lbl_…_AccountNumberAsPrefix.Text: locSelectedAccount.Number & "_"`, visible for a NEW subaccount only.
-            contentBefore={(
-              <Text className={styles.prefix} data-testid="lbl_Account_RightPanel_NewEditSubaccount_BodyContent_AccountNumberAsPrefix">
-                {prefix}
-              </Text>
-            )}
-            testId="txt_Account_RightPanel_NewEditSubaccount_BodyContent_Number"
-          />
+          /*
+           * `lbl_…_AccountNumberAsPrefix` (CA:1687-1717): a separate 10 pt label, `Width: =Len(Self.Text)*9`, at the
+           * caption's X and centred on the input's row; the input starts right after it (`txt_…_Number.X: =prefix.X +
+           * prefix.Width`, CA:1740). So the prefix sits OUTSIDE the box, to its left — the port had drawn it inside the
+           * box (user screenshot, 23 Nov 2026). `--prefix-w` is the canvas 9 px per character.
+           */
+          <div className={styles.numberField} style={{ "--prefix-w": `${prefix.length * 9}px` } as CSSProperties}>
+            <TextField skin="plain"
+              label="Subaccount Number" required value={suffix} onChange={setSuffix}
+              error={suffixMessage} errorClassName={styles.error} validationIcon={null}
+              testId="txt_Account_RightPanel_NewEditSubaccount_BodyContent_Number"
+            />
+            <Text className={styles.prefixOutside} data-testid="lbl_Account_RightPanel_NewEditSubaccount_BodyContent_AccountNumberAsPrefix">
+              {prefix}
+            </Text>
+          </div>
         ) : (
           // Edit: the full number, disabled (no validation applies to it). Same canvas control,
           // which the canvas disables in edit mode (CA:1758-1766).

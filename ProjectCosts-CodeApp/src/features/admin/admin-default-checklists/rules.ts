@@ -583,10 +583,12 @@ export const busyText = {
   remove: (name: string) => `Deleting item '${name}', please wait...`,
 };
 
-/** The success toasts. */
+/**
+ * The success toasts. A task save shows NONE: `pcf_but_Admin_Checklist_Form_Buttons_Save.OnChange`
+ * sets "Checklist item was successfully saved." on the loading dialog and blanks it in the same
+ * handler (L1351-1361), so the canvas never displays it (user report, 23 Nov 2026).
+ */
 export const successText = {
-  /** `pcf_but_Admin_Checklist_Form_Buttons_Save.OnChange` — verbatim (L1351). */
-  save: "Checklist item was successfully saved.",
   /** `ico_EnablelCompletionDate_….OnChange` — verbatim (L620). */
   completion: "Completion Date was successfully changed.",
   /** NEW — no canvas equivalent: the canvas row status change sets no result text. */
