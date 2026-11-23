@@ -401,7 +401,8 @@ describe("CostsSettingsScreen", () => {
     const dialog = await screen.findByRole("dialog", { name: /Edit Period/ });
     expect(within(dialog).getByRole("textbox", { name: "Fix Costs p.a. [PLN]" })).toBeInTheDocument();
     expect(within(dialog).getByRole("textbox", { name: "PLN/MWh p.a." })).toBeInTheDocument();
-    expect(within(dialog).getByRole("textbox", { name: "Currency" })).toHaveValue("Zloty");
+    // `drp_…_Currency_1` is a disabled dropdown (ACS:5600) showing the currency name.
+    expect(within(dialog).getByRole("combobox", { name: "Currency" })).toHaveTextContent("Zloty");
   });
 
   it("UT-ADCOST-917 Poland: the DEVEX drawer defaults to the PLN unit", async () => {
@@ -547,17 +548,18 @@ describe("CostsSettingsScreen", () => {
     expect(screen.getByText("Standard Assumptions / Costs / Germany / Wind")).toHaveAttribute("aria-live", "polite");
   });
 
-  it("UT-ADCOST-930 the period drawer's computed values are read-only, not disabled", async () => {
+  it("UT-ADCOST-930 the period drawer's derived values are the canvas DisplayMode.Disabled controls: Description and Start Date disabled inputs, Currency a disabled dropdown (ACS:5091, 5314, 5600)", async () => {
     render(<Harness><CostsSettingsScreen /></Harness>);
     openSection("Land Lease");
     fireEvent.click(screen.getByTestId(T.editPeriod(LL_P2)));
     const dialog = await screen.findByRole("dialog", { name: /Edit Period/ });
-    for (const name of ["Description", "Start Date", "Currency"]) {
+    // The live canvas shows them greyed in white outlined boxes (user screenshot, 23 Nov 2026); they were read-only, not disabled.
+    for (const name of ["Description", "Start Date"]) {
       const box = within(dialog).getByRole("textbox", { name });
       expect(box).toHaveAttribute("readonly");
-      expect(box).toHaveAttribute("aria-readonly", "true");
-      expect(box).not.toBeDisabled();
+      expect(box).toBeDisabled();
     }
+    expect(within(dialog).getByRole("combobox", { name: "Currency" })).toBeDisabled();
   });
 
   it("UT-ADCOST-931 a failed reference REFRESH keeps the screen and shows a warning bar with Retry", () => {
@@ -694,13 +696,25 @@ describe("CostsSettingsScreen", () => {
     fireEvent.click(screen.getByTestId(T.editContract(LL_P1)));
     const dialog = await screen.findByRole("dialog", { name: /Edit Contract/ });
     const root = (testId: string) => within(dialog).getByTestId(testId).parentElement;
-    // `txt_…_Description_1` (ACS:5092-93), `txt_…_StartDate` (ACS:5315-16).
-    expect(carries(root("txt_LandLease_RightPanel_NewEditCost_BodyContent_Description_1"), cls.blueItalic)).toBe(true);
-    expect(carries(root("txt_LandLease_RightPanel_NewEditCost_BodyContent_StartDate"), cls.blueItalic)).toBe(true);
-    // `drp_…_Currency_1` (ACS:5578): no FontColor / FontItalic — plain (it was wrongly blue italic).
-    const currency = root("drp_LandLease_RightPanel_NewEditCost_BodyContent_Currency_1");
-    expect(carries(currency, cls.blueItalic)).toBe(false);
-    expect(carries(currency, cls.italic)).toBe(false);
+    // `txt_…_Description_1` (ACS:5091-93), `txt_…_StartDate` (ACS:5314-16): `DisplayMode.Disabled` with the pair — a disabled
+    // input shows its grey, so only the italic is carried (23 Nov 2026; they were blue italic in the filled box).
+    for (const id of ["txt_LandLease_RightPanel_NewEditCost_BodyContent_Description_1", "txt_LandLease_RightPanel_NewEditCost_BodyContent_StartDate"]) {
+      expect(carries(root(id), cls.italic), id).toBe(true);
+      expect(carries(root(id), cls.blueItalic), id).toBe(false);
+      expect(within(dialog).getByTestId(id)).toBeDisabled();
+    }
+    // `drp_…_Currency_1` (ACS:5578-5600): a DISABLED dropdown showing the currency name; no FontColor / FontItalic — plain.
+    const currency = within(dialog).getByTestId("drp_LandLease_RightPanel_NewEditCost_BodyContent_Currency_1");
+    expect(carries(currency, cls.blueItalic) || carries(currency.parentElement, cls.blueItalic)).toBe(false);
+    expect(carries(currency, cls.italic) || carries(currency.parentElement, cls.italic)).toBe(false);
+    const currencyBox = within(dialog).getByRole("combobox", { name: "Currency" });
+    expect(currencyBox).toBeDisabled();
+    expect(currencyBox).toHaveTextContent("Euro");
+    // The duration and frequency dropdowns have no placeholder: an empty canvas DropDown is an empty box.
+    for (const id of ["DurationYears_1", "DurationMonths_1"]) {
+      expect(within(dialog).getByTestId(`drp_LandLease_RightPanel_NewEditPeriod_BodyContent_${id}`)).not.toHaveTextContent("Select");
+    }
+    expect(within(dialog).getByTestId("drp_LandLease_RightPanel_NewEditCost_BodyContent_DistributionFrequency_Month_1")).not.toHaveTextContent("Select");
     // The five money figures (ACS:5807-6338).
     for (const id of ["FixedCosts_1", "PercentOfRevenues_1", "EuroMWh_1", "EuroMW_1", "EuroWTG_1"]) {
       expect(carries(root(`txt_LandLease_RightPanel_NewEditPeriod_BodyContent_${id}`), cls.blueItalic), id).toBe(true);

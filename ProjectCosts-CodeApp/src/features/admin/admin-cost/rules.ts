@@ -1272,10 +1272,16 @@ export type OpexFieldStandardKey =
  * (ACS:7189-90) and `txt_…_InflationProfile_1` under both captions (ACS:7506-07). Plain on every
  * `drp_…` (Currency ACS:5578, Duration, Aggregation, Distribution Frequency, Area — `BasePaletteColor`
  * only, no `FontColor` / `FontItalic`) and on the toggles.
+ *
+ * Description and Start Date carry the pair but are `DisplayMode.Disabled` (ACS:5091, 5314): a disabled
+ * modern TextInput draws its text in the disabled grey, so only the italic shows — grey italic in a white
+ * outlined box (user's canvas screenshot, 23 Nov 2026). They return `"italic"`; the drawer renders them disabled.
  */
 export function opexFieldStandard(field: OpexFieldStandardKey): FieldStandard {
   switch (field) {
-    case "description": case "startDate": case "inflationStartYear": case "inflationProfile":
+    case "description": case "startDate":
+      return "italic";
+    case "inflationStartYear": case "inflationProfile":
     case "fixCosts": case "ofRevenues": case "eurMwh": case "eurMw": case "eurWtg":
       return "standard";
     default:
