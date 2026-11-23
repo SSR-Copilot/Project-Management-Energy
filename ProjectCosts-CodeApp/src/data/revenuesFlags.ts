@@ -34,3 +34,20 @@ export const REVENUE_PERF: RevenuePerfFlags = {
   parallelVolumeWrites: true,
   wideCreateGroup: true,
 };
+
+/**
+ * Which rule seeds the Add Revenue Contract panel's standard price (Bidding Price, Tariff / Price p50 and p90) (D155).
+ *
+ *  - `"yearCurve"` (default): the unified rule of `domain/priceCurve.ts`. The curve's row for the COD year if there is
+ *    one, otherwise the row whose YEAR is nearest (equally near: the higher price), independent of row order. The
+ *    Milestones screen's default revenue uses the same function.
+ *  - `"canvasParity"`: the 1.21.753 canvas as shipped (SOURCE DEFECT 1 and 1.21.753-1, D-record of 17 Nov 2026). Outside
+ *    Italy the exact-year lookup cannot match and the fallback compares the COD year with the PRICES, so the answer is the
+ *    LAST row of the table, in whatever order Fabric returned it. A German wind project with COD 2034 got the 2025 row (52)
+ *    where the table has a 2034 row (60). Kept reachable as the rollback; flag it to the product owner before using it.
+ */
+export type PriceLookupMode = "yearCurve" | "canvasParity";
+
+export const REVENUE_PRICE: { lookup: PriceLookupMode } = {
+  lookup: "yearCurve",
+};

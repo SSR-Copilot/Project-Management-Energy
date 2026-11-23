@@ -8561,3 +8561,44 @@ The live app wins (the user, 21 Nov 2026): `sortTabs` orders by name A → Z, ca
 **Tests:** UT-ADCHK-013 (A → Z, case, tie-break), 014 / 015 (the twin), 017, UT-ADCHK-901 (the strip and the default tab). The fixture tab "DE PV" was renamed "DK PV" so the fixtures' default tab (DE Wind, whose tasks they hold) stays first under the new sort.
 
 **Open:** the extracted YAML should be refreshed from the live app (the migration's canvas-identity gate and the parity harness still read 1.21.709).
+
+## D155 — Revenues and Milestones: one price-curve rule, the COD year's row first, else the nearest year (23 Nov 2026; number PROVISIONAL, may be renumbered at merge)
+
+**Status:** working tree of `RounakDev1`, **uncommitted, NOT product-approved by a recorded sign-off (the user asked for the change on 23 Nov 2026), not run on DEV or QA**. Type: BUG against the user's expectation, a DIVERGENCE from the live canvas. It **reverses the answer of 17 Nov 2026** (canvas parity: question D6 of `gap-analysis/pm-revenues.md`, `priceForYearCanvasParity`).
+
+### 1. Report
+
+QA, code app, Revenues, Add Revenue Contract, project "Test - Marsel": Germany, Wind, COD 29 Jan 2034 (read from VSBCloud_QA, read-only). Label FiT opened with Bidding Price 52.00, Tariff / Price p50 and p90 52.00. The Fabric price curve of Germany has a `price / 2034` row with wind 60 (rows 2025 to 2035, wind 52 for 2025 and 2026, else 60; PV 47). Expected 60.00.
+
+### 2. Root cause
+
+1. `applyRevenueEngine` seeded with `priceForYearCanvasParity(…, exactRegion)`. `priceExactRegion` is `null` outside Italy, which switches the exact-year branch off (the canvas 1.21.753 added `country = locAreaWithRegion` to the lookup, BLANK outside Italy: SOURCE DEFECT 1.21.753-1). So the row of the COD year was never read for Germany.
+2. The fallback compares the COD YEAR with the PRICE columns (SOURCE DEFECT 1, the same comparison as the canvas L6018-6377). 2034 is greater than every price, so it returns `Last(prices)`, the last row of the table.
+3. Fabric returns the rows unsorted (`listRevenueAssumptions` has no order). In the QA table the last rows are 2026 and 2025, so "last" was the 2025 row: 52. The unit-test fixtures were in ascending year order, where "last" is the highest year, so the order dependence did not show.
+
+### 3. The rule (`domain/priceCurve.ts`, `priceForYearOnCurve`; one definition for both screens)
+
+1. The curve's row for the COD year, if there is one.
+2. Otherwise the row whose YEAR is nearest. This covers both ends: before the first year the first year's price, after the last year the last year's price, inside a gap the closer side.
+3. Two years equally near: the higher price (the canvas's own secondary sort, `"pv"/"wind", SortOrder.Descending`).
+
+It never reads an array position, so it does not depend on the order Fabric returns. A row with no usable price is not chosen as the nearest row; an exact row with a blank price answers blank. A year listed twice (a data error) uses the first row, as the canvas `LookUp`.
+
+### 4. What changed
+
+- `domain/priceCurve.ts` (new) and its test. `features/pm/revenues/rules.ts`: `priceForYear` is built on it; `seedPrice(…, mode)`; `p90Price` takes the mode; `applyRevenueEngine` takes `priceLookup` (default `REVENUE_PRICE.lookup`). `features/pm/milestones/rules.ts`: `pickPrice` is built on the same function (before, an exact tie went to the EARLIER year there and to the higher price in Revenues; now both take the higher price).
+- Switch `REVENUE_PRICE.lookup` in `data/revenuesFlags.ts`: `"yearCurve"` (default) or `"canvasParity"` (the 17 Nov behaviour, kept reachable as the rollback, CONVENTIONS rule 8).
+- Not changed: an existing contract keeps its saved price (only a new contract and the reset-to-standard seed read the curve); the Italian zone pools; the German FiT block (Bidding Price × correction factor = Tariff); the PPA rule (no standard, blank price).
+
+### 5. DIVERGENCES
+
+- From the live canvas: a German (or any non-Italian) project now opens with the COD year's curve row where the canvas shows the last row of the table. The user's expectation, 23 Nov 2026 ("it should be 60 when confirmed for 2034"). The canvas itself is unchanged; whoever fixes `country = locAreaWithRegion` there makes both agree.
+- Milestones: the default revenue's price in an exact tie between two years (see §4).
+
+### 6. Tests
+
+UT-PRICECURVE-001…011 (exact year on the QA curve in Fabric's order, PV, both ends, gap, tie, all 120 orderings of five years, blank prices, no year, duplicates); UT-REV-076 (the Add panel seeds the COD year, the parity mode is the old seed), UT-REV-077 (the QA case: Bidding Price, Tariff p50 and p90 60.00, the rollback mode 52.00, PV 47.00), UT-REV-078 (a COD after the curve takes the last YEAR). UT-REV-075 (the canvas parity function) is unchanged. Mutation-checked: with the mode set to `canvasParity`, UT-REV-076, 077 and 078 fail.
+
+### 7. Needs a live check
+
+Open Add Revenue Contract on the QA project with FiT (expect 60.00 / 60.00 / 60.00, correction factor 1.000) and, after the deploy, on a project whose COD year has no row (the nearest year's price). Italy: one price zone per project, unchanged.

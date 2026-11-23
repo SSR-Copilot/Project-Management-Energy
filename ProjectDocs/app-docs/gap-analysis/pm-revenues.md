@@ -235,7 +235,7 @@ Legend: COVERED / PARTIAL / MISSING / WRONG. A WRONG row quotes canvas vs code.
 1. **Version:** should the app follow 1.21.753 (Italy prefix slice, renamed zones, the zone-only price pool) or the 1.21.709 YAML on disk? Please confirm that 1.21.753 is the target and provide its YAML so the canvas-identity check runs against it (D4-D6).
 2. Should Add Contract open with an empty Type (canvas), or default to PPA? (B3)
 3. Should a locked or Draft page show the contracts and balancing grids read-only (canvas), or hide them? (S3)
-4. ~~Price fallback: should the screen use the corrected nearest-year selection or canvas parity (year-vs-price)? (D6)~~ — answered 17 Nov 2026: canvas parity (`priceForYearCanvasParity` with the 1.21.753 exact-year rule; see 02-OPEN-DECISIONS.md).
+4. ~~Price fallback: should the screen use the corrected nearest-year selection or canvas parity (year-vs-price)? (D6)~~ — answered 17 Nov 2026: canvas parity (`priceForYearCanvasParity` with the 1.21.753 exact-year rule; see 02-OPEN-DECISIONS.md). **Reversed 23 Nov 2026 (D155):** the Add panel seeds the COD year's row, else the nearest year (`domain/priceCurve.ts`); canvas parity stays behind `REVENUE_PRICE.lookup`.
 5. The balancing-price Patch writes no start/end date and no Owning Business Unit. Are the dates computed server-side? Should the code app write them? (D17)
 6. Tariff p90 for German FiT: should it be Bidding × CF p90 (canvas Value), or the p90 assumption price? (B12)
 7. Card gallery with fold and a per-card command bar (canvas), or a table with row selection (code)? (U5, B7)

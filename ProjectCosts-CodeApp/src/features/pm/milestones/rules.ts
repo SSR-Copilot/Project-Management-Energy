@@ -39,6 +39,7 @@ import {
   parseNumber, isTwoDecimal, inRange, isBlank, pfxRound, decimalSeparator, type Lang,
 } from "@/domain/powerFxNumeric";
 import { addDays, addMonths, addYears } from "@/domain/dates";
+import { priceForYearOnCurve, type PricePoint } from "@/domain/priceCurve";
 import { foundationCostAdded, foundationCostAddedBooleanReading } from "@/domain/foundationCost";
 import { dateFormat } from "@/domain/locale";
 import { DATE_PICKER_FORMAT, MODERN_DATE_PICKER_FORMAT, type CanvasDateFormat } from "@/domain/canvasDate";
@@ -1062,7 +1063,9 @@ export function contractDates(
 
 /**
  * Rule 26 — the `valuetype = "price"` row whose `category` equals `Text(Year(COD))`; if
- * none, clamp to the first/last row, otherwise pick the nearest year.
+ * none, the row of the nearest year (before the first year the first row, after the last year the last row),
+ * and the higher price when two years are equally near. D155: one rule with the Revenues screen
+ * (`domain/priceCurve.ts`); before, an exact tie went to the EARLIER year here and to the higher price there.
  *
  * SOURCE DEFECT, corrected: the canvas's clamp compares the COD YEAR to the PRICE
  * (`Value(recYear) < Value(First(recFilteredPrices).pv)`) and its nearest-match sorts on
@@ -1076,29 +1079,19 @@ export function pickPrice(
   technology: string | null,
   codYear: number,
 ): number | null {
-  const prices = rows.filter((r) => r.valuetype === "price");
-  if (prices.length === 0) return null;
-
-  const exact = prices.find((r) => r.category === String(codYear));
-  if (exact) {
-    const v = Number(pick(exact, technology));
-    return Number.isFinite(v) ? v : null;
-  }
-
-  const withYear = prices
-    .map((r) => ({ row: r, year: Number(r.category) }))
-    .filter((x) => Number.isFinite(x.year))
-    .sort((a, b) => a.year - b.year);
-  if (withYear.length === 0) return null;
-
-  const target =
-    codYear < withYear[0]!.year ? withYear[0]
-    : codYear > withYear[withYear.length - 1]!.year ? withYear[withYear.length - 1]
-    : withYear.reduce((best, x) =>
-        Math.abs(x.year - codYear) < Math.abs(best.year - codYear) ? x : best);
-
-  const v = Number(pick(target!.row, technology));
-  return Number.isFinite(v) ? v : null;
+  // D155: the one price-curve rule, shared with the Revenues screen (`domain/priceCurve.ts`): the COD year's row, else
+  // the nearest year, the higher price when two years are equally near, whatever order Fabric returned the rows in.
+  const points: PricePoint[] = rows
+    .filter((r) => r.valuetype === "price")
+    .map((r) => {
+      const raw = pick(r, technology);
+      return {
+        year: r.category === null || r.category.trim() === "" ? NaN : Number(r.category),
+        // `Number("")` and `Number(null)` are 0: a blank price must stay blank, not become a price of 0.
+        price: raw === null || raw === undefined || String(raw).trim() === "" ? NaN : Number(raw),
+      };
+    });
+  return priceForYearOnCurve(points, codYear);
 }
 
 export interface InflationSettings {

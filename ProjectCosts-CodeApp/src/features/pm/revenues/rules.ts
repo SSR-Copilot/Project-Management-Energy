@@ -35,10 +35,12 @@
  *
  * SOURCE DEFECTS — each is commented at its rule, canvas behaviour kept reachable:
  *  1. ambiguity 1 — the price-curve clamp/nearest fallback compares PRICES to YEARS.
- *     `priceForYear` implements the intended nearest-*year* selection;
- *     `priceForYearCanvasParity` reproduces the shipped comparison verbatim. The engine seeds
- *     with the CANVAS-PARITY one (user, 17 Nov 2026: Add Revenue Contract showed 60.00 where
- *     the canvas shows 52.00); `priceForYear` stays for when the source is fixed.
+ *     `priceForYear` implements the intended nearest-*year* selection (the unified rule of
+ *     `domain/priceCurve.ts`, shared with Milestones);
+ *     `priceForYearCanvasParity` reproduces the shipped comparison verbatim. The engine seeded
+ *     with the CANVAS-PARITY one from 17 Nov 2026 (the canvas showed 52.00 where the curve's COD-year
+ *     row is 60.00). Since 23 Nov 2026 (D155) it seeds with the unified year rule, the exact COD-year
+ *     row first; `REVENUE_PRICE.lookup = "canvasParity"` brings the canvas behaviour back.
  *  2. ambiguity 4 — Shift of COD bounds disagree between message (exclusive 0…24) and
  *     visibility (inclusive). `validateShiftOfCod` ports the visibility rule;
  *     `shiftOfCodMessageRuleCanvasParity` reproduces the message rule.
@@ -67,7 +69,8 @@ import { CHOICE_FINANCE, ES, ES_FINANCE } from "@/data/dataverseNames";
 import { bind, dateOnly } from "@/data/odata";
 import { createdRowRef, refusePlan, together, type PlannedWrite, type WritePlan } from "@/data/writePlan";
 import { LEAF_DELETE_CONCURRENCY, WIDE_GROUP_CONCURRENCY } from "@/data/concurrency";
-import { REVENUE_PERF, type RevenuePerfOverrides } from "@/data/revenuesFlags";
+import { REVENUE_PERF, REVENUE_PRICE, type PriceLookupMode, type RevenuePerfOverrides } from "@/data/revenuesFlags";
+import { priceForYearOnCurve, type PricePoint } from "@/domain/priceCurve";
 import type { PlanJob } from "@/data/usePlanWrite";
 
 /* ═════════════════════════════════════════════════════════════════════ types ════ */
@@ -741,50 +744,25 @@ export const priceRows = (rows: readonly AssumptionRow[]): AssumptionRow[] =>
   rows.filter((r) => r.valuetype === "price");
 
 /**
- * Rule 11 — price-curve lookup with clamp-and-nearest fallback, INTENDED behaviour.
+ * Rule 11 — price-curve lookup, the UNIFIED rule (D155; the default, `REVENUE_PRICE.lookup = "yearCurve"`).
  *
  * The exact-year branch is unambiguous: `LookUp(Filter(…, valuetype = "price" &&
- * category = Text(Year(COD))), true)` and take the tech column. The fallback is not —
- * see `priceForYearCanvasParity` and defect 1 at the top of this file. Here the year
- * lives in `category`, which is what makes the curve a curve: below the first year clamp
- * to the first price, above the last year clamp to the last, otherwise take the row whose
- * `category` year is nearest, breaking ties on the higher price (the canvas's
- * `"pv", SortOrder.Descending` secondary sort).
+ * category = Text(Year(COD))), true)` and take the tech column. The canvas fallback is not (see
+ * `priceForYearCanvasParity` and defect 1 at the top of this file), so the rule is the one of
+ * `domain/priceCurve.ts`, shared with the Milestones screen: the row for the COD year if there is one, otherwise
+ * the row whose `category` YEAR is nearest (before the first year that is the first row, after the last year the
+ * last row), the higher price when two years are equally near (the canvas's `"pv", SortOrder.Descending`
+ * secondary sort). The answer does not depend on the order Fabric returns the rows in.
  */
 export function priceForYear(
   rows: readonly AssumptionRow[], tech: Technology, codYear: number, language: Lang = "en-US",
 ): number | null {
-  const prices = priceRows(rows);
-  if (prices.length === 0) return null;
-
-  const exact = prices.find((r) => r.category === String(codYear));
-  if (exact) {
-    const v = assumptionNumber(techColumn(exact, tech), language);
-    return Number.isNaN(v) ? null : v;
-  }
-
-  const priceOf = (r: AssumptionRow) => assumptionNumber(techColumn(r, tech), language);
-  const yearOf = (r: AssumptionRow) => Number(r.category);
-
-  const first = prices[0]!;
-  const last = prices[prices.length - 1]!;
-  if (codYear < yearOf(first)) {
-    const v = priceOf(first);
-    return Number.isNaN(v) ? null : v;
-  }
-  if (codYear > yearOf(last)) {
-    const v = priceOf(last);
-    return Number.isNaN(v) ? null : v;
-  }
-
-  const ranked = [...prices].sort((a, b) => {
-    const da = Math.abs(yearOf(a) - codYear);
-    const db = Math.abs(yearOf(b) - codYear);
-    if (da !== db) return da - db;
-    return priceOf(b) - priceOf(a);
-  });
-  const v = priceOf(ranked[0]!);
-  return Number.isNaN(v) ? null : v;
+  const points: PricePoint[] = priceRows(rows).map((r) => ({
+    // A blank `category` is no year (`Number("")` and `Number(null)` are 0, which would be a year 0).
+    year: (r.category ?? "").trim() === "" ? NaN : Number(r.category),
+    price: assumptionNumber(techColumn(r, tech), language),
+  }));
+  return priceForYearOnCurve(points, codYear);
 }
 
 /**
@@ -843,17 +821,34 @@ export function priceForYearCanvasParity(
 }
 
 /**
+ * D155 — the standard price the Add panel seeds, by lookup mode (`REVENUE_PRICE.lookup`).
+ *
+ * `"yearCurve"`: the unified rule (`priceForYear`); `exactRegion` is not needed, because the Italian pool is
+ * already cut to the project's zone by `pricePoolFor`.
+ * `"canvasParity"`: the 1.21.753 canvas as shipped (`priceForYearCanvasParity`, SOURCE DEFECT 1 / 1.21.753-1).
+ */
+export function seedPrice(
+  rows: readonly AssumptionRow[], tech: Technology, codYear: number, language: Lang,
+  mode: PriceLookupMode, exactRegion?: string | null,
+): number | null {
+  return mode === "canvasParity"
+    ? priceForYearCanvasParity(rows, tech, codYear, language, exactRegion)
+    : priceForYear(rows, tech, codYear, language);
+}
+
+/**
  * Rule 13 — the p90 price only exists for wind. `locRevenuePriceP90` is a
  * `Switch(recTechnologyType, Technology.Wind, …, Blank())` with NO PV branch, so PV
  * projects get blank and the p90 field is not rendered. Its lookup (L6394-6461) is the p50 one,
- * so it shares the canvas-parity fallback and `exactRegion` (see `priceForYearCanvasParity`).
+ * so it follows the same mode as the p50 price (`seedPrice`; the canvas-parity mode shares
+ * `exactRegion`, see `priceForYearCanvasParity`).
  */
 export function p90Price(
   rows: readonly AssumptionRow[], tech: Technology, codYear: number, language: Lang = "en-US",
-  exactRegion?: string | null,
+  exactRegion?: string | null, mode: PriceLookupMode = REVENUE_PRICE.lookup,
 ): number | null {
   if (tech !== "Wind") return null;
-  return priceForYearCanvasParity(rows, tech, codYear, language, exactRegion);
+  return seedPrice(rows, tech, codYear, language, mode, exactRegion);
 }
 
 /**
@@ -3248,6 +3243,8 @@ export function applyRevenueEngine(input: {
   profiles: readonly CountryInflationProfileRow[];
   language?: Lang;
   today?: Date;
+  /** Overrides `REVENUE_PRICE.lookup` for this call (tests; a caller that decided differently). D155. */
+  priceLookup?: PriceLookupMode;
 }): RevenueFormState {
   const { project, rows, region, label } = input;
   const lang = input.language ?? "en-US";
@@ -3259,14 +3256,18 @@ export function applyRevenueEngine(input: {
   const end = engineEndDate(start, dur.years, dur.months);
   const codYear = project.cod?.getFullYear() ?? (input.today ?? new Date()).getFullYear();
   const pricePool = pricePoolFor(rows, project.countryName, region);
-  // Canvas parity (SOURCE DEFECT 1, kept on purpose — user, 17 Nov 2026): outside Italy this is the
-  // LAST price row, as the live canvas seeds it.
+  // DIVERGENCE (D155, product owner 23 Nov 2026): the standard price is the curve's row for the COD year, else the
+  // row of the nearest year (`domain/priceCurve.ts`). The canvas 1.21.753 as shipped (kept as
+  // `REVENUE_PRICE.lookup = "canvasParity"`, `input.priceLookup` overrides) cannot match the exact year outside Italy
+  // and returns the LAST row in Fabric's order: a German wind project with COD 2034 got 52 (the 2025 row) where the
+  // curve has a 2034 row of 60.
+  const mode = input.priceLookup ?? REVENUE_PRICE.lookup;
   const exactRegion = priceExactRegion(project.countryName, region);
   // `priceValue: Value(If(recStandardAssumptionExists, …, Blank()))` (L5996-6391, p90 L6394-6461):
   // a type with no standard (e.g. PPA on a German project) opens with a BLANK Tariff / Price — the
   // live canvas, 17 Nov 2026; this app had seeded it from the curve regardless.
-  const price = exists ? priceForYearCanvasParity(pricePool, tech, codYear, lang, exactRegion) : null;
-  const priceP90 = exists ? p90Price(pricePool, tech, codYear, lang, exactRegion) : null;
+  const price = exists ? seedPrice(pricePool, tech, codYear, lang, mode, exactRegion) : null;
+  const priceP90 = exists ? p90Price(pricePool, tech, codYear, lang, exactRegion, mode) : null;
   const infl = inflation(rows, tech, project, { standardAssumptionExists: exists, language: lang });
   const neg = negativePriceState(rows, tech, label, input.productionExists);
   const shows = showsGermanFitBlock(project.countryName, label, tech);

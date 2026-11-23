@@ -486,25 +486,63 @@ describe("price curve (rule 11 / source ambiguity 1)", () => {
     expect(p90Price(curve, "Wind", 2028)).toBe(65);
   });
 
-  it("the Add panel seeds with the CANVAS fallback: outside Italy the last price row, even with an exact COD row (17 Nov 2026)", () => {
-    // Live canvas: a German wind FiT contract opened with Bidding Price 52.00 where this app showed
-    // 60.00 (the COD-year row). 1.21.753 matches the exact year only on `country = locAreaWithRegion`,
-    // blank outside Italy, so the canvas falls through to the year-vs-price fallback: the LAST row.
-    // `label` is made the country's standard type (`valuetype = "revenuetype"`), or nothing is seeded.
-    const engine = (label: string) => applyRevenueEngine({
+  it("UT-REV-076 the Add panel seeds the COD year's own row outside Italy (D155; the 17 Nov 2026 canvas-parity seed is the other mode)", () => {
+    // Before D155 a German wind FiT contract opened with the LAST price row (75 here, 52 in QA) although the curve has
+    // a row for the COD year (65). `label` is made the country's standard type (`valuetype = "revenuetype"`), or
+    // nothing is seeded.
+    const engine = (label: string, priceLookup?: "yearCurve" | "canvasParity") => applyRevenueEngine({
       project: project(), rows: [row("revenuetype", "", label.toLowerCase(), null), ...curve], region: null, label,
-      productionExists: false, subaccountId: "sub-1", profiles: [], today: d("2026-10-20"),
+      productionExists: false, subaccountId: "sub-1", profiles: [], today: d("2026-10-20"), priceLookup,
     });
-    expect(priceForYear(curve, "Wind", 2028)).toBe(65); // the intended rule, kept but not used
-    expect(engine("PPA").tariff).toBe("75.00");
-    expect(engine("PPA").tariffP90).toBe("75.00");
+    expect(priceForYear(curve, "Wind", 2028)).toBe(65);
+    expect(engine("PPA").tariff).toBe("65.00");
+    expect(engine("PPA").tariffP90).toBe("65.00");
     const fit = engine("FiT");
-    expect(fit.biddingPrice).toBe("75.00");
-    expect(fit.tariff).toBe("75.00");
-    expect(fit.tariffP90).toBe("75.00");
+    expect(fit.biddingPrice).toBe("65.00");
+    expect(fit.tariff).toBe("65.00");
+    expect(fit.tariffP90).toBe("65.00");
+    // The canvas-parity mode is still reachable, and is exactly the old seed.
+    const parity = engine("FiT", "canvasParity");
+    expect(parity.biddingPrice).toBe("75.00");
+    expect(parity.tariff).toBe("75.00");
+    expect(parity.tariffP90).toBe("75.00");
     // Italy still matches its own zone's COD-year row exactly.
     expect(priceExactRegion("Italy", "Italy_North")).toBe("Italy_North");
     expect(priceExactRegion("Germany", "Italy_North")).toBeNull();
+  });
+
+  it("UT-REV-077 the QA report: German wind FiT, COD 2034, the curve in Fabric's row order → Bidding Price, Tariff p50 and p90 are 60.00", () => {
+    // The 'Test - Marsel' case of 23 Nov 2026. The table ends with the 2026 and 2025 rows (wind 52), so the canvas-parity
+    // seed (the LAST row) gave 52.00 where the 2034 row says 60.
+    const order = [2030, 2029, 2033, 2034, 2035, 2031, 2032, 2027, 2028, 2026, 2025];
+    const prices = order.map((y) => row("price", String(y), y <= 2026 ? "52" : "60", "47"));
+    const engine = (priceLookup?: "yearCurve" | "canvasParity") => applyRevenueEngine({
+      project: project({ cod: d("2034-01-29"), technology: "Wind" }),
+      rows: [row("revenuetype", "", "fit", "fit"), ...prices], region: null, label: "FiT",
+      productionExists: false, subaccountId: "sub-1", profiles: [], today: d("2026-11-23"), priceLookup,
+    });
+    const fit = engine();
+    expect(fit.biddingPrice).toBe("60.00");
+    expect(fit.tariff).toBe("60.00");
+    expect(fit.tariffP90).toBe("60.00");
+    expect(fit.correctionFactor).toBe("1.000");
+    // The rollback mode reproduces the reported 52.00.
+    expect(engine("canvasParity").biddingPrice).toBe("52.00");
+    // PV has no Bidding Price block and reads the PV column (47), also by year.
+    const pv = applyRevenueEngine({
+      project: project({ cod: d("2034-01-29"), technology: "PV" }),
+      rows: [row("revenuetype", "", "fit", "fit"), ...prices], region: null, label: "FiT",
+      productionExists: false, subaccountId: "sub-1", profiles: [], today: d("2026-11-23"),
+    });
+    expect(pv.tariff).toBe("47.00");
+  });
+
+  it("UT-REV-078 a COD after the last year of the curve seeds the last YEAR's price, not the last row of the table", () => {
+    const order = [2030, 2029, 2033, 2034, 2035, 2031, 2032, 2027, 2028, 2026, 2025];
+    const prices = order.map((y) => row("price", String(y), y <= 2026 ? "52" : "60", "47"));
+    expect(priceForYear(prices, "Wind", 2040)).toBe(60);
+    expect(priceForYear(prices, "Wind", 2020)).toBe(52);
+    expect(p90Price(prices, "Wind", 2040)).toBe(60);
   });
 
   it("a type with no standard assumption opens with a BLANK Tariff / Price, curve or not (PPA on a FiT country, 17 Nov 2026)", () => {
