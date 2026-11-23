@@ -819,10 +819,12 @@ describe("Panel control styling (canvas FontColor / FontItalic, fixed per contro
     for (const f of ["applyVat", "depreciation"] as const) expect(devexFieldStandard(f), f).toBe(false);
   });
 
-  it("UT-ADCOST-940 contract / period panel: blue italic on Description, Start Date, the five money figures, Inflation Start Year and Inflation Profile; plain on Currency and every dropdown / toggle", () => {
-    for (const f of ["description", "startDate", "fixCosts", "ofRevenues", "eurMwh", "eurMw", "eurWtg", "inflationStartYear", "inflationProfile"] as const) {
+  it("UT-ADCOST-940 contract / period panel: blue italic on the five money figures, Inflation Start Year and Inflation Profile; italic only on the disabled Description and Start Date; plain on Currency and every dropdown / toggle", () => {
+    for (const f of ["fixCosts", "ofRevenues", "eurMwh", "eurMw", "eurWtg", "inflationStartYear", "inflationProfile"] as const) {
       expect(opexFieldStandard(f), f).toBe("standard");
     }
+    // `txt_…_Description_1` / `txt_…_StartDate` are `DisplayMode.Disabled` (ACS:5091, 5314): grey italic, the blue never shows.
+    for (const f of ["description", "startDate"] as const) expect(opexFieldStandard(f), f).toBe("italic");
     // `drp_LandLease_RightPanel_NewEditCost_BodyContent_Currency_1` (ACS:5578) sets no FontColor / FontItalic — it was wrongly blue italic.
     for (const f of ["currency", "duration", "aggregation", "distributionFrequency", "area", "toggles"] as const) {
       expect(opexFieldStandard(f), f).toBe(false);

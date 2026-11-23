@@ -20,7 +20,7 @@
  * visible caption (CONVENTIONS rule 16).
  */
 import { useMemo, useState } from "react";
-import { Dropdown, Field, Option, Switch, Text } from "@fluentui/react-components";
+import { Dropdown, Field, Option, Switch, mergeClasses } from "@fluentui/react-components";
 import { FormPanel, ReadOnlyField, TextField } from "@/components";
 import { type CostCurrency } from "@/data/adminCost";
 import { CONTRACT_TYPE } from "@/domain/costStandards";
@@ -78,8 +78,11 @@ export function ContractPeriodDrawer(props: ContractPeriodDrawerProps) {
    * The value / selection / change props of one single-select dropdown. `aria-label` and
    * `data-testid` stay literal at the call site, so the canvas-identity gate compares them.
    */
+  // No placeholder: a modern `DropDown@0.0.45` with no selection is an empty box (user's canvas screenshot, 23 Nov 2026).
+  // The open list is the canvas list (`listbox`): as wide as the box, 27 px rows, blue hover, about twenty rows then scroll.
   const choiceProps = (options: readonly Choice[], value: number | null, onChange: (v: number | null) => void, width?: number) => ({
-    placeholder: "Select",
+    listbox: { className: styles.listbox },
+    positioning: { matchTargetSize: "width" as const },
     ...(width ? { style: { minWidth: width, width } } : {}),
     value: options.find((o) => o.value === value)?.label ?? "",
     selectedOptions: value === null ? [] : [String(value)],
@@ -111,6 +114,7 @@ export function ContractPeriodDrawer(props: ContractPeriodDrawerProps) {
       // `lbl_LandLease_RightPanel_NewEditPeriod_BodyHeader_1.Text` (`opexPanelTitle`).
       title={opexPanelTitle(panel.mode, panel.subaccount.name)}
       width="period"
+      panelClassName={styles.panel}
       closeTestId="ico_LandLease_RightPanel_NewEditPeriod_BodyheaderCancel_1"
       // The shared footer's Cancel goes through the panel's discard guard; a save in flight
       // disables both buttons and locks the panel. The commercial hint sits left (the footer's `hint`).
@@ -130,43 +134,43 @@ export function ContractPeriodDrawer(props: ContractPeriodDrawerProps) {
       dirty={isDirty(form, pristine)}
       {...(saving ? { busyLabel: MSG.savingNamed(form.description) } : {})}
     >
-      <div className={styles.form}>
-        {!contractLevel ? (
-          // NEW — no canvas equivalent: the canvas only disables these fields, without a note.
-          <Text className={styles.readOnlyNote}>
-            Inflation and External Contract are contract-level settings inherited from Period 1; edit Period 1 to change them.
-          </Text>
-        ) : null}
+      <div className={mergeClasses(styles.form, styles.disabledLook, styles.periodFields)}>
+        {/*
+          Period 2+ / Add Period: the inflation block and External Contract are disabled, as in the canvas. The port's
+          note "Inflation and External Contract are contract-level settings inherited from Period 1…" had no canvas
+          equivalent and was removed (user, 23 Nov 2026); the disabled controls carry the meaning.
+        */}
         <div className={styles.columns}>
-          <div className={styles.column}>
+          <div className={mergeClasses(styles.column, styles.periodColumn)}>
             {/*
-              `lbl_LandLease_RightPanel_NewEditCost_BodyContentDescription_1.Text` — "Description" (derived, locked);
-              blue italic (`txt_…_Description_1`, ACS:5092-93). No required mark: the canvas asterisk
-              `lbl_…_DescriptionAsterisk_1.Visible: =//IsBlank(locSelectedLandLeasePeriod)` (ACS:5192) is
-              commented out, so it is never visible.
+              `lbl_LandLease_RightPanel_NewEditCost_BodyContentDescription_1.Text` — "Description" (derived, locked):
+              `txt_…_Description_1` is `DisplayMode.Disabled` with the italic pair (ACS:5091-93), so it draws grey italic
+              in a white outlined box (`disabledLook`; user's canvas screenshot, 23 Nov 2026 — it was blue italic in the
+              filled box). No required mark: the canvas asterisk `lbl_…_DescriptionAsterisk_1.Visible:
+              =//IsBlank(locSelectedLandLeasePeriod)` (ACS:5192) is commented out, so it is never visible.
             */}
-            <ReadOnlyField skin="plain" label="Description" value={form.description} disabled={false}
+            <ReadOnlyField skin="plain" label="Description" value={form.description}
               standard={opexFieldStandard("description")}
               testId="txt_LandLease_RightPanel_NewEditCost_BodyContent_Description_1" />
-            {/* `lbl_LandLease_RightPanel_NewEditCost_BodyContent_StartDate_1.Text` — "Start Date" (derived, locked); blue italic (ACS:5315-16). */}
-            <ReadOnlyField skin="plain" label="Start Date" value={form.startDate} disabled={false}
+            {/* `lbl_LandLease_RightPanel_NewEditCost_BodyContent_StartDate_1.Text` — "Start Date" (derived, locked); disabled, italic (ACS:5314-16). */}
+            <ReadOnlyField skin="plain" label="Start Date" value={form.startDate}
               standard={opexFieldStandard("startDate")}
               testId="txt_LandLease_RightPanel_NewEditCost_BodyContent_StartDate" />
             {/* `lbl_LandLease_RightPanel_NewEditPeriod_BodyContent_DurationYears_1.Text` — "Duration". */}
             <Field label="Duration" required {...errorProps("duration")}>
-              <div className={styles.inline}>
-                {/* `drp_…_DurationYears_1.AccessibleLabel` — "Year"; `drp_…_DurationMonths_1.AccessibleLabel` — "Month". */}
+              <div className={styles.durationRow}>
+                {/* `drp_…_DurationYears_1.AccessibleLabel` — "Year" (100 wide); `drp_…_DurationMonths_1.AccessibleLabel` — "Month" (120 wide). */}
                 <Dropdown
                   aria-label="Year"
                   data-testid="drp_LandLease_RightPanel_NewEditPeriod_BodyContent_DurationYears_1"
-                  {...choiceProps(YEAR_OPTIONS, form.years, (v) => setForm((f) => withYears(f, v)), 110)}
+                  {...choiceProps(YEAR_OPTIONS, form.years, (v) => setForm((f) => withYears(f, v)), 100)}
                 >
                   {optionsOf(YEAR_OPTIONS)}
                 </Dropdown>
                 <Dropdown
                   aria-label="Month"
                   data-testid="drp_LandLease_RightPanel_NewEditPeriod_BodyContent_DurationMonths_1"
-                  {...choiceProps(MONTH_OPTIONS, form.months, (v) => setForm((f) => ({ ...f, months: v })), 130)}
+                  {...choiceProps(MONTH_OPTIONS, form.months, (v) => setForm((f) => ({ ...f, months: v })), 120)}
                 >
                   {optionsOf(MONTH_OPTIONS)}
                 </Dropdown>
@@ -174,11 +178,18 @@ export function ContractPeriodDrawer(props: ContractPeriodDrawerProps) {
             </Field>
             {/*
               `lbl_LandLease_RightPanel_NewEditCost_BodyContent_Currency_1.Text` — "Currency" (locked to EUR / PLN).
-              Plain: `drp_…_Currency_1` (ACS:5578) sets no `FontColor` / `FontItalic`.
+              `drp_…_Currency_1` (ACS:5578-5600) is a `DisplayMode.Disabled` DropDown: the currency name in a disabled
+              combobox — white box, grey outline, grey text, the chevron (user's canvas screenshot, 23 Nov 2026; it was a
+              plain read-only input). No `FontColor` / `FontItalic`: plain.
             */}
-            <ReadOnlyField skin="plain" label="Currency" value={currencyName} disabled={false}
-              standard={opexFieldStandard("currency")}
-              testId="drp_LandLease_RightPanel_NewEditCost_BodyContent_Currency_1" />
+            <Field label="Currency">
+              <Dropdown
+                aria-label="Currency" data-testid="drp_LandLease_RightPanel_NewEditCost_BodyContent_Currency_1"
+                disabled value={currencyName} selectedOptions={[cur]}
+              >
+                <Option value={cur}>{currencyName}</Option>
+              </Dropdown>
+            </Field>
             {/* `lbl_…_FixedCosts_1.Text` — `"Fix Costs p.a. [" & {EUR|PLN} & "]"`. */}
             <TextField skin="plain" label={`Fix Costs p.a. [${cur}]`}
               testId="txt_LandLease_RightPanel_NewEditPeriod_BodyContent_FixedCosts_1" {...figure("fixCosts")} />
@@ -215,7 +226,7 @@ export function ContractPeriodDrawer(props: ContractPeriodDrawerProps) {
             </Field>
           </div>
 
-          <div className={styles.column}>
+          <div className={mergeClasses(styles.column, styles.periodColumn)}>
             {ll ? (
               <>
                 {/* `tgl_…_Secured.Label` — "Secured"; `tgl_…_AllocationToAllWTGs.Label` — "Allocate to all WTGs". Locked. */}
@@ -223,18 +234,22 @@ export function ContractPeriodDrawer(props: ContractPeriodDrawerProps) {
                 <Switch label="Allocate to all WTGs" aria-label="Allocate to all WTGs" data-testid="tgl_LandLease_RightPanel_NewEditContractPeriod_BodyContent_AllocationToAllWTGs" checked disabled />
               </>
             ) : null}
-            {/* `tgl_LandLease_RightPanel_NewEditCost_BodyContent_InflationProfile_1.Label` — "Inflation Profile". */}
-            <Switch
-              label="Inflation Profile"
-              aria-label="Inflation Profile"
-              data-testid="tgl_LandLease_RightPanel_NewEditCost_BodyContent_InflationProfile_1"
-              checked={form.useInflation}
-              disabled={!contractLevel}
-              onChange={(_, d) => setForm((f) => withInflation(f, d.checked, pristine))}
-            />
-            {form.useInflation ? (
-              <>
-                {/* `tgl_LandLease_RightPanel_NewEditCost_BodyContent_CountryInflationProfile_1.Label` — "Country Inflation Profile". */}
+            {/*
+              `tgl_LandLease_RightPanel_NewEditCost_BodyContent_InflationProfile_1.Label` — "Inflation Profile", with
+              `tgl_…_CountryInflationProfile_1` ("Country Inflation Profile") 35 px under it in the same container
+              (`Y: =35`, ACS:6990): the two sit closer than the other toggles, which have a 50 px container each
+              (`inflationToggles`; user screenshot pair, 23 Nov 2026).
+            */}
+            <div className={styles.inflationToggles}>
+              <Switch
+                label="Inflation Profile"
+                aria-label="Inflation Profile"
+                data-testid="tgl_LandLease_RightPanel_NewEditCost_BodyContent_InflationProfile_1"
+                checked={form.useInflation}
+                disabled={!contractLevel}
+                onChange={(_, d) => setForm((f) => withInflation(f, d.checked, pristine))}
+              />
+              {form.useInflation ? (
                 <Switch
                   label="Country Inflation Profile"
                   aria-label="Country Inflation Profile"
@@ -243,9 +258,17 @@ export function ContractPeriodDrawer(props: ContractPeriodDrawerProps) {
                   disabled={!contractLevel}
                   onChange={(_, d) => setForm((f) => withCountryInflation(f, d.checked, pristine))}
                 />
-                {/* `lbl_…_InflationStartYear_1.Text` — "Inflation Start Year"; the value is `MSG.inflationStartYear`; blue italic (ACS:7189-90). */}
-                <ReadOnlyField skin="plain" label="Inflation Start Year" value={MSG.inflationStartYear} required disabled={false}
-                  standard={opexFieldStandard("inflationStartYear")}
+              ) : null}
+            </div>
+            {form.useInflation ? (
+              <>
+                {/*
+                  `lbl_…_InflationStartYear_1.Text` — "Inflation Start Year"; the value is `MSG.inflationStartYear`; blue italic
+                  (ACS:7189-90). `txt_…_InflationStartYear_1.DisplayMode` is Disabled for Period 2+ / Add Period (ACS:7175): then
+                  it is the greyed, white outlined box (`disabledLook`), as the canvas Add Period panel shows (user, 23 Nov 2026).
+                */}
+                <ReadOnlyField skin="plain" label="Inflation Start Year" value={MSG.inflationStartYear} required disabled={!contractLevel}
+                  standard={contractLevel ? opexFieldStandard("inflationStartYear") : "italic"}
                   testId="txt_LandLease_RightPanel_NewEditCost_BodyContent_InflationStartYear_1" />
               </>
             ) : null}
@@ -255,7 +278,8 @@ export function ContractPeriodDrawer(props: ContractPeriodDrawerProps) {
                 <Dropdown
                   aria-label="Area"
                   data-testid="drp_LandLease_RightPanel_NewEditCost_BodyContent_AreaInflationProfile_1"
-                  placeholder="Select"
+                  listbox={{ className: styles.listbox }}
+                  positioning={{ matchTargetSize: "width" }}
                   disabled={!contractLevel}
                   value={form.area}
                   selectedOptions={form.area ? [form.area] : []}
@@ -269,12 +293,13 @@ export function ContractPeriodDrawer(props: ContractPeriodDrawerProps) {
               `txt_LandLease_RightPanel_NewEditCost_BodyContent_InflationProfile_1` is ONE canvas input
               whose caption (`lbl_…_InflationProfile_1.Text`) switches: `If(Country toggle, "Country
               Inflation Profile", "Custom Inflation Profile [%]")`. Both branches carry its name and its
-              blue italic pair (ACS:7506-07).
+              blue italic pair (ACS:7506-07). Period 2+ / Add Period: the input is Disabled (ACS:7479) — the
+              Country branch is then the greyed, white outlined box.
             */}
             {form.useInflation ? (
               form.useCountryInflation ? (
-                <ReadOnlyField skin="plain" label="Country Inflation Profile" value="Country Inflation Profile" disabled={false}
-                  standard={opexFieldStandard("inflationProfile")}
+                <ReadOnlyField skin="plain" label="Country Inflation Profile" value="Country Inflation Profile" disabled={!contractLevel}
+                  standard={contractLevel ? opexFieldStandard("inflationProfile") : "italic"}
                   testId="txt_LandLease_RightPanel_NewEditCost_BodyContent_InflationProfile_1" />
               ) : (
                 <TextField skin="plain"
