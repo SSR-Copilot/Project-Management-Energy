@@ -19,7 +19,7 @@
  */
 import { useMemo, useState } from "react";
 import {
-  Checkbox, Dropdown, Field, Input, mergeClasses, Option, Radio, RadioGroup, Text, Textarea,
+  Checkbox, Dropdown, Field, mergeClasses, Option, Radio, RadioGroup, Text, Textarea,
 } from "@fluentui/react-components";
 import { FormPanel, PANEL_RADIO_ROW, TextField, useStandardListboxStyles, useStandardValueClass } from "@/components";
 import type { CapexHierarchy, DevexCost } from "@/data/adminCost";
@@ -76,6 +76,8 @@ export function DevexCostDrawer(props: DevexCostDrawerProps) {
       // `lbl_AdminCost_RightPanel_Form_AddStandardCost_Header_title.Text` (`devexPanelTitle`).
       title={devexPanelTitle(editing, hierarchy)}
       width="narrow"
+      // Semibold captions with the red `*` before them (`canvas.css`), as the canvas labels + `*_Asterisk` pairs.
+      panelClassName="devex-canvas-panel"
       closeTestId="ico_btn_AdminCost_RightPanel_Form_AddStandardCost_Header_Cancel"
       // The shared footer's Cancel goes through the panel's discard guard; a save in
       // flight disables both buttons and locks the panel (brand-outline Cancel).
@@ -113,6 +115,9 @@ export function DevexCostDrawer(props: DevexCostDrawerProps) {
                 key={label}
                 label={{ children: label, className: standardClass(devexFieldStandard("clusters")) }}
                 value={String(i + 1)}
+                // The `*` belongs to the "Select Cluster" caption only; without this the Field passes
+                // `required` down and every cluster label grew its own star (user screenshot, 23 Nov 2026).
+                required={false}
                 aria-label={label}
                 data-testid={`chk_AdminCost_RightPanel_SelectCluster${i + 1}`}
                 checked={form.clusters[i]}
@@ -124,20 +129,24 @@ export function DevexCostDrawer(props: DevexCostDrawerProps) {
 
         {/*
           `lbl_AdminCost_RightPanel_Form_AddCost_Fields_Distribution_Frequency.Text` — "Distribution
-          Frequency". The canvas ComboBox is disabled with 3 Months; shown as its fixed value. Italic
-          only — `cmb_…_Distribution_Frequency` sets `FontItalic` without a `FontColor` (ACS:10085).
+          Frequency". The canvas ComboBox is disabled with 3 Months: a disabled dropdown showing that one
+          value, chevron and all (it had been a plain disabled input, user screenshot pair, 23 Nov 2026).
+          Italic only — `cmb_…_Distribution_Frequency` sets `FontItalic` without a `FontColor` (ACS:10085).
         */}
         <Field label="Distribution Frequency" required>
-          <Input
+          <Dropdown
             className={mergeClasses(standardClass(devexFieldStandard("distributionFrequency")))}
             value="3 Months"
+            selectedOptions={["3"]}
             disabled
             aria-label="Distribution Frequency"
             data-testid="cmb_AdminCost_RightPanel_Form_AddCost_Fields_Distribution_Frequency"
-          />
+          >
+            <Option value="3">3 Months</Option>
+          </Dropdown>
         </Field>
 
-        <div className={styles.inline}>
+        <div className={styles.stack}>
           {/*
             `chk_AdminCost_RightPanel_Form_AddCost_Fields_ApplyVat.Label` / `_Depreciation.Label` — verbatim; locked on.
             Plain: `FontColor: =gblAppColors.Label.Color`, no `FontItalic` (ACS:10152 / 10164, `devexFieldStandard`).

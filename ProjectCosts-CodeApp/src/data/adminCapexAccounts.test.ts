@@ -104,8 +104,8 @@ vi.mock("@/generated/services/Vsb_capexcostsService", () => ({
 
 import {
   DeleteBlockedError, DuplicateNumberError, PartialStepError, RecordGoneError,
-  cleanUpForecastCosts, createCapexAccount, deactivateCapexAccount,
-  deactivateCapexSubaccount, deleteCapexAccount, deleteCapexSubaccount, deleteCostsFilter,
+  cleanUpForecastCosts, createCapexAccount, deactivateCapexAccount, deactivateCapexAccountStatus,
+  deactivateCapexSubaccount, deactivateCapexSubaccountStatus, deleteCapexAccount, deleteCapexSubaccount, deleteCostsFilter,
   loadCapexAccountRows, numberExists, PAID_EXCLUSION, saveCapexOrder, zeroCostsFilter,
 } from "./adminCapexAccounts";
 
@@ -287,11 +287,11 @@ describe("Deletes", () => {
 describe("Forecast cost clean-up", () => {
   // The audit found the original `vsb_costpaid ne true` wrong: Dataverse `ne` never
   // matches null, so rows with no paid flag escaped the clean-up. Only explicit `true` is spared.
-  it("UT-ADCAPEX-023 Builds the exact null-safe filters for Y=2026, M=10, skipping only rows marked paid", () => {
+  it("UT-ADCAPEX-023 Builds the exact null-safe filters for Y=2026, M=10, skipping only rows marked paid (and, for the zeroing, rows already at 0)", () => {
     expect(PAID_EXCLUSION).toBe("(vsb_costpaid eq false) or (vsb_costpaid eq null)");
     expect(zeroCostsFilter([SUB_A], 2026, 10)).toBe(
       `(_vsb_contract_value eq ${SUB_A}) and (vsb_year eq 2026) and (vsb_month gt 10) and ` +
-        "((vsb_costpaid eq false) or (vsb_costpaid eq null))",
+        "((vsb_costpaid eq false) or (vsb_costpaid eq null)) and (vsb_cost ne 0)",
     );
     expect(deleteCostsFilter([SUB_A], 2026)).toBe(
       `(_vsb_contract_value eq ${SUB_A}) and (vsb_year gt 2026) and ((vsb_costpaid eq false) or (vsb_costpaid eq null))`,
@@ -433,6 +433,45 @@ describe("Status changes", () => {
     expect((error as PartialStepError).failedStep).toBe("Subaccounts set to Inactive");
     expect((error as PartialStepError).completed).toEqual(["Account set to Inactive"]);
     expect(fetchAllCalls.map((c) => c.label)).toEqual([CHILDREN]); // clean-up never started
+  });
+
+  it("UT-ADCAPEX-051 Status-only account deactivation PATCHes the account and its live children, returns the child ids and never reads costs", async () => {
+    children(SUB_A, SUB_B);
+    const result = await deactivateCapexAccountStatus(ACCOUNT);
+    expect(result.subaccountIds).toEqual([SUB_A, SUB_B]);
+    expect(updateCalls.map((u) => u.id)).toEqual([ACCOUNT, SUB_A, SUB_B]);
+    expect(fetchAllCalls.map((c) => c.label)).toEqual([CHILDREN]);
+    expect(bulkCalls).toEqual([]);
+    expect(deleted).toEqual([]);
+  });
+
+  it("UT-ADCAPEX-052 Status-only subaccount deactivation is one guarded PATCH; a vanished row is reported as gone", async () => {
+    await deactivateCapexSubaccountStatus(SUB_A);
+    expect(updateCalls).toEqual([{ id: SUB_A, fields: { statecode: 1, statuscode: 2 } }]);
+    expect(fetchAllCalls).toEqual([]);
+    goneIds.add(SUB_B);
+    await expect(deactivateCapexSubaccountStatus(SUB_B)).rejects.toBeInstanceOf(RecordGoneError);
+  });
+
+  it("UT-ADCAPEX-053 The zeroing and the deletes run side by side: both failing reports the zeroing; a landed delete phase is listed as completed", async () => {
+    fetchAllRows["list CAPEX contracts for deactivated accounts"] = [{ vsb_capexprojectcontractid: G(500) }];
+    fetchAllRows["list current-year forecast CAPEX costs"] = [{ vsb_capexcostid: "z1" }];
+    fetchAllRows["list future-year forecast CAPEX costs"] = [{ vsb_capexcostid: "d1" }, { vsb_capexcostid: "d2" }];
+    failBulk = true;
+    failDeleteFor.add("d1");
+    let error = await cleanUpForecastCosts([SUB_A], 2026, 10).catch((e: unknown) => e) as PartialStepError;
+    expect(error).toBeInstanceOf(PartialStepError);
+    expect(error.failedStep).toBe("Future-month costs set to 0 (1 row)");
+    expect(error.completed).toEqual([]);
+    // Every delete was still attempted (the phases do not wait for each other).
+    expect(deleted.map((d) => d.id)).toEqual(["d2"]);
+
+    deleted = [];
+    failDeleteFor.clear();
+    error = await cleanUpForecastCosts([SUB_A], 2026, 10).catch((e: unknown) => e) as PartialStepError;
+    expect(error.failedStep).toBe("Future-month costs set to 0 (1 row)");
+    expect(error.completed).toEqual(["Later-year costs deleted (2 rows)"]);
+    expect(deleted.map((d) => d.id)).toEqual(["d1", "d2"]);
   });
 
   it("UT-ADCAPEX-033 Deactivating a subaccount sets it Inactive then cleans its contracts' costs", async () => {

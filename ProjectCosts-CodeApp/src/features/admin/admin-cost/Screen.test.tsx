@@ -614,6 +614,30 @@ describe("CostsSettingsScreen", () => {
     expect(within(list).getAllByRole("checkbox")).toHaveLength(5);
   });
 
+  it("UT-ADCOST-938 the DEVEX panel: no star on the cluster labels, Apply VAT over Depreciation, Distribution Frequency a disabled dropdown, semibold captions with the star first", async () => {
+    render(<Harness><CostsSettingsScreen /></Harness>);
+    openSection("DEVEX/CAPEX");
+    fireEvent.click(screen.getByRole("button", { name: "Add Cost" }));
+    const dialog = await screen.findByRole("dialog", { name: /Add Cost/ });
+    // The `*` belongs to the "Select Cluster" caption; the five checkbox labels carry none (user screenshot, 23 Nov 2026).
+    const clusters = within(dialog).getByRole("group", { name: "Select Cluster" });
+    expect(clusters.querySelectorAll(".fui-Label__required")).toHaveLength(0);
+    // `chk_…_Depreciation.Y: =ApplyVat.Y + ApplyVat.Height + 10` (ACS:10166): one under the other.
+    const vat = within(dialog).getByTestId("chk_AdminCost_RightPanel_Form_AddCost_Fields_ApplyVat");
+    const pair = vat.closest(".fui-Checkbox")?.parentElement as HTMLElement;
+    expect(pair).toContainElement(within(dialog).getByTestId("chk_AdminCost_RightPanel_Form_AddCost_Fields_Depreciation"));
+    const pairCss = appliedRules(pair);
+    expect(pairCss["display"]).toBe("flex");
+    expect(pairCss["flex-direction"]).toBe("column");
+    // `cmb_…_Distribution_Frequency`: a DISABLED ComboBox showing "3 Months" (ACS:10083-10085), not a text box.
+    const frequency = within(dialog).getByTestId("cmb_AdminCost_RightPanel_Form_AddCost_Fields_Distribution_Frequency");
+    expect(frequency).toHaveAttribute("role", "combobox");
+    expect(frequency).toBeDisabled();
+    expect(frequency).toHaveTextContent("3 Months");
+    // The panel carries the scope class that makes every caption semibold with its `*` first (`canvas.css`).
+    expect(dialog.classList.contains("devex-canvas-panel")).toBe(true);
+  });
+
   /* ── Rule 20: the canvas FontColor / FontItalic pair, per control, through the ONE shared style ── */
 
   it("UT-ADCOST-942 DEVEX panel: blue italic on Description, clusters, Category, Sub-Account, Unit (box and open list), Cost; italic only on Distribution Frequency, Cost Paid By, Comment; plain Apply VAT / Depreciation", async () => {

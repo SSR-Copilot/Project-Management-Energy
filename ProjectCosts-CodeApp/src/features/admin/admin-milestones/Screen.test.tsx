@@ -669,20 +669,24 @@ describe("MilestonesSettingsScreen — canvas parity", () => {
     ]);
   });
 
-  it("UT-ADMILE-938 the section's bottom rule shows only while folded (`shp_BottomLine.Visible = IsFolded`, AMS:855)", async () => {
+  it("UT-ADMILE-938 the header rule stays while unfolded and the open section ends with a faint line (live canvas; user, 23 Nov 2026)", async () => {
     const user = userEvent.setup();
     renderScreen();
     const header = await screen.findByRole("button", { name: /Germany/ });
     const item = screen.getByTestId(`con_Main_MilestonesStandardAssumptions-${GERMANY}`);
     expect(header).toHaveAttribute("aria-expanded", "false");
-    expect(getComputedStyle(item).borderBottomWidth).toBe("1px");
-    // The rule is the item's while folded, never the header's own (`border="folded"`, not `"always"`).
-    expect(getComputedStyle(header.parentElement!).borderBottomWidth).not.toBe("1px");
+    // Folded: one Grayscale20 rule, the header's (`border="headerAndEnd"`); nothing on the item.
+    expect(getComputedStyle(header.parentElement!).borderBottomWidth).toBe("1px");
+    expect(getComputedStyle(item).borderBottomWidth).not.toBe("1px");
     await user.click(header);
     expect(header).toHaveAttribute("aria-expanded", "true");
-    expect(getComputedStyle(item).borderBottomWidth).not.toBe("1px");
-    expect(getComputedStyle(header.parentElement!).borderBottomWidth).not.toBe("1px");
-    await user.click(header);
+    // Unfolded: the header rule stays and the item closes with the #F5F5F5 line (the extract's
+    // `shp_BottomLine.Visible = IsFolded`, AMS:855, is older than the live app).
+    expect(getComputedStyle(header.parentElement!).borderBottomWidth).toBe("1px");
     expect(getComputedStyle(item).borderBottomWidth).toBe("1px");
+    expect(getComputedStyle(item).borderBottomColor).toBe("rgb(245, 245, 245)");
+    await user.click(header);
+    expect(getComputedStyle(item).borderBottomWidth).not.toBe("1px");
+    expect(getComputedStyle(header.parentElement!).borderBottomWidth).toBe("1px");
   });
 });

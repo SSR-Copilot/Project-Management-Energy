@@ -177,6 +177,26 @@ export const BUSY = {
 } as const;
 
 /**
+ * The forecast cost clean-up that follows a deactivation. It runs in the BACKGROUND, after the
+ * status change landed and the dialog closed, under a progress toast: it is one request per cost
+ * row (no bulk delete exists for a standard table, D36 §1), so for an account booked on many
+ * projects it takes long, and the canvas too closed its pop-up before writing (CA:2423).
+ */
+export const CLEANUP = {
+  running: "Cleaning up forecast costs...",
+  /** `describeWriteError(error, action)`'s action. */
+  action: "clean up the forecast costs",
+  testId: "capex-forecast-cleanup",
+} as const;
+
+/** The clean-up's outcome toast (pure). */
+export function cleanupDoneText(result: { contracts: number; zeroed: number; deleted: number }): string {
+  if (result.contracts === 0) return "No forecast costs to clean up: no contracts are booked on it.";
+  const rows = (n: number) => `${n} ${n === 1 ? "row" : "rows"}`;
+  return `Forecast costs cleaned up: ${rows(result.zeroed)} set to 0, ${rows(result.deleted)} deleted.`;
+}
+
+/**
  * Digits only, after trim.
  *
  * SOURCE DEFECT (fix kept, D153): the canvas test is `Or(Not(IsNumeric(v)), IsMatch(v, ","), IsMatch(v, "\."))`

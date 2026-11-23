@@ -449,7 +449,10 @@ export default function CheckListSettingsScreen() {
         {() => (
           <SettingsAccordion
             variant="light"
-            border="folded"
+            // The live canvas draws the Grayscale20 rule under every cluster header, folded or not, and closes an
+            // unfolded cluster with a faint #F5F5F5 line (user screenshot, 23 Nov 2026); the 1.21.709 extract's
+            // `shp_BottomLine.Visible: =ThisItem.IsFolded` (L756) is older than the live app.
+            border="headerAndEnd"
             itemInsetRight={10}
             panelPadding={{ left: 20, top: 10, bottom: 12 }}
             openItems={openClusters}

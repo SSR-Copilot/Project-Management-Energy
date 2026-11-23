@@ -16,9 +16,9 @@ import { Vsb_capexcostsService } from "@/generated/services/Vsb_capexcostsServic
 import type { Vsb_capexaccountlists } from "@/generated/models/Vsb_capexaccountlistsModel";
 import { RecordGoneError, unwrap } from "@/platform/errors";
 import { deleteRecord, fetchAll, fetchPage, updateRecordIfExists } from "./client";
-import { and, chunk, eq, gt, isNull, lookupEq, lookupIn, or } from "./odata";
+import { and, chunk, eq, gt, isNull, lookupEq, lookupIn, ne, or } from "./odata";
 import { updateRowsEach } from "./adminRowWrites";
-import { DELETE_CONCURRENCY, WRITE_CONCURRENCY, forEachLimit } from "./concurrency";
+import { DELETE_CONCURRENCY, WRITE_CONCURRENCY, forEachLimit, mapLimit } from "./concurrency";
 import { nextOrder } from "@/domain/reorder";
 
 export const ACCOUNTS_TABLE = "vsb_capexaccountlists";
@@ -316,10 +316,13 @@ export const PAID_EXCLUSION = or(eq("vsb_costpaid", false), isNull("vsb_costpaid
 
 /**
  * Step 2 filter: current year, months after the current one. Paid rows are skipped
- * (the non-destructive default; canvas had no exception).
+ * (the non-destructive default; canvas had no exception). Rows already at 0 are skipped too
+ * (`vsb_cost ne 0`, which like `ne true` above never matches null): the write would change
+ * nothing, and a second deactivation of the same account used to re-send one guarded PATCH per
+ * row it had already zeroed (23 Nov 2026).
  */
 export function zeroCostsFilter(contractIds: readonly string[], year: number, month: number): string | undefined {
-  return and(lookupIn("vsb_contract", contractIds), eq("vsb_year", year), gt("vsb_month", month), PAID_EXCLUSION);
+  return and(lookupIn("vsb_contract", contractIds), eq("vsb_year", year), gt("vsb_month", month), PAID_EXCLUSION, ne("vsb_cost", 0));
 }
 
 /** Step 3 filter: every later year. Paid rows skipped. */
@@ -348,56 +351,68 @@ const rowsText = (n: number) => `${n} ${n === 1 ? "row" : "rows"}`;
 
 export interface CleanupResult { contracts: number; zeroed: number; deleted: number }
 
+/** Id-list reads in flight at once (independent chunks of one filter; small, id-only pages). */
+const READ_FAN_OUT = 4;
+
 /**
  * For every contract (any status) on any of `accountIds`, zero current-year future months
  * and delete later years. Server-side filters, chunked, read to the last page — ALL matching
  * rows, not the first N the canvas happened to scan.
+ *
+ * Timing (23 Nov 2026): the reads of independent chunks go out together (`READ_FAN_OUT`), and the
+ * two write phases run SIDE BY SIDE — they touch disjoint rows (this year's vs later years'), so
+ * nothing orders them. In flight at the peak: `WRITE_CONCURRENCY` (8) guarded PATCHes plus
+ * `DELETE_CONCURRENCY` (16) deletes, 24 requests, under the 52-per-user Dataverse ceiling with room
+ * for the screen's reads. Each phase keeps its own label, so "zeroed but a delete failed" is still
+ * reported as such; when both fail the zeroing is reported (the canvas order), and a phase is listed
+ * as completed only when it had rows and landed.
  */
 export async function cleanUpForecastCosts(
   accountIds: readonly string[], year: number, month: number,
 ): Promise<CleanupResult> {
-  const contractIds: string[] = [];
-  for (const ids of chunk(accountIds)) {
-    const rows = await fetchAll(
-      "list CAPEX contracts for deactivated accounts",
-      (o) => Vsb_capexprojectcontractsService.getAll(o),
-      { select: ["vsb_capexprojectcontractid"], filter: lookupIn("vsb_account", ids) },
-    );
-    contractIds.push(...rows.map((r) => r.vsb_capexprojectcontractid));
-  }
+  const contractPages = await mapLimit(chunk(accountIds), (ids) => fetchAll(
+    "list CAPEX contracts for deactivated accounts",
+    (o) => Vsb_capexprojectcontractsService.getAll(o),
+    { select: ["vsb_capexprojectcontractid"], filter: lookupIn("vsb_account", ids) },
+  ), READ_FAN_OUT);
+  const contractIds = contractPages.flat().map((r) => r.vsb_capexprojectcontractid);
   if (contractIds.length === 0) return { contracts: 0, zeroed: 0, deleted: 0 };
 
-  const toZero: string[] = [];
-  const toDelete: string[] = [];
-  for (const ids of chunk(contractIds)) {
-    const zero = await fetchAll(
+  const costPages = await mapLimit(chunk(contractIds), (ids) => Promise.all([
+    fetchAll(
       "list current-year forecast CAPEX costs",
       (o) => Vsb_capexcostsService.getAll(o),
       { select: ["vsb_capexcostid"], filter: zeroCostsFilter(ids, year, month) },
-    );
-    toZero.push(...zero.map((r) => r.vsb_capexcostid));
-    const later = await fetchAll(
+    ),
+    fetchAll(
       "list future-year forecast CAPEX costs",
       (o) => Vsb_capexcostsService.getAll(o),
       { select: ["vsb_capexcostid"], filter: deleteCostsFilter(ids, year) },
-    );
-    toDelete.push(...later.map((r) => r.vsb_capexcostid));
-  }
+    ),
+  ]), READ_FAN_OUT);
+  const toZero = costPages.flatMap(([zero]) => zero.map((r) => r.vsb_capexcostid));
+  const toDelete = costPages.flatMap(([, later]) => later.map((r) => r.vsb_capexcostid));
 
-  // Two labelled sub-steps, so "zeroed but a delete failed" is reported as such.
   const zeroLabel = `Future-month costs set to 0 (${rowsText(toZero.length)})`;
   const deleteLabel = `Later-year costs deleted (${rowsText(toDelete.length)})`;
-  try {
-    await updateRowsEach("zero future CAPEX cost", COSTS_TABLE, COST_KEY, toZero.map((id) => ({ vsb_capexcostid: id, vsb_cost: 0 })));
-  } catch (cause) {
-    throw new PartialStepError(zeroLabel, [], cause);
-  }
-  await countedForEach(
-    toDelete, (id) => deleteRecord("delete future CAPEX cost", COSTS_TABLE, id), DELETE_CONCURRENCY,
-    (done, total, cause) => new PartialStepError(
-      deleteLabel, [zeroLabel], cause, `${done} of ${total} later-year cost rows were deleted`,
+  const [zeroed, deleted] = await Promise.allSettled([
+    updateRowsEach("zero future CAPEX cost", COSTS_TABLE, COST_KEY, toZero.map((id) => ({ vsb_capexcostid: id, vsb_cost: 0 }))),
+    countedForEach(
+      toDelete, (id) => deleteRecord("delete future CAPEX cost", COSTS_TABLE, id), DELETE_CONCURRENCY,
+      (done, total, cause) => new PartialStepError(
+        deleteLabel, [], cause, `${done} of ${total} later-year cost rows were deleted`,
+      ),
     ),
-  );
+  ]);
+  if (zeroed.status === "rejected") {
+    const deletesLanded = deleted.status === "fulfilled" && toDelete.length > 0;
+    throw new PartialStepError(zeroLabel, deletesLanded ? [deleteLabel] : [], zeroed.reason);
+  }
+  if (deleted.status === "rejected") {
+    // `countedForEach` always throws a `PartialStepError`; keep its in-step count.
+    const failure = deleted.reason as PartialStepError;
+    throw new PartialStepError(failure.failedStep, toZero.length > 0 ? [zeroLabel] : [], failure.cause, failure.detail);
+  }
   return { contracts: contractIds.length, zeroed: toZero.length, deleted: toDelete.length };
 }
 
@@ -448,19 +463,10 @@ export interface DeactivateAccountInput {
   month: number;
 }
 
-/**
- * Deactivate: account Inactive → subaccounts Inactive (the dialog's
- * promise, not the canvas typo that set them Active) → cost clean-up for contracts on the
- * subaccounts AND on the account itself.
- *
- * the subaccount list is read live from Dataverse at confirm time (`listChildIds`), not taken
- * from the screen's cached tree, so a subaccount another admin added since the last load is
- * deactivated and cleaned too. The read happens before any write, so a failed read changes nothing.
- */
-export async function deactivateCapexAccount(input: DeactivateAccountInput): Promise<void> {
-  const subaccountIds = await listChildIds(input.accountId);
-  await runSteps([
-    ["Account set to Inactive", () => setState(input.accountId, false, "deactivate CAPEX account")],
+/** The status steps of an account deactivation: the account, then its (live) subaccounts. */
+function accountStatusSteps(accountId: string, subaccountIds: readonly string[]): [string, () => Promise<unknown>][] {
+  return [
+    ["Account set to Inactive", () => setState(accountId, false, "deactivate CAPEX account")],
     ["Subaccounts set to Inactive", () => countedForEach(
       subaccountIds,
       deactivateChildIfPresent,
@@ -469,13 +475,45 @@ export async function deactivateCapexAccount(input: DeactivateAccountInput): Pro
         "Subaccounts set to Inactive", [], cause, `${done} of ${total} subaccounts were set to Inactive`,
       ),
     )],
+  ];
+}
+
+/**
+ * Deactivate, status only: account Inactive → subaccounts Inactive (the dialog's promise, not
+ * the canvas typo that set them Active). Resolves to the subaccount ids, so the caller can run
+ * `cleanUpForecastCosts` for the account and all of them — the CAPEX Accounts screen does that in
+ * the background, after its dialog closed (it is one request per cost row, 23 Nov 2026).
+ *
+ * The subaccount list is read live from Dataverse at confirm time (`listChildIds`), not taken
+ * from the screen's cached tree, so a subaccount another admin added since the last load is
+ * deactivated (and cleaned) too. The read happens before any write, so a failed read changes nothing.
+ */
+export async function deactivateCapexAccountStatus(accountId: string): Promise<{ subaccountIds: string[] }> {
+  const subaccountIds = await listChildIds(accountId);
+  await runSteps(accountStatusSteps(accountId, subaccountIds));
+  return { subaccountIds };
+}
+
+/** Deactivate, status only: the subaccount Inactive (one guarded PATCH). */
+export async function deactivateCapexSubaccountStatus(id: string): Promise<void> {
+  await runSteps([["Subaccount set to Inactive", () => setState(id, false, "deactivate CAPEX subaccount")]]);
+}
+
+/**
+ * Deactivate in ONE awaited flow: the status steps above, then the cost clean-up for contracts on
+ * the subaccounts AND on the account itself, with one step report across all three.
+ */
+export async function deactivateCapexAccount(input: DeactivateAccountInput): Promise<void> {
+  const subaccountIds = await listChildIds(input.accountId);
+  await runSteps([
+    ...accountStatusSteps(input.accountId, subaccountIds),
     ["Forecast costs cleaned up", () => cleanUpForecastCosts(
       [input.accountId, ...subaccountIds], input.year, input.month,
     )],
   ]);
 }
 
-/** Deactivate: subaccount Inactive, then clean up its contracts' costs. */
+/** Deactivate in one awaited flow: subaccount Inactive, then clean up its contracts' costs. */
 export async function deactivateCapexSubaccount(id: string, year: number, month: number): Promise<void> {
   await runSteps([
     ["Subaccount set to Inactive", () => setState(id, false, "deactivate CAPEX subaccount")],

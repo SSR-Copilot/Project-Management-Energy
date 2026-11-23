@@ -33,7 +33,7 @@ function seeded(keys: QueryKey[]) {
 describe("Settings invalidation helpers — exact key sets", () => {
   it.each([
     ["CAPEX accounts", () => invalidateAfterCapexAccountsWrite(client), [
-      ["adminCapexAccounts"], ["capexAccounts"], ["adminCostHierarchy"],
+      ["adminCapexAccounts", "tree"], ["capexAccounts"], ["adminCostHierarchy"],
       ["cost-book"], ["capex-totals"], ["add-cost-sheet"],
       ["devCoCapexCosts"], ["devCoCapexContracts"],
     ]],
