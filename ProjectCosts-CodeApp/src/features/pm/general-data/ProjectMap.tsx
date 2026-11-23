@@ -81,6 +81,9 @@ export default function ProjectMap(props: ProjectMapProps) {
     const map = new atlas.Map(hostRef.current, {
       ...(center ? { center: [center.lng, center.lat] } : {}),
       zoom: ZOOM, language: first.language, view: "Auto", style: "road",
+      // The SDK's "Feedback" link (to Microsoft's map-feedback site) is not part of the app; the © attribution stays,
+      // as the map data's licence requires it.
+      showFeedbackLink: false,
       authOptions: {
         authType: atlas.AuthenticationType.sas,
         getToken: (resolve, reject) => { azureMapsToken().then(resolve, reject); },
