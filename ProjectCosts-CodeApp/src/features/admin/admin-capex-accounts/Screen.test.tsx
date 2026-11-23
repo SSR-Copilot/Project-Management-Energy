@@ -462,7 +462,7 @@ describe("CAPEXAccountsSettingsScreen", () => {
     await waitFor(() => expect(hiddenButton("Select account 80000 - Land")).toHaveAttribute("aria-pressed", "false"));
   });
 
-  it("UT-ADCAPEX-920 deactivating an account shows the right dialog, PATCHes the cascade, reads costs null-safely and invalidates the cost screens", async () => {
+  it("UT-ADCAPEX-920 deactivating an account shows the right dialog, PATCHes the cascade, then cleans costs in the background (null-safe reads) and invalidates the cost screens", async () => {
     client.contracts = [{ vsb_capexprojectcontractid: "00000000-0000-0000-0000-000000005000" }];
     const invalidate = vi.spyOn(queryClient, "invalidateQueries");
     const user = await openDevelopmentTab();
@@ -471,10 +471,13 @@ describe("CAPEXAccountsSettingsScreen", () => {
     expect(await screen.findByText("Deactivate Account?")).toBeInTheDocument();
     await user.click(dialogButton("Deactivate"));
 
-    expect(await screen.findByText("Account and its subaccounts deactivated; forecast costs cleaned up.")).toBeInTheDocument();
+    // The dialog's work is the status change; the clean-up follows under a progress toast.
+    expect(await screen.findByText("Account and its subaccounts deactivated.")).toBeInTheDocument();
     for (const id of [IDS.land, IDS.land1, IDS.land2, IDS.land3]) {
       expectPatched(id, { statecode: 1, statuscode: 2 });
     }
+    expect(await screen.findByText("Forecast costs cleaned up: 0 rows set to 0, 0 rows deleted.")).toBeInTheDocument();
+    expect(screen.queryByTestId("capex-forecast-cleanup")).not.toBeInTheDocument();
     const costReads = client.retrieveMultipleRecordsAsync.mock.calls.filter(([t]) => t === "vsb_capexcosts");
     expect(costReads).toHaveLength(2);
     for (const [, options] of costReads) {
@@ -482,13 +485,35 @@ describe("CAPEXAccountsSettingsScreen", () => {
     }
     const keys = invalidate.mock.calls.map(([f]) => JSON.stringify(f?.queryKey));
     // The shared helper also refreshes the Costs settings hierarchy (bug fix) and the
-    // Add-Costs sheet.
+    // Add-Costs sheet. The tree key, not the screen prefix: the per-row contract checks are not refetched.
     for (const key of [
-      qk.adminCapexAccounts, qk.capexAccounts, ["cost-book"], ["capex-totals"],
+      qk.adminCapexAccountsTree, qk.capexAccounts, ["cost-book"], ["capex-totals"],
       qk.adminCostHierarchy, ["add-cost-sheet"],
     ]) {
       expect(keys).toContain(JSON.stringify(key));
     }
+    expect(keys).not.toContain(JSON.stringify(qk.adminCapexAccounts));
+  });
+
+  it("UT-ADCAPEX-940 a clean-up that fails after the status landed is reported as a toast; the dialog is already closed", async () => {
+    client.contracts = [{ vsb_capexprojectcontractid: "00000000-0000-0000-0000-000000005000" }];
+    const base = client.retrieveMultipleRecordsAsync.getMockImplementation()!;
+    client.retrieveMultipleRecordsAsync.mockImplementation(async (table: string, options: { filter?: string }) => (
+      table === "vsb_capexcosts"
+        ? { success: true, data: [{ vsb_capexcostid: "00000000-0000-0000-0000-00000000c057" }] }
+        : base(table, options)));
+    client.deleteRecordAsync.mockResolvedValue({ success: false, error: { message: "denied", status: 500 } });
+    const user = await openDevelopmentTab();
+    await user.click(screen.getByRole("button", { name: "Select account 80000 - Land" }));
+    await user.click(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-deactivateAccount"));
+    await user.click(dialogButton("Deactivate"));
+
+    expect(await screen.findByText("Account and its subaccounts deactivated.")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("Deactivate Account?")).not.toBeInTheDocument());
+    const failure = await screen.findByText(/Could not clean up the forecast costs/);
+    expect(failure).toHaveTextContent("Failed step: Later-year costs deleted (1 row).");
+    expect(failure).toHaveTextContent("Already completed: Future-month costs set to 0 (1 row).");
+    expect(screen.queryByTestId("capex-forecast-cleanup")).not.toBeInTheDocument();
   });
 
   it("UT-ADCAPEX-921 a partial cascade failure is reported with what landed, and the dialog stays open with an alert", async () => {
@@ -519,13 +544,15 @@ describe("CAPEXAccountsSettingsScreen", () => {
     await user.click(screen.getByRole("button", { name: "Select account 80000 - Land" }));
     await user.click(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-deactivateAccount"));
     await user.click(dialogButton("Deactivate"));
-    expect(await screen.findByText("Account and its subaccounts deactivated; forecast costs cleaned up.")).toBeInTheDocument();
+    expect(await screen.findByText("Account and its subaccounts deactivated.")).toBeInTheDocument();
     expect(client.retrieveMultipleRecordsAsync).toHaveBeenCalledWith(
       "vsb_capexaccountlists", expect.objectContaining({ filter: `_vsb_parentaccount_value eq ${IDS.land}` }),
     );
     for (const id of [IDS.land1, IDS.land2, IDS.land3, late]) {
       expectPatched(id, { statecode: 1, statuscode: 2 });
     }
+    // The background clean-up ran for the account and every live child (no contracts booked here).
+    expect(await screen.findByText("No forecast costs to clean up: no contracts are booked on it.")).toBeInTheDocument();
   });
 
   it("UT-ADCAPEX-923 a failed contract check shows account Delete disabled with an explanation and Retry", async () => {
@@ -577,7 +604,8 @@ describe("CAPEXAccountsSettingsScreen", () => {
     expect(await screen.findByText("Deactivate Subaccount?")).toBeInTheDocument();
     await user.click(dialogButton("Deactivate"));
     await waitFor(() => expectPatched(IDS.land1, { statecode: 1, statuscode: 2 }));
-    expect(await screen.findByText("Subaccount deactivated; forecast costs cleaned up.")).toBeInTheDocument();
+    expect(await screen.findByText("Subaccount deactivated.")).toBeInTheDocument();
+    expect(await screen.findByText("No forecast costs to clean up: no contracts are booked on it.")).toBeInTheDocument();
   }, 20_000); // two dialog round-trips; room for the explicit 5 s waits under a loaded run
 
   it("UT-ADCAPEX-926 changing tab clears the selection; expansion survives a write and refetch", async () => {
@@ -853,7 +881,7 @@ describe("CAPEXAccountsSettingsScreen", () => {
     expect((await screen.findByTestId(`${grid}-ChangeStatusIcon-${IDS.land1}`)).querySelector("svg")?.getAttribute("data-icon-name")).toBe(dismiss);
     expect(screen.getByTestId(`${grid}-ChangeStatusIcon-${IDS.land2}`).querySelector("svg")?.getAttribute("data-icon-name")).toBe(checkmark);
     // "icon:Edit" (CA:538-548) is the MDL2 pencil, drawn as the em: a 15 px glyph (`ColImageWidth: 15`). Edit and the
-    // status icon are black, Delete keeps the brand blue (the user, 21 Nov 2026).
+    // status icon and Delete are black (the user, 21 and 23 Nov 2026).
     const edit = screen.getByTestId(`${grid}-EditIcon-${IDS.land1}`);
     const pencil = edit.querySelector("svg") as SVGElement;
     expect(pencil.getAttribute("data-icon-name")).toBe("Edit");
@@ -871,6 +899,8 @@ describe("CAPEXAccountsSettingsScreen", () => {
     expect(editRules.some((t) => t.includes(":hover") && t.includes("background-color: transparent"))).toBe(true);
     const statusRules = rulesFor(screen.getByTestId(`${grid}-ChangeStatusIcon-${IDS.land1}`));
     expect(statusRules.some((t) => t.includes(".fui-Button__icon") && /color: (#0b0b0b|rgb\(11, 11, 11\))/.test(t))).toBe(true);
+    const deleteRules = rulesFor(screen.getByTestId(`${grid}-DeleteIcon-${IDS.land1}`));
+    expect(deleteRules.some((t) => t.includes(".fui-Button__icon") && /color: (#0b0b0b|rgb\(11, 11, 11\))/.test(t) && !t.includes(":hover"))).toBe(true);
     // `HeaderVisible: =false`: no column headers.
     expect(screen.queryAllByRole("columnheader", { hidden: true })).toHaveLength(0);
 

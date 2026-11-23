@@ -33,7 +33,12 @@ async function invalidateAll(client: QueryClient, keys: readonly QueryKey[]): Pr
  */
 export function capexAccountsWriteKeys(): QueryKey[] {
   return [
-    qk.adminCapexAccounts,
+    // The tree only — NOT the `qk.adminCapexAccounts` prefix, which also covers every per-row
+    // "has contracts" check on screen (`qk.adminCapexHasContracts`). No account write changes
+    // those answers (a status change leaves contracts alone; a deleted row leaves the screen; a
+    // new row is not cached yet), and refetching them all, awaited, held the busy overlay open
+    // long after the write had landed (23 Nov 2026).
+    qk.adminCapexAccountsTree,
     qk.capexAccounts,
     qk.adminCostHierarchy,
     qk.costBookAll,

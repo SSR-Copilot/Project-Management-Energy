@@ -74,8 +74,11 @@ const useStyles = makeStyles({
     "& td > span, & th > span": { color: "#242424" },
     "& td:first-child, & th:first-child": { paddingLeft: "20px" },
   },
-  /** `con_Header_TasksInCluster*` — Grayscale40 (#FAFAFA), radius 2, Semibold labels. */
-  head: { backgroundColor: palette.Grayscale40 },
+  /**
+   * `con_Header_TasksInCluster*` — Grayscale40 (#FAFAFA), radius 2, Semibold labels, and no line under it: the
+   * canvas band is a plain container (user's canvas screenshot, 23 Nov 2026), so Fluent's header border is off.
+   */
+  head: { backgroundColor: palette.Grayscale40, "& tr": { borderBottomStyle: "none" } },
   /** Header labels are `Text@0.0.51` Semibold with no `Size`: the modern Text default, 14 px. */
   headCell: { fontWeight: tokens.fontWeightSemibold, fontSize: "14px", lineHeight: "20px", height: "32px" },
   colDescription: { width: "320px" },
@@ -87,8 +90,12 @@ const useStyles = makeStyles({
    * the Active column, not a column of their own.
    */
   activeCell: { display: "flex", alignItems: "center" },
-  /** `ico_ActivateDeactivate_…` keeps the PowerCAT Icon's default TextAlignment (Center) in its 90 px; Completion Date sets Left. */
-  activeButton: { width: "90px", justifyContent: "center" },
+  /**
+   * `ico_ActivateDeactivate_…` (L557-581) sets no `TextAlignment`, and the canvas draws "Active" and "Inactive" with
+   * their icons at the same X (user screenshot, 23 Nov 2026), i.e. left-aligned like Completion Date, the icon
+   * about 16 px in from the column's X. Centring in the 90 px moved the shorter "Active" row to the right.
+   */
+  activeButton: { width: "90px", justifyContent: "flex-start", paddingLeft: "16px" },
   /**
    * `ico_Edit_…` / `ico_Delete_…`: `Width: =34`, `Height: =34` (L498-499, L532-533) around the 16 px icon, and
    * `IconColor: If(Self.DisplayMode = DisplayMode.Edit, akzent3, "#bbb")` (L503, L537): #bbb while locked.
@@ -99,10 +106,12 @@ const useStyles = makeStyles({
     "& button[aria-disabled='true'] .fui-Button__icon": { color: "#bbb" },
   },
   /**
-   * `TemplateSize: =34`; the row rule is the gallery's `BorderColor: RGBA(245, 245, 245, 1)`.
-   * Hard-coded: `src/theme/tokens.ts` has no #F5F5F5 token.
+   * `TemplateSize: =34`, `TemplatePadding: =0`, and NO line between rows: the gallery template
+   * (`con_Details_TasksInCluster…`) has `BorderStyle.None`, and the canvas screenshot (23 Nov 2026) shows no line
+   * under any row or under the header band. Fluent's default row border (`colorNeutralStroke2`) is turned off. The two
+   * lines the user sees round an unfolded cluster are the accordion's (`SettingsAccordion border="headerAndEnd"`).
    */
-  row: { height: "34px", borderBottomColor: "#F5F5F5" },
+  row: { height: "34px", borderBottomStyle: "none" },
   /**
    * Row values: `Size: =gblAppSizes.Font.Large` (12) on a modern `Text@0.0.51`, whose `Size` is used as px
    * (as the other modern-Text ports do), so 12 px, smaller than the 14 px header. A classic label's 12 would be 16 px.

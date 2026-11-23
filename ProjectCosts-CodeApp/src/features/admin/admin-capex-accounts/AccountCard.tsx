@@ -107,9 +107,9 @@ const useStyles = makeStyles({
     "& .fui-Button__icon": { fontSize: "15px", width: "15px", height: "15px" },
   },
   /**
-   * The Edit and Deactivate / Activate row icons are black, with no hover fill and no hover recolour (the user,
-   * 21 Nov 2026: the Fluent subtle button's grey hover box and brand hover tint are not wanted here); Delete
-   * keeps the brand blue.
+   * The Edit, Deactivate / Activate and Delete row icons are black, with no hover fill and no hover recolour
+   * (the user, 21 Nov 2026: the Fluent subtle button's grey hover box and brand hover tint are not wanted here;
+   * 23 Nov 2026: Delete too, it had kept the brand blue).
    */
   iconBlack: {
     "& .fui-Button__icon": { color: palette.black },
@@ -230,11 +230,11 @@ export function AccountCard(props: AccountCardProps) {
               const numberId = `capex-subaccount-number-${sub.id}`;
               const nameId = `capex-subaccount-name-${sub.id}`;
               const describedBy = `${numberId} ${nameId}`;
-              const iconColumn = (cellActions: readonly RowAction[], black = true) => (
+              const iconColumn = (cellActions: readonly RowAction[]) => (
                 <TableCell className={mergeClasses(styles.cell, styles.iconCell)}>
                   <RowActions
-                    appearance="subtle" size="small" {...(black ? {} : { tone: "brand" as const })}
-                    className={mergeClasses(styles.icon, black && styles.iconBlack)} actions={cellActions}
+                    appearance="subtle" size="small"
+                    className={mergeClasses(styles.icon, styles.iconBlack)} actions={cellActions}
                   />
                 </TableCell>
               );
@@ -249,8 +249,8 @@ export function AccountCard(props: AccountCardProps) {
                     * `ChangeStatusIcon` "icon:DeactivateOrders" (Active) / "icon:ActivateOrders"
                     * (Inactive) and `DeleteIcon` "icon:Delete". Edit and the two Orders glyphs are the
                     * MDL2 outlines the v8 DetailsList drew (shared `EditIcon` / `…OrdersIcon`), 15 px; Fluent's
-                    * `EditRegular` was a thinner, rounder pencil (user screenshot, 21 Nov 2026). Edit and the
-                    * status icon are black, Delete brand blue (the user, 21 Nov 2026).
+                    * `EditRegular` was a thinner, rounder pencil (user screenshot, 21 Nov 2026). All three icons
+                    * are black (the user, 23 Nov 2026: Delete had kept the brand blue since 21 Nov).
                     */}
                   {iconColumn([{
                     key: "edit", icon: <EditIcon />, label: "Edit", title: "Edit", describedBy,
@@ -278,7 +278,7 @@ export function AccountCard(props: AccountCardProps) {
                       visible: deleteUnavailable, disabledReason: CONTRACT_CHECK_FAILED.subaccount,
                       testId: `delete-unavailable-${sub.number}`, onClick: () => {},
                     },
-                  ], false)}
+                  ])}
                   <TableCell className={styles.fillerCell} />
                 </TableRow>
               );

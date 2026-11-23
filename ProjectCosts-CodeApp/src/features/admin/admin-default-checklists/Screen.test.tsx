@@ -1104,6 +1104,33 @@ describe("CheckListSettingsScreen — canvas parity, 20 Nov 2026 (row icons, Add
     expect(screen.queryByText("Value cannot be blank.")).not.toBeInTheDocument();
   });
 
+  it("UT-ADCHK-954 an unfolded cluster keeps the rule under its header and closes with a line; the task grid draws none (live canvas, 23 Nov 2026)", async () => {
+    const u = user();
+    renderScreen();
+    const header = await screen.findByRole("button", { name: "Draft to Cluster 1" });
+    const item = screen.getByTestId("con_Main_DefaultChecklist_AdminScreen-cccccccc-0000-0000-0000-000000000000");
+    // Folded: the Grayscale20 rule is the header's (one line, as before).
+    expect(getComputedStyle(header.parentElement!).borderBottomWidth).toBe("1px");
+    expect(getComputedStyle(item).borderBottomWidth).not.toBe("1px");
+    await u.click(header);
+    await screen.findByText("Site identified");
+    // Unfolded: the header rule stays, and the item ends with the faint #F5F5F5 line.
+    expect(getComputedStyle(header.parentElement!).borderBottomWidth).toBe("1px");
+    expect(getComputedStyle(item).borderBottomWidth).toBe("1px");
+    expect(getComputedStyle(item).borderBottomColor).toBe("rgb(245, 245, 245)");
+    // The grid: no line under a row, none under the header band.
+    const row = screen.getByTestId("con_Details_TasksInClusterDefaultChecklist_AdminScreen-dddddddd-0000-0000-0000-000000000001");
+    expect(getComputedStyle(row).borderBottomStyle).toBe("none");
+    const table = screen.getByTestId("gal_TasksInClusterDefaultChecklist_AdminScreen-cccccccc-0000-0000-0000-000000000000");
+    const head = table.querySelector("thead") as HTMLElement;
+    const rules: CSSStyleRule[] = [];
+    for (const sheet of Array.from(document.styleSheets)) {
+      try { for (const r of Array.from(sheet.cssRules)) if (r instanceof CSSStyleRule) rules.push(r); } catch { /* cross-origin */ }
+    }
+    const headTrRules = rules.filter((r) => Array.from(head.classList).some((c) => r.selectorText === `.${c} tr`));
+    expect(headTrRules.some((r) => r.style.borderBottomStyle === "none")).toBe(true);
+  });
+
   it("UT-ADCHK-949 the cluster Reorder command shows the canvas ItemIconName NumberedList", async () => {
     const u = user();
     const numberedList = "NumberedList";

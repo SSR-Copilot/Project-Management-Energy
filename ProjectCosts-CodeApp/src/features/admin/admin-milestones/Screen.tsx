@@ -230,12 +230,13 @@ export default function MilestonesSettingsScreen() {
             `gal_CountriesMilestonesStandardAssumptions`. The shared accordion takes no root id, and
             its header button (canvas `btn_Select_MilestonesStandardAssumptions_AdminScreen` with
             `ico_Down_…` / `ico_Up_…`) takes no canvas id either.
-            `shp_BottomLine_….Visible = ThisItem.IsFolded` (AMS:855): the 1 px rule shows only while
-            the section is folded (`border="folded"`).
+            `shp_BottomLine_….Visible = ThisItem.IsFolded` (AMS:855) is the extract; the live canvas keeps the
+            1 px rule under an unfolded section's header too and closes the section with a faint #F5F5F5 line,
+            as on Check List Settings (user, 23 Nov 2026: "apply this to milestone expand also").
           */
           <SettingsAccordion
             variant="light"
-            border="folded"
+            border="headerAndEnd"
             panelPadding={PANEL_PADDING}
             openItems={openItems}
             onToggle={toggleSection}
