@@ -127,7 +127,12 @@
 .canvas-rail-collapse { flex-shrink: 0; margin-top: auto; position: relative; height: 45px; display: flex; align-items: center; }
 .canvas-rail-collapse-delimiter { position: absolute; top: 0; left: 0; right: 0; height: 2px; background: #f3f2f1; }
 .canvas-rail-pm .canvas-rail-collapse > button { width: 100%; height: 45px; justify-content: flex-start; padding: 0 0 0 7px; border-radius: 0; gap: 0; min-width: 0; color: #2c2c2c; font-size: 14.67px; font-weight: 400; }
+/* Collapsed (`aria-expanded="false"`), the rail is 32 px wide (`PM_RAIL_COLLAPSED_WIDTH`): 7 px of padding plus the
+   28 px icon slot pushed the 24 px glyph 1 px past the right edge, where `overflow-x: hidden` clipped it (user
+   screenshot, 23 Nov 2026). Centred instead: 4 px of air either side, the same glyph. */
+.canvas-rail-pm .canvas-rail-collapse > button[aria-expanded="false"] { justify-content: center; padding-left: 0; }
 .canvas-rail-pm .canvas-rail-collapse > button .fui-Button__icon { width: 28px; height: 28px; display: grid; place-items: center; margin: 0; }
+.canvas-rail-pm .canvas-rail-collapse > button[aria-expanded="false"] .fui-Button__icon { width: 24px; }
 /* The panel glyph 24 x 12 from x 9, as on the canvas; Fluent otherwise caps the icon at 20 px. */
 .canvas-rail-pm .canvas-rail-collapse > button .fui-Button__icon svg { width: 24px; height: 12px; max-width: none; }
 .canvas-rail-collapse-label { padding-left: 10px; white-space: nowrap; overflow: hidden; }
@@ -796,6 +801,10 @@
 .finance-form-dsra .finance-reset.finance-calendar { left: 293px; width: 32px; height: 32px; }
 .finance-form-dsra .finance-reset.finance-calendar .fui-Button__icon { width: 20px; height: 20px; font-size: 20px; }
 .finance-form .finance-row-error { display: block; height: 16px; margin-top: -16px; line-height: 16px; }
+/* DIVERGENCE (user, 23 Nov 2026): the Decommissioning panel's "End Date of Saving must not be later than Project End
+   Date" sits in the canvas at Y 54 of a 70-high container — over the box's bottom edge, with the next caption right
+   under it (PFS:15032). The user asked for room: 4 px under the box, 8 px before "Date of Expiry". */
+.finance-form-decom .finance-row-error { margin-top: 4px; margin-bottom: 8px; }
 /* Every Finance year / month pair (the tranche's too): the two boxes are 10 apart, `X: YY.X + YY.Width + 10`. */
 .finance-canvas-panel .finance-ym-pair { column-gap: 10px; }
 
