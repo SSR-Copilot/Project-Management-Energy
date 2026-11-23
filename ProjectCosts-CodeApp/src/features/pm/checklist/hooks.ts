@@ -132,6 +132,16 @@ export const checklistWriteKeys = (projectId: string) => [
 
 const NONE: never[] = [];
 
+/** D156 (`sharedStates`): how long the shared project-states list is kept, as on Revenues, Milestones and Project Overview. */
+const REFERENCE_STALE = 30 * 60 * 1000;
+
+/**
+ * D156 (`sharedStates`): the shared list is filled by whichever screen opened first, and General Data's rows may leave
+ * `clusterDescription` undefined; this screen's rows carry it as `string | null` (`listChecklistProjectStates`). Same rows, same order.
+ */
+const normaliseStates = (rows: ProjectStateRef[]): ProjectStateRef[] =>
+  rows.map((s) => ({ ...s, clusterDescription: s.clusterDescription ?? null }));
+
 export interface ClusterSequenceData {
   states: ProjectStateRef[];
   trackings: TrackingRow[];
@@ -154,10 +164,17 @@ export function useClusterSequence(
   project: ChecklistProject | null,
 ): ReadResult<ClusterSequenceData> & { isFetching: boolean; coreReady: boolean; coreSettled: boolean } {
   const id = projectId ?? "";
+  const perf = checklistPerf();
+  // D156 (`quietFocus`): the reference reads are not refetched when the window regains focus; the project, trackings and rows still are.
+  const quiet = perf.quietFocus ? { refetchOnWindowFocus: false as const } : {};
   const states = useQuery({
-    queryKey: qk.checklist(id, "states"),
+    // D156 (`sharedStates`): the 30-minute cache of the other Project Management screens; the shape is the same list, so `select`
+    // only guarantees `clusterDescription` is null, never undefined, whichever screen filled the cache first.
+    queryKey: perf.sharedStates ? qk.generalDataProjectStates : qk.checklist(id, "states"),
     queryFn: listChecklistProjectStates,
     enabled: Boolean(projectId),
+    ...(perf.sharedStates ? { staleTime: REFERENCE_STALE, select: normaliseStates } : {}),
+    ...quiet,
   });
   const trackings = useQuery({
     queryKey: qk.checklist(id, "trackings"),
@@ -165,9 +182,13 @@ export function useClusterSequence(
     enabled: Boolean(projectId),
   });
   const gates = useQuery({
-    queryKey: qk.checklist(id, "gates", project?.countryId ?? "", project?.technology ?? ""),
+    // D156 (`scopedGates`): the gate settings depend on the project's country and technology only.
+    queryKey: perf.scopedGates
+      ? qk.checklistGates(project?.countryId ?? "", project?.technology ?? "")
+      : qk.checklist(id, "gates", project?.countryId ?? "", project?.technology ?? ""),
     queryFn: () => listChecklistGates(project!),
     enabled: project !== null,
+    ...quiet,
   });
   return {
     data: { states: states.data ?? NONE, trackings: trackings.data ?? NONE, gates: gates.data ?? NONE },
@@ -208,6 +229,8 @@ export function useChecklistApprovalSettings(
     queryKey: qk.checklist(projectId ?? "", "approvals", ...ids),
     queryFn: () => listChecklistApprovalSettings(ids),
     enabled: Boolean(projectId) && ids.length > 0,
+    // D156 (`quietFocus`): the approval settings are admin configuration; returning to the window does not re-read them (or their Entra mails).
+    ...(checklistPerf().quietFocus ? { refetchOnWindowFocus: false as const } : {}),
   });
   return out(q, NONE as ChecklistApprovalSetting[]);
 }
@@ -553,10 +576,14 @@ export function useChecklistWrites(projectId: string | undefined) {
     backfill, prepareCluster, patchRow, saveTransition, returnToPrevious, changeTerminal,
     requestApproval, cancelGateApproval, cancelChecklistApproval,
     /** The command bar's Refresh (`Navigate` to the same screen) and the history Refresh. */
-    refresh: (part?: string) => {
+    refresh: async (part?: string) => {
       // D138 (A2): the command bar's Refresh re-asks Entra too; a history-only refresh does not need to.
       if (!part) resetChecklistPeopleCache();
-      return qc.invalidateQueries({ queryKey: part ? qk.checklist(id, part) : qk.checklistAll(id) });
+      const jobs = [qc.invalidateQueries({ queryKey: part ? qk.checklist(id, part) : qk.checklistAll(id) })];
+      // D156: the full Refresh must still re-read the reference reads that no longer sit under this project's key.
+      if (!part && checklistPerf().sharedStates) jobs.push(qc.invalidateQueries({ queryKey: qk.generalDataProjectStates }));
+      if (!part && checklistPerf().scopedGates) jobs.push(qc.invalidateQueries({ queryKey: qk.checklistGatesAll }));
+      await Promise.all(jobs);
     },
   };
 }

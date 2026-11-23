@@ -8602,3 +8602,44 @@ UT-PRICECURVE-001…011 (exact year on the QA curve in Fabric's order, PV, both 
 ### 7. Needs a live check
 
 Open Add Revenue Contract on the QA project with FiT (expect 60.00 / 60.00 / 60.00, correction factor 1.000) and, after the deploy, on a project whose COD year has no row (the nearest year's price). Italy: one price zone per project, unchanged.
+## D156 — Cluster Check List: the reference reads are kept and shared, not repeated (23 Nov 2026; number PROVISIONAL, may be renumbered at merge)
+
+**Status:** working tree of `RounakDev1`, **uncommitted, NOT product-approved, not run on DEV or QA, nothing timed**. Request: "check on the performance optimization which can improve the performance in the Cluster Checklist screen without compromising any business logic", then "proceed for the fixes" (the safe set A1 to A4 of the analysis; the options that need a decision or a DEV probe are NOT built).
+
+### 1. Finding
+
+D150 left the usual visit at 4 modelled rounds: project, states and trackings; then the gates and the rows; then the gates' Entra lookups (the loader waits for them); then the approval settings and their own Entra lookups (the row actions that depend on the approval mode wait for them). Four of the screen's reads are REFERENCE data that no write of this screen changes (the project states, the gate settings, the approval settings, the Portfolio Managers' mails), and they were kept for 30 seconds, per project, and refetched on every window focus:
+- `PEOPLE_FRESH_MS = 30 s` (`data/checklistPeople.ts`): every visit older than 30 s asked Entra again, twice (gates, approvals).
+- the gate key carried the project id (`hooks.ts`), so the next project of the same country and technology read the gates and their mails again; the project states had a per-project key and 30 s, although Revenues, Milestones and Project Overview share one 30-minute cache (already prefetched at start-up).
+- `refetchOnWindowFocus: true` with a 30 s `staleTime` (`app/Providers.tsx`) re-ran that whole chain on every return to the tab.
+
+### 2. Changed (four switches in `data/checklistPerfFlags.ts`; `CHECKLIST_PERF_ALL_OFF` is D150's behaviour exactly)
+
+1. `longPeopleCache`: an Entra answer is reused for 30 minutes (`PEOPLE_FRESH_LONG_MS`). A failed lookup is still dropped at once; the command bar's Refresh still clears the cache.
+2. `scopedGates`: the gate settings are cached by country and technology (`qk.checklistGates`), which is all `listChecklistGates` reads.
+3. `sharedStates`: the project states use the shared key `qk.generalDataProjectStates` with the 30-minute stale time; a `select` guarantees `clusterDescription` is `null`, never `undefined`, whichever screen filled the cache.
+4. `quietFocus`: the project states, the gates and the approval settings are not refetched on window focus. The project, the trackings and the rows still are (what a second user changes).
+
+The full Refresh invalidates the two keys that no longer sit under the project's key (`generalDataProjectStates`, `checklistGatesAll`), so it still refreshes everything. No read, filter, `$select`, write, write order, payload, text or flow call changed; every visit still reads the gates, the states and the settings when its query is stale (30 s) or missing.
+
+### 3. DIVERGENCES (timing and freshness only; proposed, not approved)
+
+- A Portfolio Manager's mail changed in Entra is picked up at the next Refresh or after 30 minutes (the canvas read it at every `OnVisible`). The mail feeds a tooltip and the Request Approval payload; if it is wrong, Refresh fixes it.
+- The project states are up to 30 minutes old (the canvas reads them once per session, App.OnStart: no staler).
+- The gate settings and approval settings of a visit are fresh within 30 s of a read, as before; they are no longer re-read when the window regains focus. An admin change is seen at the next visit after 30 s, or at Refresh.
+
+### 4. Expected effect (MODELLED from the dependency chain, NOT measured)
+
+On a repeat visit the two Entra rounds disappear (4 modelled rounds become 3, and the loader ends one round earlier); the next project of the same country and technology reads no gates, no mails and no states; returning to the tab no longer starts the gate, approval and Entra chain. A cold first visit is unchanged. The size of the Entra cost has never been measured; the gain is whatever that lookup costs on DEV.
+
+### 5. Tests
+
+`UT-CHKREF-001…009` (`checklistReference.perf.test.tsx`: a second project of the same country and technology reads states and gates once, another country or technology reads its own gates; ALL_OFF reads per project; foreign cache rows get `clusterDescription` null and are not re-read; on focus only the trackings refetch, and all of them with the switch off; the full Refresh invalidates the shared keys and re-reads them, a history Refresh and ALL_OFF do not), `UT-CHKPERF-015, 016` (`checklist.people.perf.test.ts`: reused for 31 s and 29 min, asked again at 31 min; a failed lookup is dropped; Refresh clears). **Existing test changed:** `UT-CHKPERF-014` pinned the 30 s lifetime; it now runs with `longPeopleCache: false`. Mutation-checked: with the four switches off by default, UT-CHKPERF-015 and UT-CHKREF-001, 004, 005, 007 fail.
+
+### 6. Not built (each needs a decision or a DEV probe)
+
+Entra off the critical path (Request Approval must still wait for the mail), a start-up prefetch of the Check List, the approval settings read beside the rows (an OData filter on the template's scope, to be probed), the PATCH's returned row instead of the reload and a conditional PATCH instead of the guard read (probe), `CHECKLIST_BULK.materialise` (measure first: a bulk request was 1.2 to 1.9 s through the host, ordinary writes 0.25 to 0.5 s), the Move's pre-flighted guards (changes a pinned write order), an optimistic Complete.
+
+### 7. Needs a live check
+
+A repeat visit and a visit to a second project on DEV with the `[VSB]` console lines: the second read of the gates and of `aadusers` should be absent inside 30 minutes; Refresh should read them again; a tab switch should not.
