@@ -70,10 +70,15 @@ export function usePaymentTargets(projectId: string | undefined, contracts: BopC
   return { ...query, byContract };
 }
 
+/**
+ * The DevCo picker's chart of accounts, in EVERY state — `ClearCollect(colCapexAllAccountsTemporary, 'CAPEX
+ * Account Lists')` has no status filter, so the canvas lists an inactive subaccount too (the user, 23 Nov 2026:
+ * CONTR-057 lifted for this picker). Its own key: the active-only list stays cached for the Contracts settings screen.
+ */
 export function useCapexAccounts() {
   return useQuery({
-    queryKey: qk.capexAccounts,
-    queryFn: () => costRepository().listCapexAccounts(),
+    queryKey: qk.capexAccountsAll,
+    queryFn: () => costRepository().listCapexAccounts({ includeInactive: true }),
     // The chart of accounts is master data maintained on the Admin screens; it does not
     // change during a costing session.
     staleTime: 30 * 60 * 1000,

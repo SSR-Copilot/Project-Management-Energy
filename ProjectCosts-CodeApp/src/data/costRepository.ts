@@ -85,7 +85,8 @@ export interface CostRepository {
   listContracts(projectId: string): Promise<BopContract[]>;
   listPaymentTargets(projectId: string, contractIds: readonly string[]): Promise<PaymentTarget[]>;
   listDevCoLinks(projectId: string, contractIds: readonly string[]): Promise<DevCoLink[]>;
-  listCapexAccounts(): Promise<AccountRow[]>;
+  /** `includeInactive`: every state, as the canvas chart of accounts (the DevCo picker); default active only. */
+  listCapexAccounts(options?: { includeInactive?: boolean }): Promise<AccountRow[]>;
   listDevCoCapexContracts(projectId: string): Promise<CapexProjectContract[]>;
 
   /**

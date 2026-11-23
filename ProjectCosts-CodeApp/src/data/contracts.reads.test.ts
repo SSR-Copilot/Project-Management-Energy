@@ -171,6 +171,15 @@ describe("listCapexAccounts", () => {
     ]);
     expect(rows).toEqual([{ id: id(1), number: "", name: "Turbines", order: 3, parentId: id(9) }]);
   });
+
+  it("UT-CONTR-245b includeInactive reads every state (no status filter), as the canvas chart of accounts for the DevCo picker", async () => {
+    answer({ vsb_capexaccountlists: [{ vsb_capexaccountlistid: id(1), vsb_number: "81005_0", vsb_name: "Land Survey", statecode: 1 }] });
+    const rows = await listCapexAccounts({ includeInactive: true });
+    const [call] = calls("vsb_capexaccountlists");
+    expect(call!.options.filter).toBeUndefined();
+    expect(call!.options.orderBy).toEqual(["vsb_number asc"]);
+    expect(rows.map((r) => r.number)).toEqual(["81005_0"]);
+  });
 });
 
 describe("findBopStandardAssumption", () => {

@@ -275,10 +275,12 @@ export async function listCapexCostRows(projectId: string): Promise<CapexCostRow
 /**
  * `ClearCollect(colCapexAllAccountsTemporary, 'CAPEX Account Lists')` — the chart of accounts.
  *
- * PRODUCT DECISION, left as is (CONTR-057): the canvas reads ALL states (no filter); this read keeps
- * `statecode eq 0`, so an inactive account is hidden from the DevCo picker. Not changed here.
+ * The canvas reads ALL states (no filter). By default this read keeps `statecode eq 0` (the Contracts
+ * settings screen's chart of accounts, CONTR-057). `includeInactive` reads every state, as the canvas:
+ * the project Contracts screen's DevCo picker uses it, so an inactive subaccount is listed there too
+ * (the user, 23 Nov 2026 — it showed on the canvas and not in the code app; CONTR-057 lifted for that picker).
  */
-export async function listCapexAccounts(): Promise<AccountRow[]> {
+export async function listCapexAccounts(options: { includeInactive?: boolean } = {}): Promise<AccountRow[]> {
   const rows = await fetchAll(
     "list CAPEX accounts",
     (o) => Vsb_capexaccountlistsService.getAll(o),
@@ -287,7 +289,7 @@ export async function listCapexAccounts(): Promise<AccountRow[]> {
         "vsb_capexaccountlistid", "vsb_number", "vsb_name", "vsb_order",
         "_vsb_parentaccount_value", "vsb_accountcategory",
       ],
-      filter: ACTIVE,
+      ...(options.includeInactive ? {} : { filter: ACTIVE }),
       orderBy: ["vsb_number asc"],
     },
   );
