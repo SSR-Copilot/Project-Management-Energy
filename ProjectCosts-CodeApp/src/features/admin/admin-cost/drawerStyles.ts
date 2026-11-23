@@ -26,6 +26,11 @@ export const useDrawerStyles = makeStyles({
   error: { color: palette.Error, fontWeight: tokens.fontWeightSemibold, fontSize: "12px" },
   inline: { display: "flex", columnGap: "12px", alignItems: "flex-end", flexWrap: "wrap" },
   /**
+   * `chk_…_ApplyVat` / `chk_…_Depreciation` (ACS:10140-10170): one under the other, Depreciation at
+   * `ApplyVat.Y + ApplyVat.Height + 10`. They had been drawn side by side (user screenshot pair, 23 Nov 2026).
+   */
+  stack: { display: "flex", flexDirection: "column", alignItems: "flex-start", rowGap: "10px" },
+  /**
    * `chk_AdminCost_RightPanel_SelectCluster1…5`: one cluster per line, as the canvas lists them. Fluent's
    * Checkbox is inline-flex, so left in a plain div the short labels ran on (Cluster 2 and 3 shared a line).
    */

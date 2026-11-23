@@ -3,8 +3,12 @@
  *
  *   light (Milestones `Screen.tsx:42-54`, Check List Settings `Screen.tsx:57-68`): header #fdffff,
  *     header button min 42 px, hover #E3E3E322, `size="large"`, chevron at the end. The 1 px
- *     Grayscale20 bottom rule is on the header always (`border="always"`, MS) or on the item only
- *     while folded (`border="folded"`, CL). `itemInsetRight={10}` is CL's item margin.
+ *     Grayscale20 bottom rule is on the header always (`border="always"`), on the item only
+ *     while folded (`border="folded"`, MS: `shp_BottomLine.Visible = IsFolded`), or on the header
+ *     always plus a 1 px #F5F5F5 line at the end of an OPEN item (`border="headerAndEnd"`, CL: the
+ *     live canvas shows both lines round an unfolded cluster, measured on the user's screenshot,
+ *     23 Nov 2026, while the 1.21.709 extract still has `Visible: =ThisItem.IsFolded`).
+ *     `itemInsetRight={10}` is CL's item margin.
  *     `panelPadding` goes on the AccordionPanel (MS 10/10/12, CL 20/10/12).
  *   grey (Costs `Screen.tsx:69-76`): the accordion is padded 10 / 20 / 0 / 20 with items 5 px apart;
  *     header Grayscale20, header button min 50 px, padding-left 10; a string title is 16 px
@@ -24,6 +28,8 @@ const useStyles = makeStyles({
   item: { backgroundColor: palette.white },
   insetRight10: { marginRight: "10px" },
   folded: { borderBottomWidth: "1px", borderBottomStyle: "solid", borderBottomColor: palette.Grayscale20 },
+  /** `headerAndEnd`, open item: the faint line that closes an unfolded cluster (#F5F5F5, the canvas gallery's `BorderColor`). */
+  openEnd: { borderBottomWidth: "1px", borderBottomStyle: "solid", borderBottomColor: "#F5F5F5" },
   lightHeader: {
     backgroundColor: "#fdffff",
     "& button": { minHeight: "42px" },
@@ -53,8 +59,8 @@ export interface SettingsAccordionProps {
   /** Called with the toggled item's id. */
   onToggle: (id: string) => void;
   variant: "light" | "grey";
-  /** Light only: MS "always" (default), CL "folded". */
-  border?: "always" | "folded";
+  /** Light only: "always" (default), MS "folded", CL "headerAndEnd". */
+  border?: "always" | "folded" | "headerAndEnd";
   /** Light only: CL 10. */
   itemInsetRight?: 0 | 10;
   /** Light only: AccordionPanel padding (MS 10/10/12, CL 20/10/12). */
@@ -86,6 +92,7 @@ export function SettingsAccordion({
               styles.item,
               light && itemInsetRight === 10 && styles.insetRight10,
               light && border === "folded" && !open && styles.folded,
+              light && border === "headerAndEnd" && open && styles.openEnd,
             )}
           >
             <AccordionHeader
@@ -95,7 +102,7 @@ export function SettingsAccordion({
               expandIcon={{ children: <ExpandChevron open={open} />, style: { transform: "none" } }}
               {...(light ? { size: "large" as const } : {})}
               className={light
-                ? mergeClasses(styles.lightHeader, border === "always" && styles.headerRule)
+                ? mergeClasses(styles.lightHeader, border !== "folded" && styles.headerRule)
                 : styles.greyHeader}
             >
               {!light && typeof item.title === "string"

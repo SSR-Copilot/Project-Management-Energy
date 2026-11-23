@@ -50,11 +50,13 @@ import { useConfirmDialog, type ConfirmState } from "@/features/shared/useConfir
 import { usePanelState } from "@/features/shared/usePanelState";
 import { useToggleSet } from "@/features/shared/useToggleSet";
 import { userReason } from "@/platform/userMessage";
+import { useQueryClient } from "@tanstack/react-query";
 import {
-  DuplicateNumberError, RecordGoneError, createCapexAccount,
-  deactivateCapexAccount, deactivateCapexSubaccount, deleteCapexAccount, deleteCapexSubaccount,
+  DuplicateNumberError, RecordGoneError, cleanUpForecastCosts, createCapexAccount,
+  deactivateCapexAccountStatus, deactivateCapexSubaccountStatus, deleteCapexAccount, deleteCapexSubaccount,
   saveCapexOrder,
 } from "@/data/adminCapexAccounts";
+import { invalidateAfterCapexAccountsWrite } from "@/data/adminInvalidation";
 import { runPlan } from "@/data/runPlan";
 import { reorderDiff } from "@/domain/reorder";
 import { palette } from "@/theme/tokens";
@@ -63,7 +65,7 @@ import { AccountPanel, ReorderPanel, SubaccountPanel } from "./Panels";
 import { useCapexPrivileges, useCapexTree, useCapexWrite, useHasContracts } from "./hooks";
 import { OutOfScopeError, describeWriteError } from "./messages";
 import {
-  BUSY, CONTRACT_CHECK_FAILED, GONE, GONE_STATUS, accountCommands, accountDeleteUnavailable, accountStatusDialog, composeSubaccountNumber, deleteAccountDialog,
+  BUSY, CLEANUP, CONTRACT_CHECK_FAILED, GONE, GONE_STATUS, accountCommands, accountDeleteUnavailable, accountStatusDialog, cleanupDoneText, composeSubaccountNumber, deleteAccountDialog,
   deleteSubaccountDialog, forecastCutoff, planActivateAccount, planActivateSubaccount, planRenameAccount,
   subaccountStatusDialog,
   type CapexNode, type CommandState, type DialogText,
@@ -122,6 +124,7 @@ export default function CAPEXAccountsSettingsScreen() {
   const health = useQueryHealth([treeQuery]);
   const privileges = useCapexPrivileges();
   const write = useCapexWrite();
+  const queryClient = useQueryClient();
   /** The admin rule (with the local-run bypass): a non-admin's write is refused, nothing is sent. */
   const canEdit = useAdminAccess();
 
@@ -203,6 +206,24 @@ export default function CAPEXAccountsSettingsScreen() {
   function run<T>(label: string, fn: () => Promise<T>): Promise<T> {
     if (!canEdit) return Promise.reject(new OutOfScopeError());
     return runner.run(label, async () => (await write.mutateAsync(fn)) as T);
+  }
+
+  /**
+   * The forecast cost clean-up of a deactivation, in the BACKGROUND (`CLEANUP`): a progress toast
+   * while it runs, then the outcome as a toast, then the cost screens' caches refreshed. Not under
+   * the overlay, so the dialog closes as soon as the status change itself has landed.
+   */
+  function cleanUpInBackground(accountIds: readonly string[], year: number, month: number) {
+    const done = notify.progress(CLEANUP.running, { testId: CLEANUP.testId });
+    void cleanUpForecastCosts(accountIds, year, month)
+      .then(
+        (result) => notify.success(cleanupDoneText(result)),
+        (error: unknown) => notify.error(describeWriteError(error, CLEANUP.action)),
+      )
+      .finally(() => {
+        done();
+        void invalidateAfterCapexAccountsWrite(queryClient);
+      });
   }
 
   function openPanel(next: Panel) {
@@ -352,14 +373,16 @@ export default function CAPEXAccountsSettingsScreen() {
    *     contracts (and, for an account, the subaccounts) on the server. An account delete clears the
    *     selection, as the canvas.
    *   - Deactivate account (CA:2423): the account Inactive, its subaccounts (read live) Inactive,
-   *     then the forecast clean-up (this year's later months set to 0, later years deleted).
+   *     under the overlay; then the forecast clean-up (this year's later months set to 0, later
+   *     years deleted) in the BACKGROUND (`cleanUpInBackground`) — it is one request per cost row,
+   *     so it took minutes under the overlay for an account booked on many projects (23 Nov 2026).
    *     SOURCE DEFECT (D19): the canvas sets every subaccount to ACTIVE, although the dialog
    *     promises they are deactivated. The pre-port twin `childStatusOnDeactivateCanvasParity`
    *     (UT-ADCAPEX-019b) was not carried over.
    *     DIVERGENCE: the clean-up covers contracts on the subaccounts AND on the account itself;
    *     the canvas cleans only the subaccounts' contracts (`locSubaccounts`).
-   *   - Deactivate subaccount (CA:2454): the subaccount Inactive and the same clean-up of its
-   *     contracts.
+   *   - Deactivate subaccount (CA:2454): the subaccount Inactive and the same background clean-up
+   *     of its contracts.
    *   - DIVERGENCE (both deactivates): cost rows marked paid (`vsb_costpaid = true`) are skipped by
    *     the clean-up (`PAID_EXCLUSION`); the canvas zeroes and deletes them too.
    *   - Activate: status only (`planActivateAccount` / `planActivateSubaccount`); deleted costs
@@ -383,8 +406,9 @@ export default function CAPEXAccountsSettingsScreen() {
         case "accountStatus":
           if (wasActive) {
             // The data layer reads the subaccounts live; the cached tree is not used.
-            await run(BUSY.updateAccount, () => deactivateCapexAccount({ accountId: targetId, year, month }));
-            notify.success("Account and its subaccounts deactivated; forecast costs cleaned up.");
+            const { subaccountIds } = await run(BUSY.updateAccount, () => deactivateCapexAccountStatus(targetId));
+            notify.success("Account and its subaccounts deactivated.");
+            cleanUpInBackground([targetId, ...subaccountIds], year, month);
           } else {
             await run(BUSY.updateAccount, () => runPlan(planActivateAccount(targetId, { canEdit }), ACTIVATE_ACCOUNT));
             notify.success("Account activated.");
@@ -392,8 +416,9 @@ export default function CAPEXAccountsSettingsScreen() {
           break;
         case "subaccountStatus":
           if (wasActive) {
-            await run(BUSY.updateSubaccount, () => deactivateCapexSubaccount(targetId, year, month));
-            notify.success("Subaccount deactivated; forecast costs cleaned up.");
+            await run(BUSY.updateSubaccount, () => deactivateCapexSubaccountStatus(targetId));
+            notify.success("Subaccount deactivated.");
+            cleanUpInBackground([targetId], year, month);
           } else {
             await run(BUSY.updateSubaccount, () => runPlan(planActivateSubaccount(targetId, { canEdit }), ACTIVATE_SUBACCOUNT));
             notify.success("Subaccount activated.");

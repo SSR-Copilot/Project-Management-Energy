@@ -467,6 +467,12 @@
 .canvas-contract-comment { margin-top: 20px; }
 .canvas-contract-comment textarea { resize: none; }
 .canvas-label-regular .canvas-field > span:first-child { font-weight: 400; }
+/* Cost Settings DEVEX/CAPEX Add Cost panel (`con_AdminCost_RightPanel_Form_AddStandardCost`): every caption is a
+   `Text@0.0.51` with `Weight: Semibold` at X 20 and its `*_Asterisk` label (`Color: gblAppColors.Error` = #d20532,
+   X 5) sits BEFORE it. Fluent's `Field` drew the captions regular with the star after (user screenshot pair,
+   23 Nov 2026). */
+.canvas-panel.devex-canvas-panel .fui-Field > .fui-Field__label { display: inline-flex; align-items: baseline; font-weight: 600; color: #242424; }
+.canvas-panel.devex-canvas-panel .fui-Field > .fui-Field__label .fui-Label__required { order: -1; padding-left: 0; padding-right: 4px; color: #d20532; }
 
 /* The Contracts command bar: `CommandBar` has no inset (21 Oct 2026), so its first icon is
    placed over the cards' radio (`img_…_CardHeaderRadioSelection`, X 10) by this wrapper. */
