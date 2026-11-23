@@ -431,6 +431,7 @@ Branch `feature/azure-maps-integration`; details in `18-AZURE-MAPS-IN-THE-CODE-A
 | General Data | The token flow catches its own failure (scope → `Failed_steps` → `Respond_error` → `Terminate_failed`): the app gets `errorcode` / `errormessage` at once instead of a 502 *NoResponse* after a wait, and the run still ends as Failed in the run history | new |
 | General Data | After a token failure the app waits 60 s before calling the flow again: panning a broken map no longer starts a flow run per tile (UT-AZMAP-006) | new |
 | General Data | A map that cannot load at all (SDK chunk, WebGL, a CSP block) is caught by an error boundary around the map: "The map cannot be displayed. Please reload the page." in the map area, the form and Save unaffected (UT-GDATA-911; found when UT-ROUTES-020/021 crashed the whole route without it) | new |
+| General Data | The Azure Maps SDK's "Feedback" link (bottom right, to Microsoft's map-feedback site) is hidden (`showFeedbackLink: false`); the © TomTom / Microsoft attribution stays, as the map data's licence requires (23 Nov 2026, user request) | new |
 
 ## Cluster Checklist, Move to Cluster: loading and layers (6 Nov 2026, D105) — fixed / kept
 
