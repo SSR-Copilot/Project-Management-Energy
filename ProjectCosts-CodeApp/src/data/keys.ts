@@ -24,6 +24,8 @@ export const qk = {
   projectCountry: (countryId: string) => ["projectCountry", countryId] as const,
 
   capexAccounts: ["capexAccounts"] as const,
+  /** The chart of accounts in EVERY state (the project Contracts DevCo picker); under the prefix above, so one invalidation covers both. */
+  capexAccountsAll: ["capexAccounts", "all"] as const,
   /*
    * Application Settings (`/admin/*`) keys, flat and camelCase like the rest of `qk`. A key with a
    * `...All` twin is a prefix of it, so one invalidation refreshes every scope.

@@ -66,7 +66,8 @@ describe("OPT-08a: page size on the narrow cost-row reads", () => {
     const call = optionsOf("list Add Cost from Table costs")[0]!;
     expect(call.maxPageSize).toBe(5000);
     expect(call.select).toEqual(["vsb_capexcostid", "_vsb_contract_value", "vsb_year", "vsb_month", "vsb_cost"]);
-    expect(call.filter).toContain("statecode eq 0");
+    // Any state (audit, 23 Nov 2026): the canvas cost read has no status clause, so no `statecode` condition is sent.
+    expect(call.filter).not.toContain("statecode");
     expect(value.costs).toEqual([{ id: g(30), contractId: g(20), year: 2027, month: 1, cost: 5 }]);
   });
 

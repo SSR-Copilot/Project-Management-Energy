@@ -452,7 +452,8 @@ describe("loadProjectPage — the two ordered segments", () => {
     expect(namedCall().filter).toContain(`${COL.name} ne null`);
     expect(blankCall().filter).toContain(`${COL.name} eq null`);
     for (const call of [namedCall(), blankCall()]) {
-      expect(call.filter).toContain("statecode eq 0");
+      // D45 G2: every state, as the canvas `Filter(Projects, …)` — no `statecode` clause.
+      expect(call.filter).not.toContain("statecode");
       expect(call.filter).toContain("_vsb_country_value eq 11111111-1111-1111-1111-111111111111");
     }
     expect(pageCalls.every((c) => c.tableName === "vsb_projects")).toBe(true);

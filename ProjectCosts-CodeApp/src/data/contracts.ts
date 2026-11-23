@@ -19,6 +19,7 @@ import { Vsb_bopprojectscontractsesService } from "@/generated/services/Vsb_bopp
 import { Vsb_bopcontractspaymenttargetsesService } from "@/generated/services/Vsb_bopcontractspaymenttargetsesService";
 import { Vsb_bopcontractsdevcocostsesService } from "@/generated/services/Vsb_bopcontractsdevcocostsesService";
 import { Vsb_bopcontractsstandardassumptionsesService } from "@/generated/services/Vsb_bopcontractsstandardassumptionsesService";
+import { Vsb_capexaccountlistsService } from "@/generated/services/Vsb_capexaccountlistsService";
 import { Vsb_capexprojectcontractsService } from "@/generated/services/Vsb_capexprojectcontractsService";
 import { Vsb_capexcostsService } from "@/generated/services/Vsb_capexcostsService";
 import type { Vsb_bopprojectscontractses } from "@/generated/models/Vsb_bopprojectscontractsesModel";
@@ -285,13 +286,29 @@ export async function listCapexCostRows(
 /**
  * `ClearCollect(colCapexAllAccountsTemporary, 'CAPEX Account Lists')` — the chart of accounts.
  *
- * PRODUCT DECISION, left as is (CONTR-057): the canvas reads ALL states (no filter); this read keeps
- * `statecode eq 0`, so an inactive account is hidden from the DevCo picker. Not changed here.
+ * The canvas reads ALL states (no filter). By default this read keeps `statecode eq 0` (the Contracts
+ * settings screen's chart of accounts, CONTR-057). `includeInactive` reads every state, as the canvas:
+ * the project Contracts screen's DevCo picker uses it, so an inactive subaccount is listed there too
+ * (the user, 23 Nov 2026 — it showed on the canvas and not in the code app; CONTR-057 lifted for that picker).
  */
-export async function listCapexAccounts(): Promise<AccountRow[]> {
-  // B2 (OPT-07c): the one shared chart read (`./capexChart`: the same select, ACTIVE filter and `vsb_number asc` order), shared
-  // with the cost book, the tab strip, the Summary totals and Add Cost from Table, and dropped after any admin account write.
-  return (await loadCapexChartRows()).map(toAccountRow);
+export async function listCapexAccounts(options: { includeInactive?: boolean } = {}): Promise<AccountRow[]> {
+  // B2 (OPT-07c): the default read is the one shared chart read (`./capexChart`: the same select, ACTIVE filter and `vsb_number asc`
+  // order), shared with the cost book, the tab strip, the Summary totals and Add Cost from Table, and dropped after any admin account
+  // write. `includeInactive` (the project Contracts screen's DevCo picker, 23 Nov 2026) needs every state, which the shared read does
+  // not hold, so it keeps its own unfiltered read exactly as before.
+  if (!options.includeInactive) return (await loadCapexChartRows()).map(toAccountRow);
+  const rows = await fetchAll(
+    "list CAPEX accounts",
+    (o) => Vsb_capexaccountlistsService.getAll(o),
+    {
+      select: [
+        "vsb_capexaccountlistid", "vsb_number", "vsb_name", "vsb_order",
+        "_vsb_parentaccount_value", "vsb_accountcategory",
+      ],
+      orderBy: ["vsb_number asc"],
+    },
+  );
+  return rows.map(toAccountRow);
 }
 
 /**

@@ -491,13 +491,13 @@ describe("ProjectOverviewScreen", () => {
     expect(projectCalls.some((c) => c.options.skipToken === "TOKEN-PAGE-2")).toBe(true);
   });
 
-  it("UT-OVUI-004 sends no $filter at all when nothing is filtered beyond active", async () => {
+  it("UT-OVUI-004 sends only the segment split when nothing is filtered (every state, as the canvas; D45 G2)", async () => {
     render(<Harness><ProjectOverviewScreen /></Harness>);
     await screen.findByText("Contr. Endpoint Testproject");
-    // `statecode eq 0` is always composed in, and the segment split adds the sorted column's
-    // null test. What must never appear is an empty `$filter=`.
-    expect(projectQuery()?.filter).toBe("(statecode eq 0) and (vsb_projectname ne null)");
-    expect(blankQuery()?.filter).toBe("(statecode eq 0) and (vsb_projectname eq null)");
+    // No status clause (the canvas `Filter(Projects, …)` has none, so inactive projects are listed too);
+    // the segment split adds the sorted column's null test. What must never appear is an empty `$filter=`.
+    expect(projectQuery()?.filter).toBe("vsb_projectname ne null");
+    expect(blankQuery()?.filter).toBe("vsb_projectname eq null");
   });
 
   it("UT-OVUI-005 renders the footer strings the screenshot shows", async () => {

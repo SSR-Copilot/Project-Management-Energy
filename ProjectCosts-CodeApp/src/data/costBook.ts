@@ -887,6 +887,12 @@ export function contractLabel(
  *
  * Cost rows come back for EVERY year, not just the selected one, because the grid's Total /
  * Planned / Actual columns are all-years figures. Narrowing by year would make the totals wrong.
+ *
+ * Contracts and cost rows come back in EVERY state (audit, 23 Nov 2026): the canvas `Filter('CAPEX
+ * Project Contracts', Project = …)` and its `colCapexCosts` have no status clause, so an inactive
+ * contract still counts in the grid and the Summary there. The earlier `statecode eq 0` made the
+ * code app's totals lower than the canvas's by exactly those rows. The same applies to the Summary
+ * reads and the standard-contract check below, and to Add Cost from Table (`addCostSheet.ts`).
  */
 export async function loadCostLines(
   projectId: string,
@@ -923,7 +929,7 @@ export async function loadCostLines(
             // The "edited from spreadsheet" warning (D90): `Is Edited from PCF?` and `Initial Contract Source`.
             "vsb_iseditedfrompcf", "vsb_initialcontractsource",
           ],
-          filter: and(lookupEq("vsb_project", projectId), lookupIn("vsb_account", ids), ACTIVE),
+          filter: and(lookupEq("vsb_project", projectId), lookupIn("vsb_account", ids)),
         },
       ),
     ),
@@ -1041,11 +1047,11 @@ async function loadPayments(contractIds: string[]): Promise<Map<string, Payment[
             "vsb_capexcostid", "_vsb_contract_value", "vsb_year", "vsb_month",
             "vsb_cost", "vsb_costpaid",
           ],
-          filter: and(lookupIn("vsb_contract", ids), ACTIVE),
-          // B2 (OPT-08a): six narrow columns, so the platform's page ceiling (5000) is safe and a large category's cost rows
-          // (the project docs record 579 on Wirmighausen, tens of thousands elsewhere) arrive in one request per chunk instead
-          // of one per 500 rows. Same rows and order; only the number of round trips changes (as `loadContractCostSums`).
-          maxPageSize: 5000,
+          filter: lookupIn("vsb_contract", ids),
+          // B2 (OPT-08a): six narrow columns, so the platform's page ceiling (5000) is safe and a large category's cost rows
+          // (the project docs record 579 on Wirmighausen, tens of thousands elsewhere) arrive in one request per chunk instead
+          // of one per 500 rows. Same rows and order; only the number of round trips changes (as `loadContractCostSums`).
+          maxPageSize: 5000,
         },
       ),
     ),
@@ -1098,9 +1104,11 @@ export async function standardContractExists(
     (o) => Vsb_capexprojectcontractsService.getAll(o),
     {
       select: ["vsb_capexprojectcontractid"],
+      // Any state, as the canvas `LookUp` (Capex Costs Screen:7380-7383): an inactive standard
+      // contract still blocks a second one.
       filter: and(
         lookupEq("vsb_project", projectId), lookupEq("vsb_account", accountId),
-        lookupEq("vsb_capexstandardassumptioncontract", assumptionId), ACTIVE,
+        lookupEq("vsb_capexstandardassumptioncontract", assumptionId),
       ),
       top: 1,
     },
@@ -1206,7 +1214,7 @@ async function loadContractCostSums(
           select: skipPendingCosts
             ? ["vsb_capexcostid", "_vsb_contract_value", "vsb_cost"]
             : ["_vsb_contract_value", "vsb_cost"],
-          filter: and(lookupIn("vsb_contract", ids), ACTIVE),
+          filter: lookupIn("vsb_contract", ids),
           // 5000 is Dataverse's ceiling for `odata.maxpagesize`; `fetchAll` still follows the
           // skip token, so this changes the number of round trips and nothing else.
           maxPageSize: 5000,
@@ -1267,7 +1275,7 @@ export async function loadCapexTotals(
         // `vsb_totalcost` is deliberately NOT selected. The Summary does not use it, and
         // selecting it would invite the next reader to sum the wrong column again.
         select: ["vsb_capexprojectcontractid", "_vsb_account_value"],
-        filter: and(lookupEq("vsb_project", projectId), ACTIVE),
+        filter: lookupEq("vsb_project", projectId),
       },
     ),
   ]);

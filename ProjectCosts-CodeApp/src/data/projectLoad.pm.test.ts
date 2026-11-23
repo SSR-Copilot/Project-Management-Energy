@@ -138,11 +138,11 @@ describe("OPT-01: the Project Management load reads the row only", () => {
     expect(value).toMatchObject({ countryName: "Poland", areaStateProvince: "Pomorskie", clusterStateOrder: 3, clusterStateName: "Cluster 3" });
   });
 
-  it("UT-PROJLOAD-OPT-018 the PM read keeps the row's $select and the ACTIVE filter", async () => {
+  it("UT-PROJLOAD-OPT-018 the PM read keeps the row's $select and, as the full load (23 Nov 2026), reads the project in any state", async () => {
     const { calls } = await h.wave.run(() => loadProject(P, { scope: "pm" }));
     expect(calls[0]?.select).toEqual(expect.arrayContaining(["vsb_projectid", "vsb_projectname", "vsb_approvalstates", "_vsb_clusterstate_value"]));
     expect(calls[0]?.filter).toContain(P);
-    expect(calls[0]?.filter).toContain("statecode eq 0");
+    expect(calls[0]?.filter).not.toContain("statecode");
   });
 });
 

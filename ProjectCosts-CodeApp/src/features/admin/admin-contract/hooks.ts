@@ -48,7 +48,8 @@ export function useContractDevCo(selection: CountryTechnology | undefined) {
 export function useCapexAccounts() {
   return useQuery({
     queryKey: qk.capexAccounts,
-    queryFn: listCapexAccounts,
+    // Active only (CONTR-057 holds for this screen); the project Contracts picker reads every state under its own key.
+    queryFn: () => listCapexAccounts(),
     staleTime: 5 * 60 * 1000,
     retry,
   });
