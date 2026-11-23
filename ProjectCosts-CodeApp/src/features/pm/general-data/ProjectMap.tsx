@@ -10,6 +10,7 @@
  *   `Items` (one row: Name = the saved 'Project Name', Lat/Lng = `mapMarker`) → `pin` / `label`, a labelled pin
  *   `CurrentLocation: true` + `CurrentLocation*`                            → `device`, a blue dot
  *   `DefaultZoomLevel: 12`                                                    → `ZOOM`
+ *   `ShowCompass` / `ShowZoomControl` / `ShowPitchControl` (unset = on)       → Compass, Zoom and Pitch controls
  *   `OnMapClick` (opens the confirmation when the point differs)              → `onPick` (the screen decides)
  *   `BorderRadius: 4`, 90 % of the cell                                       → the screen's `map` class
  *
@@ -103,7 +104,12 @@ export default function ProjectMap(props: ProjectMapProps) {
     });
     map.events.add("ready", () => {
       setStatus("ready");
-      map.controls.add(new atlas.control.ZoomControl(), { position: atlas.ControlPosition.TopRight });
+      // The canvas `Map@1.8.27` sets no `ShowCompass` / `ShowZoomControl` / `ShowPitchControl`, so all three are on
+      // (their defaults), stacked top right in this order: compass (rotate left / right, reset north), zoom, pitch.
+      map.controls.add(
+        [new atlas.control.CompassControl(), new atlas.control.ZoomControl(), new atlas.control.PitchControl()],
+        { position: atlas.ControlPosition.TopRight },
+      );
       const pins = new atlas.source.DataSource();
       const dev = new atlas.source.DataSource();
       map.sources.add([pins, dev]);
