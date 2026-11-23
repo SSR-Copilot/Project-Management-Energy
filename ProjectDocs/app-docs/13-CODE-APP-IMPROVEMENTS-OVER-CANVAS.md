@@ -813,6 +813,21 @@ MODELLED from the dependency chain; nothing was timed. Every change is behind a 
 | Cluster Check List | The project states come from the 30-minute cache the other Project Management screens share, not a read per visit; the canvas reads them once per session. UT-CHKREF-001, 004 | new (DIVERGENCE (freshness): up to 30 minutes old; no staler than the canvas. Switch `sharedStates`) |
 | Cluster Check List | Returning to the browser tab no longer re-runs the gate, approval-settings and Entra reads; the project, trackings and rows still refetch (what a second user changes). UT-CHKREF-005, 006 | new (switch `quietFocus`) |
 | Cluster Check List | The command bar's Refresh still refreshes everything: it also invalidates the shared states and the gate scope. UT-CHKREF-007…009. Tests: the 30 s lifetime test UT-CHKPERF-014 now runs with the switch off | new (tests) |
+## Code review fixes: a failed delete is not "deleted", a capped read fails, a checked InfoCenter link (23 Nov 2026, D157, number provisional) — fixed (not approved, not run on DEV)
+
+| Screen | Change | Status |
+|---|---|---|
+| All screens (delete) | A delete that Dataverse refuses with text such as "…does not exist" about ANOTHER object (a cascade, a plug-in) is now an error, not "deleted". Only HTTP 404 and `0x80040217` mean "already gone". Before, the row stayed while the screen said it was gone. UT-ERR-DELETE-002, 003, UT-PLAN-913 | fixed (DIVERGENCE: a safety fix; the canvas shows the error) |
+| All screens (reads) | A read that was meant to be complete and reaches the 50-page cap (25,000 rows) fails with a clear error instead of returning a short list that totals, diffs or deletes would act on. A search box that asked for one page still gets one. UT-FETCHALL-001…005 | fixed (new guard) |
+| Header | The "VSB Cloud InfoCenter" item opens only an http(s) address (R-9, as the Project Overview links). UT-URL-001, 002, UT-HEADER-017 | fixed (new guard) |
+| Cross-cutting (tests) | The screen tests wait up to 5 s (was 1 s) for a lazy panel or dialog, so the gate no longer fails under load for no reason | fixed (tooling) |
+## Code review #3 and #4: finish an interrupted checklist copy, no project-scoped create without its business unit (23 Nov 2026, D158, number provisional) — fixed (divergences, not approved, not run on DEV)
+
+| Screen | Change | Status |
+|---|---|---|
+| Cluster Check List | A cluster that has some of its template tasks but not all (a copy that stopped part-way) is completed at the next visit, for the missing templates only. Only when nobody has worked on the cluster and it is not Completed, so a template an admin adds later never reaches work in progress. The canvas copies only into an empty cluster, so a half-copied one stayed incomplete for good. UT-CHKCOPY-001…018 | fixed (DIVERGENCE from the canvas; a half-copied cluster whose tasks were already worked on is not completed. Switch `completeCopy`) |
+| All screens (writes) | A save that would create a row tied to a project WITHOUT the owning business unit is refused before anything is sent ("Nothing was saved: …"). Before, the row was saved and became invisible to colleagues in other business units. UT-OWNER-001…009, UT-FINPERF-126 | fixed (DIVERGENCE: a project with no business unit on record can no longer create rows; the canvas saved them without the bind. Switch `OWNER_BIND_GUARD.refuseCreateWithoutOwner`) |
+| Finance, Production, Revenues | The three private copies of the bind are replaced by the shared one, which also checks the id is a GUID | fixed (internal) |
 ## Generators screen: targeted reloads, a split load gate and a prefetch (19 Nov 2026, D141, number provisional) — new / divergences (not approved, not run on DEV)
 
 | Screen | Change | Status |

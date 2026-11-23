@@ -101,6 +101,7 @@ import {
 } from "./bulkBackend";
 import { createGate, createSerialRunner, WRITE_CONCURRENCY } from "./concurrency";
 import { GENERATORS_DELETE, type DeleteFlagOverrides, type GeneratorsDeleteFlags } from "./generatorsDeleteFlags";
+import { ownerBindGuard, ownerBindProblem } from "./ownerBindGuard";
 import { withDeleteRetry } from "./retry";
 import { DeleteNotConfirmedError, verifyGone, type VerifyClient } from "./verifyGone";
 import { changeCount, CREATED_ROW_ID, isBulkWrite, type PlannedWrite, type WritePlan } from "./writePlan";
@@ -449,6 +450,11 @@ export async function executePlan(
 
   const writes = plan.writes;
   assertPlanShape(writes);
+  // D158 (CONVENTIONS rule 4): a project-scoped create without the owning-business-unit bind is refused BEFORE anything is sent.
+  if (ownerBindGuard().refuseCreateWithoutOwner) {
+    const noOwner = ownerBindProblem(writes);
+    if (noOwner) throw new PlanRefusedError(noOwner);
+  }
   const flags: GeneratorsDeleteFlags = { ...GENERATORS_DELETE, ...options.deleteFlags };
   const total = writes.reduce((n, w) => n + changeCount(w), 0);
   const createdIds: string[] = [];

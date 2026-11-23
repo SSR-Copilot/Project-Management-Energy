@@ -43,6 +43,14 @@
  *    them once per session (App.OnStart). The full Refresh re-reads them. OFF: a read per project and visit (30 s).
  *  - `quietFocus` (default ON): the reference reads above are not refetched when the browser window regains focus. The project,
  *    the trackings and the rows still are (they carry what a second user changes). OFF: every stale query refetches on focus.
+ *
+ * D158 — not a speed switch, a BEHAVIOUR one (it lives here because the Check List's switches do):
+ *  - `completeCopy` (default ON): a visit to a cluster that has checklist rows but is MISSING some of its templates completes the copy,
+ *    for the missing templates only. The canvas copies only when the cluster has no row at all, so a copy that stopped part-way (a
+ *    throttled or failed create, D150's wider groups) left a cluster with a few tasks that no later visit ever finished. It applies only
+ *    to a cluster nobody has worked on (no row has a task state, a comment or an approval state) and that is not Completed, so a template
+ *    an admin adds later never reaches a project's work in progress. DIVERGENCE from the canvas (product owner, 23 Nov 2026: "Fix #3").
+ *    OFF: the canvas rule (copy only into an empty cluster).
  */
 export interface ChecklistPerfFlags {
   targetedReload: boolean;
@@ -54,6 +62,7 @@ export interface ChecklistPerfFlags {
   scopedGates: boolean;
   sharedStates: boolean;
   quietFocus: boolean;
+  completeCopy: boolean;
 }
 
 /** The switches as shipped. */
@@ -67,12 +76,13 @@ export const CHECKLIST_PERF: Readonly<ChecklistPerfFlags> = {
   scopedGates: true,
   sharedStates: true,
   quietFocus: true,
+  completeCopy: true,
 };
 
 /** Every switch at its OLD behaviour: today's requests exactly (tests, and the rollback in one line). */
 export const CHECKLIST_PERF_ALL_OFF: Readonly<ChecklistPerfFlags> = {
   targetedReload: false, earlyRows: false, earlyVisit: false, prefetchCopy: false, wideCopy: false,
-  longPeopleCache: false, scopedGates: false, sharedStates: false, quietFocus: false,
+  longPeopleCache: false, scopedGates: false, sharedStates: false, quietFocus: false, completeCopy: false,
 };
 
 let override: Partial<ChecklistPerfFlags> | null = null;

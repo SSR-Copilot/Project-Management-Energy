@@ -1,6 +1,6 @@
 /**
  * UT-PLAN-911.. — `unwrapDeleteStrict`: the strict "gone" of a hardened delete (Generators delete hardening, DEL-2).
- * `unwrapDelete` (the lenient one every other caller uses) is pinned alongside, to show it is untouched.
+ * `unwrapDelete` (every other delete) is pinned alongside; since D157 it applies the same rule as the strict one.
  */
 import { describe, expect, it } from "vitest";
 import { DataError, unwrapDelete, unwrapDeleteStrict } from "./errors";
@@ -20,11 +20,12 @@ describe("unwrapDeleteStrict", () => {
     expect(unwrapDeleteStrict(fail("0x80040217"), "op")).toBe("gone");
   });
 
-  it("UT-PLAN-913 the free text \"does not exist\" on a 400 is NOT gone for a hardened delete (the lenient one still accepts it)", () => {
+  it("UT-PLAN-913 the free text \"does not exist\" on a 400 is NOT gone, for a hardened delete or (since D157) any other delete", () => {
     const e = withStatus("Entity 'other' Does Not Exist", 400);
     expect(() => unwrapDeleteStrict(fail(e), "op")).toThrow(DataError);
     expect(() => unwrapDeleteStrict(fail("record does not exist"), "op")).toThrow(DataError);
-    expect(() => unwrapDelete(fail({ status: 400, message: "Entity other Does Not Exist" }), "op")).not.toThrow();
+    // D157: it was `.not.toThrow()` here; the lenient delete accepted any "does not exist" text as "the row is gone".
+    expect(() => unwrapDelete(fail({ status: 400, message: "Entity other Does Not Exist" }), "op")).toThrow(DataError);
   });
 
   it.each([400, 401, 403, 409, 429, 500, 503])("UT-PLAN-914 HTTP %i throws a DataError carrying the status", (status) => {

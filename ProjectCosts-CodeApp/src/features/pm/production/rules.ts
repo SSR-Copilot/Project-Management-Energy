@@ -64,7 +64,7 @@ import {
 import { addMonths } from "@/domain/dates";
 import { p75, p90, NOT_COMPUTABLE } from "@/domain/yieldStats";
 import { CHOICE_PRODUCTION, ES, ES_FINANCE, ES_PLANT, ES_PRODUCTION } from "@/data/dataverseNames";
-import { bind, dateOnly } from "@/data/odata";
+import { bind, dateOnly, owningBusinessUnitBind as ownerBind } from "@/data/odata";
 import { WIDE_GROUP_CONCURRENCY } from "@/data/concurrency";
 import { createdRowRef, together, type PlannedWrite, type WritePlan } from "@/data/writePlan";
 import { textFormat } from "@/features/pm/generators/rules";
@@ -1228,7 +1228,7 @@ export function parseStandardAssumptions(rows: readonly RevenueAssumptionSqlRow[
 const ins = (entitySet: string, data: Record<string, unknown>, reason: string): PlannedWrite => ({ op: "create", entitySet, data, reason });
 const upd = (entitySet: string, id: string, data: Record<string, unknown>, reason: string): PlannedWrite => ({ op: "update", entitySet, id, data, reason });
 const del = (entitySet: string, id: string, reason: string): PlannedWrite => ({ op: "delete", entitySet, id, reason });
-const ownerBind = (buId: string | null): Record<string, string> => (buId ? { [BIND.owner]: bind("businessunits", buId) } : {});
+// D158: the owning-business-unit bind is owningBusinessUnitBind (@/data/odata), imported above as ownerBind.
 
 /**
  * The yield `Patch` (WTG Y:5284, PV Y:7964). WTG writes Wind, `Allocation` (always Whole plant —

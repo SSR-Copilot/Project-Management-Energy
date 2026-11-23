@@ -8643,3 +8643,73 @@ Entra off the critical path (Request Approval must still wait for the mail), a s
 ### 7. Needs a live check
 
 A repeat visit and a visit to a second project on DEV with the `[VSB]` console lines: the second read of the gates and of `aadusers` should be absent inside 30 minutes; Refresh should read them again; a tab switch should not.
+## D157 — Code review (ponytail audit): a failed delete is not "deleted", a read that hit the cap fails, the InfoCenter link is checked, a steadier test gate (23 Nov 2026; number PROVISIONAL, may be renumbered at merge)
+
+**Status:** working tree of `RounakDev1`, **uncommitted, NOT product-approved, not run on DEV or QA**. Request: "perform additional skills required to perform code review and identify the anti-patterns", then "classify these into critical and proceed for the fixes with immediate effect". The audit is a 12-finding report; this entry records the fixes made now and what was deliberately left.
+
+### 1. Classification of the 12 findings
+
+| Class | # | Finding | Action |
+|---|---|---|---|
+| CRITICAL | 1 | A failed delete is shown as "deleted" (`unwrapDelete` accepted any "does not exist" text) | **fixed (§2.1)** |
+| HIGH | 2 | `fetchAll` returned a short list as a success at the 50-page cap (25,000 rows) | **fixed (§2.2)** |
+| HIGH | 3 | A first-visit Check List copy that stops part-way is never completed (count above zero) | NOT done: a DIVERGENCE from the canvas (copy only the missing templates), needs product approval |
+| HIGH | 4 | The owning-business-unit bind is written in about 8 places; only one validates the id; a blank id drops it silently | NOT done: replacing the copies breaks tests that use non-GUID business-unit ids, and "refuse a create without a business unit" is a product decision |
+| MEDIUM | 5 | One table cached under four keys with four copies of `useProjectStates` | open (the Check List already uses the shared key, D156) |
+| MEDIUM | 6 | The test gate fails under load (UT-GEN-930 and 931, worker-start timeouts) | **fixed in part (§2.3)** |
+| MEDIUM | 7 | `generators/rules.ts`, 5,307 lines of unrelated jobs | open: split when Generators is next changed |
+| LOW | 8 | Every tab return refetches everything stale | open (D156 did the Check List) |
+| LOW | 9 | `@microsoft/power-apps` 1.3.1, 1.6.0 is available | open: evaluate on a branch |
+| LOW | 10 | Four copies of the date helpers | open |
+| LOW | 11 | Small dead weight (`rulemap.report.ts`, `read-pcf-port.mjs`, the unused BoP data source) | open |
+| LOW | 12 | The InfoCenter link was opened without a scheme check | **fixed (§2.4)** |
+
+### 2. Fixed now
+
+1. **`unwrapDelete` (CRITICAL).** "Gone" is now only HTTP 404 or the code `0x80040217`, read exactly as `unwrapDeleteStrict` reads it (`unwrapDelete` calls it). Before, the free text "does not exist" anywhere in the error also counted, so a 400 naming ANOTHER missing object (a cascade, a plug-in, a related row) was reported as "deleted" while the row stayed, on every delete that is not a hardened Generators delete (`executePlan.ts`, the only caller). A real `Error` carrying `0x80040217` in its message is now also recognised (before it stringified to `{}`). DIVERGENCE (a safety fix; the canvas shows the error). Tests: UT-ERR-DELETE-002, 003; **UT-PLAN-913 changed**: its last line pinned the lenient behaviour (`not.toThrow()`), it now expects a `DataError`.
+2. **`fetchAll` (HIGH).** Reaching the DEFAULT cap (50 pages of 500) with more rows on the server now throws a `DataError` ("more than N rows match … incomplete") instead of returning the first 25,000 as a success; the `[VSB] ERROR` trace line stays. A caller that names its own `maxPages` (the three search boxes: `adminGatesApprovals`, `projects`, `project`) still gets the slice it asked for. Tests: UT-FETCHALL-001…005 (`client.fetchAll.test.ts`; `fetchAll` had no test before).
+3. **The test gate (MEDIUM).** `src/test/setup.ts` raises Testing Library's wait (`findBy*`, `waitFor`) from 1 s to 5 s (`asyncUtilTimeout`). UT-GEN-930 and 931 wait 1 s for the lazy Generators panel and failed only in a full run on a busy machine, which taught people to rerun a red gate. A failing test still fails, a passing one returns as soon as its condition holds; the 30 s per-test limit is unchanged. Not done: capping the workers in `vite.config.ts`.
+4. **InfoCenter link (LOW).** `isOpenableUrl` moved to `domain/url.ts` (re-exported from `project-main/rules.ts`, so no import changed); the header opens `infoCenterUrl` only when it is http(s). Tests: UT-URL-001, 002, UT-HEADER-017.
+
+### 3. Needs a live check
+A delete of a row that another user already removed (it must still read as deleted), and one that Dataverse refuses (it must show the error). A Project Overview or Check List load on a project with very many rows must not hit the new `DataError`.
+## D158 — Code review findings #3 and #4: finish an interrupted checklist copy, and no project-scoped create without its owning business unit (23 Nov 2026; number PROVISIONAL, may be renumbered at merge)
+
+**Status:** working tree of `RounakDev1`, **uncommitted, NOT product-approved by a recorded sign-off (the user asked for both on 23 Nov 2026: "Fix #3 & #4"), not run on DEV or QA**. Both are DIVERGENCES from the canvas. They are the two HIGH findings D157 left open.
+
+### 1. #3 — a copy that stopped part-way is never finished (`completeCopy`)
+
+**Problem.** The canvas copies the cluster's templates only when the project has NO checklist row for the cluster (`shouldMaterialiseChecklist`, rule 11). The copy is a group of single creates (16 wide since D150). When one of them fails or is throttled, the cluster keeps a few tasks, and every later visit sees "rows exist" and never copies the rest.
+
+**Change** (`data/checklistPerfFlags.ts` `completeCopy`, default ON; OFF is the canvas rule).
+- `features/pm/checklist/rules.ts`: `copyProbeRowTouched`, `templatesMissingFromCluster` (pure) and `planPrepareCluster({ completeWith })`.
+- `data/checklist.ts`: `listClusterCopyProbe`, a read of the cluster's rows of ANY status reduced to template key, task state, comment and approval state.
+- `hooks.ts` `prepareCluster`: when the cluster has rows, is not Completed and the rows on screen show no work, it reads the probe; when no row was worked on it reads the templates (the 30 s cached read) and copies only the templates that have no row. Best effort: any failure is traced and means "copy nothing", exactly as before.
+
+**Boundary (why it cannot reach work in progress).** Nothing is copied when ANY row of the cluster has a task state, a comment or an approval state, or when the cluster is Completed. So a template an admin adds later never lands in a project's work in progress (a new gate-relevant task could block its move). It does land in a cluster nobody has touched yet. **Known limit:** a half-copied cluster whose tasks were already worked on is not completed automatically.
+
+**Cost.** No extra request for the usual worked-on cluster (the rows already on screen show work). A visit to an untouched cluster that has rows reads the probe (one small request) and the cached templates.
+
+### 2. #4 — the owning-business-unit bind (`OWNER_BIND_GUARD`)
+
+**Problem.** The rule-4 bind was written by about eight pieces of code, each returning `{}` for a blank business unit, with nothing central checking it: one forgotten `$select` or a drifted key made every create silently lose it (the rows become invisible to colleagues in other business units).
+
+**Change.**
+- `data/ownerBindGuard.ts` (new) and one call in `executePlan`: a plan with a `create` (or a bulk create row) that binds the row to a project (`<lookup>@odata.bind: /vsb_projects(…)`) and has no lower-case `owningbusinessunit@odata.bind` is REFUSED BEFORE ANYTHING IS SENT (`PlanRefusedError`, "Nothing was saved: “…” would create a row without an owning business unit …"). Admin tables and the project itself never bind a project and are untouched. Switch `OWNER_BIND_GUARD.refuseCreateWithoutOwner` (the Generators screen F6 and the bulk backend already refused; this makes every screen do the same).
+- The three private copies of `ownerBind` (Finance, Production, Revenues) are replaced by the shared `owningBusinessUnitBind` of `data/odata.ts`, which also checks that the id is a GUID. **Not merged:** the Checklist's exported `ownerBind` (nine uses, builds its bind inline) and the data-layer writers (`addCostSheet`, `capexWrites`, `contracts`, `periodWrites`): the guard now checks what they write.
+
+**Evidence.** With only the guard in place the whole suite (7,031 tests) had ONE failure: UT-FINPERF-126, which pinned the old behaviour (a project with no business unit saved its tranche without the bind). No other plan builder omits the bind when the project has a business unit.
+
+### 3. DIVERGENCES and risks
+
+- A project whose row carries no owning business unit can no longer create rows on any project-scoped table; the save is refused with a message. Before, the rows were saved and hidden from colleagues. If a screen's project read ever omits `_owningbusinessunit_value`, its creates are refused (loud) instead of losing the bind (silent): check this on DEV (§5).
+- The shared bind validates the id (a non-GUID throws before any write). **33 test fixtures** used the fake ids `bu-1` and `bu-fr`; they were changed to GUIDs (14 test files in Finance, Production and Revenues, and the 54 occurrences in the Production golden-master snapshot `productionPlans.baseline.test.ts.snap`, which changes only by that id).
+- #3 adds an extra copy of tasks into untouched clusters that were missing templates (also templates added by an admin after the first copy).
+
+### 4. Tests
+
+`UT-OWNER-001…009` (`ownerBindGuard.test.ts`: which creates the guard looks at, the key, single and bulk creates, the refusal with nothing sent, the switch off); `UT-CHKCOPY-001…009` (`checklistCopy.complete.test.ts`: touched rows, missing templates, the plan); `UT-CHKCOPY-010…018` (`hooks.completeCopy.test.tsx`: the real hook: exactly the 3 missing of 10, a worked-on row, work visible on screen, a Completed cluster, a complete cluster, an empty cluster, a failed probe, the switch off, a second visit). **Existing tests changed:** UT-FINPERF-126 (now expects the refusal, with the old assertions kept behind the switch), and the fixtures above. Mutation-checked: with either switch off by default UT-OWNER-006 and 008 and UT-CHKCOPY-010 fail.
+
+### 5. Needs a live check
+
+On DEV: save a new row on each project-scoped screen (Revenues, Production, Finance, Generators, Check List, Land Lease, OPEX, Contracts) and confirm none is refused; visit a half-copied cluster (delete two of its tasks in a test project) and confirm the two come back; confirm a worked-on cluster is left alone.

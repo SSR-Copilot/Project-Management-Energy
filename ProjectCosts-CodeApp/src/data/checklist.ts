@@ -24,7 +24,7 @@ import { Vsb_projectchecklisttrackingnotesService } from "@/generated/services/V
 import { PROJECT_COL } from "@/features/pm/general-data/rules";
 import {
   CHECKLIST_COL, NOTE_COL, TRACKING_COL,
-  type ChecklistApprovalSetting, type ChecklistProject, type ChecklistRow, type DefaultChecklistTemplate,
+  type ChecklistApprovalSetting, type ChecklistProject, type ChecklistRow, type CopyProbeRow, type DefaultChecklistTemplate,
   type GateSetting, type HistoryQueryDescriptor, type ProjectStateRef, type TrackingRow,
 } from "@/features/pm/checklist/rules";
 import { fetchAll, fetchPage } from "./client";
@@ -306,6 +306,31 @@ export async function countClusterChecklistRows(projectId: string, clusterStateI
     { select: [CHECKLIST_COL.id], filter: projectCluster(projectId, clusterStateId), top: 1 },
   );
   return rows.length;
+}
+
+/**
+ * D158 (`completeCopy`): the rows of the cluster of ANY status, reduced to what decides whether a copy that stopped part-way can be
+ * finished: which template each row came from, and whether anybody has worked on it. Four small columns per row; it replaces nothing
+ * (the count above stays the canvas guard) and is read only for a cluster that already has rows and no cached sign of work.
+ */
+export async function listClusterCopyProbe(projectId: string, clusterStateId: string): Promise<CopyProbeRow[]> {
+  const rows = await fetchAll(
+    "check which of the cluster's templates already have a task",
+    (o) => Vsb_projectchecklistsService.getAll(o),
+    {
+      select: [CHECKLIST_COL.id, CHECKLIST_COL.projectDefaultChecklist, CHECKLIST_COL.taskState, CHECKLIST_COL.comments, CHECKLIST_COL.approvalChecklistState],
+      filter: projectCluster(projectId, clusterStateId),
+    },
+  );
+  return rows.map((x) => {
+    const r = x as unknown as Raw;
+    return {
+      templateId: str(r[CHECKLIST_COL.projectDefaultChecklist]),
+      taskState: num(r[CHECKLIST_COL.taskState]),
+      comment: str(r[CHECKLIST_COL.comments]),
+      approvalChecklistState: num(r[CHECKLIST_COL.approvalChecklistState]),
+    };
+  });
 }
 
 /**

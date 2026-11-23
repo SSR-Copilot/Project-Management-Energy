@@ -9,7 +9,7 @@ export const project = (over: Partial<ProductionProject> = {}): ProductionProjec
   id: "p1", projectIdText: "DE-0001", projectName: "Windpark Nord", countryId: "c1", countryName: "Germany", technology: 952850000,
   totalCapacity: 22.4, endDate: "2055-12-31", cod: "2028-09-01", plantPvCapacity: 5,
   grossYield: 12_000, windSpeed: 7.25, irradiation: null, netYieldP50: 12_000, netYieldP75: 11_000, netYieldP90: 10_000,
-  standardCostCreated: false, owningBusinessUnitId: "bu-1", ...over,
+  standardCostCreated: false, owningBusinessUnitId: "bbbbbbbb-0000-0000-0000-0000000000b1", ...over,
 });
 
 

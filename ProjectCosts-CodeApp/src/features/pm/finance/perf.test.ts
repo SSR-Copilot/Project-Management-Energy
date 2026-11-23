@@ -10,7 +10,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { CHOICE_FINANCE, ES, ES_FINANCE } from "@/data/dataverseNames";
 import { FINANCE_PERF_ALL_OFF, financePerf, setFinancePerfFlags, type FinancePerfFlags } from "@/data/financeFlags";
-import { executePlan, PlanError, type PlanClient } from "@/data/executePlan";
+import { executePlan, PlanError, PlanRefusedError, type PlanClient } from "@/data/executePlan";
+import { setOwnerBindGuard } from "@/data/ownerBindGuard";
 import { BulkRowsGoneError, setBulkBackend, type BulkBackend } from "@/data/bulkBackend";
 import { createGeneratorsBulkBackend } from "@/data/generatorsBulk";
 import { FINANCE_BULK_TABLES } from "@/data/financeBulk";
@@ -37,7 +38,7 @@ const project: FinanceProject = {
   technology: "Wind", areaName: null, cod: d("2028-01-01"), fid: d("2026-06-30"), construction: d("2027-03-01"),
   legallyBindingPermits: d("2026-01-15"), applicationSubmitted: null, projectDevelopmentStarted: null,
   feasibilityStudies: null, netYieldP50: 120_000, totalCapacity: 50, endDate: d("2055-12-31"),
-  clusterStateName: "Cluster 4", owningBusinessUnitId: "bu-1", clusterStateOrder: 4, financingOptions: null,
+  clusterStateName: "Cluster 4", owningBusinessUnitId: "bbbbbbbb-0000-0000-0000-0000000000b1", clusterStateOrder: 4, financingOptions: null,
 };
 
 const seniorForm = (over: Partial<SeniorDebtFormState> = {}): SeniorDebtFormState => ({
@@ -272,7 +273,7 @@ describe("UT-FINPERF a tranche Save leaves the same rows however it is sent", ()
     expect(r.bulk.snapshot).toEqual(r.legacy.snapshot);
     const children = r.bulk.snapshot.filter((s) => !s.startsWith(`${ES_FINANCE.financingInputs}|`));
     expect(children).toHaveLength(29);
-    expect(children.every((s) => s.includes('"owningbusinessunit@odata.bind":"/businessunits(bu-1)"'))).toBe(true);
+    expect(children.every((s) => s.includes('"owningbusinessunit@odata.bind":"/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)"'))).toBe(true);
     expect(children.every((s) => s.includes('"vsb_FinancingInput@odata.bind":"/vsb_financinginputs(new-1)"'))).toBe(true);
     expect(r.bulk.backend.calls).toEqual([`createMany:${ES_FINANCE.financingInputsRepaymentAmounts}:25`]);
   });
@@ -338,16 +339,25 @@ describe("UT-FINPERF a tranche Save leaves the same rows however it is sent", ()
     expect(bulk.writes.slice(1).some((w) => w.op === "updateMany")).toBe(true);
   });
 
-  it("UT-FINPERF-126 a create row without the Owning Business Unit is NOT sent through the bulk path (rule 4 fails closed there)", async () => {
+  it("UT-FINPERF-126 a create row without the Owning Business Unit is refused before anything is sent (D158); with the guard off the bulk path still fails closed (rule 4)", async () => {
     const ys = years(2029, 8);
     const noOwner = { ...project, owningBusinessUnitId: null };
-    const r = await threeWays(() => planTrancheSave({
+    const plan = () => planTrancheSave({
       form: seniorForm({ trancheId: null, repaymentRows: repayRows(ys, false), stepUpRows: [], stepUpEnabled: false }),
       project: noOwner, seniorDebtCategoryId: "c3", duplicateIds: [], storedRepayments: [], storedStepUps: [],
-    }), []);
-    expect(r.bulk.backend.calls).toEqual([]);
-    expect(r.bulk.snapshot).toEqual(r.legacy.snapshot);
-    expect(r.legacy.snapshot.some((s) => s.includes("owningbusinessunit@odata.bind"))).toBe(false);
+    });
+    // D158: the engine refuses the whole plan (a tranche and its repayment rows are project-scoped creates), whichever way it is sent.
+    await expect(threeWays(plan, [])).rejects.toBeInstanceOf(PlanRefusedError);
+    // The behaviour before D158 (the rows were written without the bind), kept behind the switch.
+    setOwnerBindGuard({ refuseCreateWithoutOwner: false });
+    try {
+      const r = await threeWays(plan, []);
+      expect(r.bulk.backend.calls).toEqual([]);
+      expect(r.bulk.snapshot).toEqual(r.legacy.snapshot);
+      expect(r.legacy.snapshot.some((s) => s.includes("owningbusinessunit@odata.bind"))).toBe(false);
+    } finally {
+      setOwnerBindGuard(null);
+    }
   });
 
   it("UT-FINPERF-127 a row another user deleted fails the bulk update, nothing of that step is sent, and the tranche write stays", async () => {

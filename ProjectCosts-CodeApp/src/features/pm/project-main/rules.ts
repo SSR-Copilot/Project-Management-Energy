@@ -832,23 +832,8 @@ export const HOVER_TEXT = {
   grid: "Project overview list",
 } as const;
 
-/**
- * Whether a stored address may be handed to `window.open` (PO-027, R-9).
- *
- * The SharePoint and Teams links are free text on the project row, so a value such as
- * `javascript:...` must not reach `window.open`. Only `http:` and `https:` addresses pass; an
- * empty, scheme-less or unparseable value does not (a scheme-less value opened a wrong relative
- * address before, so refusing it is no regression). NEW: the canvas `Launch()` took any text.
- * Never throws.
- */
-export function isOpenableUrl(url: string): boolean {
-  try {
-    const { protocol } = new URL(url);
-    return protocol === "https:" || protocol === "http:";
-  } catch {
-    return false;
-  }
-}
+/** Whether a stored address may be handed to `window.open` (PO-027, R-9). Defined in `@/domain/url` since D157 (the header shares it). */
+export { isOpenableUrl } from "@/domain/url";
 
 /* ══════════════════════════════════════════════════════════════════ paging ══ */
 

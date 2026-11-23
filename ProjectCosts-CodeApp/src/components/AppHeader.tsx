@@ -30,6 +30,7 @@ import {
 } from "@fluentui/react-icons";
 import type { Ref } from "react";
 import { layout, media, palette, space } from "@/theme/tokens";
+import { isOpenableUrl } from "@/domain/url";
 import { VsbLogo } from "./VsbLogo";
 import {
   brandVersionVisible, environmentHeaderFill, environmentVersionVisible,
@@ -473,7 +474,8 @@ export function AppHeader({
                   // The canvas used Launch(url, Blank(), LaunchTarget.Replace), which
                   // navigates the app away and discards unsaved panel state. A new tab is a
                   // deliberate divergence — ProjectDocs/app-docs/02-OPEN-DECISIONS.md D8.
-                  if (infoCenterUrl) window.open(infoCenterUrl, "_blank", "noopener");
+                  // D157: the address is an environment variable; only http(s) is opened (R-9, as the Project Overview links).
+                  if (infoCenterUrl && isOpenableUrl(infoCenterUrl)) window.open(infoCenterUrl, "_blank", "noopener");
                 }}
               >
                 VSB Cloud InfoCenter

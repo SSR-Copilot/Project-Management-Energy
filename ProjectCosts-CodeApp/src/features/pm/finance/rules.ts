@@ -72,7 +72,7 @@ import { addDays, addMonths, addYears, toMMYY, fromMMYY } from "@/domain/dates";
 import { DATE_PICKER_FORMAT, formatCanvasDate } from "@/domain/canvasDate";
 import { dateFormat } from "@/domain/locale";
 import { CHOICE_FINANCE, ES, ES_FINANCE } from "@/data/dataverseNames";
-import { bind, dateOnly } from "@/data/odata";
+import { bind, dateOnly, owningBusinessUnitBind as ownerBind } from "@/data/odata";
 import { createdRowRef, refusePlan, type PlannedWrite, type WritePlan } from "@/data/writePlan";
 import type { PlanJob } from "@/data/usePlanWrite";
 import {
@@ -3097,8 +3097,7 @@ export const FINANCE_SCREEN_TEXT = {
 
 /* ═════════════════════════════════════════════════════════════ write helpers ══ */
 
-const ownerBind = (businessUnitId: string | null): Record<string, string> =>
-  businessUnitId ? { [`${FIN_NAV.owningBusinessUnit}@odata.bind`]: bind("businessunits", businessUnitId) } : {};
+// D158: the owning-business-unit bind is `owningBusinessUnitBind` (`@/data/odata`), imported above as `ownerBind`.
 const projectBind = (projectId: string): Record<string, string> =>
   ({ [`${FIN_NAV.project}@odata.bind`]: bind(ES.projects, projectId) });
 const categoryBind = (categoryId: string | null): Record<string, string> =>

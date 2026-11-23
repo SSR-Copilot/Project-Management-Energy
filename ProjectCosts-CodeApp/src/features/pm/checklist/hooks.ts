@@ -49,7 +49,7 @@ import {
 } from "@/data/flows";
 import {
   countClusterChecklistRows, listChecklistApprovalSettings, listChecklistGates, listChecklistProjectStates,
-  listChecklistTrackings, listClusterChecklist, listClusterTemplates, listHistory, loadChecklistProject,
+  listChecklistTrackings, listClusterChecklist, listClusterCopyProbe, listClusterTemplates, listHistory, loadChecklistProject,
   type HistoryEntry,
 } from "@/data/checklist";
 import {
@@ -59,7 +59,8 @@ import {
   planPrepareCluster, planReturnToPreviousCluster, planSkippedClusterBackfill, planTerminalStateChange,
   shouldBackfillSkippedClusters, startClusterNo, trackingFor, clusterTransitionDone, flowMovesCluster,
   staleClusterRequestRefusal, staleReturnRefusal, staleSaveRefusal, staleTaskRequestRefusal,
-  type ChecklistApprovalSetting, type ChecklistProject, type ChecklistRow, type GateSetting,
+  APPROVAL_CLUSTER_STATE, copyProbeRowTouched, templatesMissingFromCluster,
+  type ChecklistApprovalSetting, type ChecklistProject, type ChecklistRow, type DefaultChecklistTemplate, type GateSetting,
   type HistoryQueryDescriptor, type ProjectStateRef, type SequenceEntry, type TerminalStaging,
   type TrackingRow, type WritePlan,
 } from "./rules";
@@ -364,6 +365,27 @@ export function useChecklistWrites(projectId: string | undefined) {
     })();
   };
 
+  /**
+   * D158 (`completeCopy`): the templates the selected cluster is still missing, for a cluster that already has rows. Best effort: any
+   * failure is traced and means "none", so a visit behaves exactly as it did before (the canvas copies only into an empty cluster).
+   * No request when the rows already on screen show work (the usual worked-on cluster); otherwise ONE small read of the rows (any status)
+   * and, only when nobody has worked on them, the cluster's templates (the 30 s cached read the first copy uses).
+   */
+  const missingTemplates = async (project: ChecklistProject, selected: SequenceEntry): Promise<DefaultChecklistTemplate[]> => {
+    try {
+      const shown = qc.getQueryData<ChecklistRow[]>(qk.checklist(id, "rows", selected.id));
+      if (shown?.some((r) => copyProbeRowTouched({
+        templateId: null, taskState: r.taskState, comment: r.note, approvalChecklistState: r.approvalChecklistState,
+      }))) return [];
+      const existing = await listClusterCopyProbe(id, selected.id);
+      if (existing.length === 0 || existing.some(copyProbeRowTouched)) return [];
+      return templatesMissingFromCluster(await templatesFor(project, selected.id), existing);
+    } catch (e) {
+      trace("warning", "The checklist's copy check failed (the visit goes on without completing the copy)", e);
+      return [];
+    }
+  };
+
   /** `btn_CheckList_EnsureSkippedClusterStatesCompleted` (Y:443-604), from a fresh read. */
   const backfill = (project: ChecklistProject, states: ProjectStateRef[]) => w.run({
     progress: MSG.loading,
@@ -390,10 +412,16 @@ export function useChecklistWrites(projectId: string | undefined) {
         listChecklistTrackings(id), countClusterChecklistRows(id, selected.id),
       ]);
       const tracking = trackingFor(trackings, selected.id);
-      const templates = needsTemplates(tracking, selected, count) ? await templatesFor(project, selected.id) : [];
-      warmSettings(templates);
+      const copyAll = needsTemplates(tracking, selected, count);
+      const templates = copyAll ? await templatesFor(project, selected.id) : [];
+      // D158 (`completeCopy`): a cluster that has rows but is missing some of its templates (a copy that stopped part-way).
+      const completeWith = !copyAll && count > 0 && checklistPerf().completeCopy
+        && tracking?.approvalClusterState !== APPROVAL_CLUSTER_STATE.completed
+        ? await missingTemplates(project, selected) : [];
+      const toCopy = copyAll ? templates : completeWith;
+      warmSettings(toCopy);
       // D138 (B1): with the switch on, the bulk backend learns the table (a separate chunk, loaded only now).
-      const bulk = CHECKLIST_BULK.materialise && templates.length > 0;
+      const bulk = CHECKLIST_BULK.materialise && toCopy.length > 0;
       if (bulk) (await import("@/data/checklistBulk")).registerChecklistBulk();
       // D150 (`wideCopy`): the single creates go out sixteen wide (the default is eight). Same rows and payloads.
       const wide = checklistPerf().wideCopy;
@@ -402,6 +430,7 @@ export function useChecklistWrites(projectId: string | undefined) {
         : undefined;
       plan = planPrepareCluster({
         selected, tracking, existingRowCount: count, templates, ctx: ctx(project), ...(materialise ? { materialise } : {}),
+        ...(completeWith.length > 0 ? { completeWith } : {}),
       });
     } catch (e) {
       return w.run({ progress: MSG.loading, plan: () => Promise.reject(e) });

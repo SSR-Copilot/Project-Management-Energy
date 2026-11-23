@@ -61,7 +61,7 @@ import { useProductionWrites } from "./hooks";
 const project = (over: Partial<ProductionProject> = {}): ProductionProject => ({
   id: "p1", projectIdText: "DE-0001", projectName: "Nord", countryId: "c1", countryName: "Germany", technology: 952850000,
   totalCapacity: 22.4, endDate: "2055-12-31", cod: "2028-09-01", plantPvCapacity: 5, grossYield: 0, windSpeed: 0, irradiation: null,
-  netYieldP50: 0, netYieldP75: 0, netYieldP90: 0, standardCostCreated: true, owningBusinessUnitId: "bu-1", ...over,
+  netYieldP50: 0, netYieldP75: 0, netYieldP90: 0, standardCostCreated: true, owningBusinessUnitId: "bbbbbbbb-0000-0000-0000-0000000000b1", ...over,
 });
 
 const row = (over: Partial<EnergyYieldRow> = {}): EnergyYieldRow => ({
@@ -129,7 +129,7 @@ describe("UT-PRODBASE-1xx reads and jobs per action (the code before optimizatio
     s.yields = [row()]; s.project = project({ standardCostCreated: true });
     const { payload } = view();
     const log = await action("save new yield (no generation)", (h) => h.saveYield({
-      editing: null, payload, project: { owningBusinessUnitId: "bu-1" },
+      editing: null, payload, project: { owningBusinessUnitId: "bbbbbbbb-0000-0000-0000-0000000000b1" },
       seasonality: { on: true, rows: buildSeasonalityRows(twelve, "WTG") }, negativePrices: { on: true, rows: buildNegativePriceRows(2028, [], "WTG") },
     }));
     expect(log.filter((l) => l === "read yields")).toHaveLength(2); // the plan's read and the roll-up's read
@@ -141,7 +141,7 @@ describe("UT-PRODBASE-1xx reads and jobs per action (the code before optimizatio
     s.yields = [editing]; s.project = project({ standardCostCreated: true });
     const { payload } = view();
     const log = await action("save edit (stored rows re-read)", (h) => h.saveYield({
-      editing, payload, project: { owningBusinessUnitId: "bu-1" },
+      editing, payload, project: { owningBusinessUnitId: "bbbbbbbb-0000-0000-0000-0000000000b1" },
       seasonality: { on: true, rows: buildSeasonalityRows(twelve, "WTG") }, negativePrices: { on: true, rows: buildNegativePriceRows(2028, [], "WTG") },
     }));
     expect(log.filter((l) => l === "read stored seasonality")).toHaveLength(1);
@@ -151,7 +151,7 @@ describe("UT-PRODBASE-1xx reads and jobs per action (the code before optimizatio
     s.yields = [row({ netYieldP50: 5_000 })]; s.project = project({ standardCostCreated: false }); s.inputs = generation();
     const { payload } = view();
     const log = await action("save new yield + generation due", (h) => h.saveYield({
-      editing: null, payload, project: { owningBusinessUnitId: "bu-1" },
+      editing: null, payload, project: { owningBusinessUnitId: "bbbbbbbb-0000-0000-0000-0000000000b1" },
       seasonality: { on: false, rows: [] }, negativePrices: { on: false, rows: [] },
     }));
     expect(s.runs).toHaveLength(3); // action job (with its roll-up) + generation job = executePlan twice for job 1, once for job 2

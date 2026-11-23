@@ -76,6 +76,31 @@ describe("AppHeader user menu", () => {
     expect(screen.getByTestId("header-user-countries").textContent).toBe("");
   });
 
+  it("UT-HEADER-017 (D157) the InfoCenter item opens an http(s) address and refuses any other scheme", async () => {
+    const user = userEvent.setup();
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    try {
+      const openInfoCenter = async (url: string) => {
+        const { unmount } = render(
+          <FluentProvider theme={vsbTheme}>
+            <AppHeader hasError={false} onReportProblem={() => undefined} infoCenterUrl={url} />
+          </FluentProvider>,
+        );
+        await user.click(screen.getByTestId("header-help"));
+        await user.click(await screen.findByTestId("header-help-infocenter"));
+        unmount();
+      };
+      await openInfoCenter("javascript:alert(1)");
+      await openInfoCenter("not a url");
+      expect(open).not.toHaveBeenCalled();
+      await openInfoCenter("https://vsb.example/infocenter");
+      expect(open).toHaveBeenCalledTimes(1);
+      expect(open).toHaveBeenCalledWith("https://vsb.example/infocenter", "_blank", "noopener");
+    } finally {
+      open.mockRestore();
+    }
+  });
+
   it("UT-HEADER-015 every menu row draws its canvas MDL2 glyph as an inline SVG on the 2048 em, not a Fluent lookalike", async () => {
     const user = userEvent.setup();
     render(

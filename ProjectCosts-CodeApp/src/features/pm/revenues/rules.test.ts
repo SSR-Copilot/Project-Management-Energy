@@ -87,7 +87,7 @@ const project = (over: Partial<RevenueProject> = {}): RevenueProject => ({
   totalCapacity: 50,
   endDate: d("2055-12-31"),
   clusterStateName: "Cluster 4",
-  owningBusinessUnitId: "bu-1",
+  owningBusinessUnitId: "bbbbbbbb-0000-0000-0000-0000000000b1",
   ...over,
 });
 
@@ -1268,7 +1268,7 @@ describe("D33 — balancing rules", () => {
       vsb_contractdurationyear: 2,
       vsb_contractdurationmonth: 4,
       vsb_balancingpriceeurpln: 4.5,
-      "owningbusinessunit@odata.bind": "/businessunits(bu-1)",
+      "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)",
     });
   });
 
@@ -1338,7 +1338,7 @@ describe("D33 — contract save", () => {
       project({ areaName: "Lazio" }), flags(),
     );
     expect(p.inflationCountryArea).toBe("Lazio");
-    expect(p.owningBusinessUnitId).toBe("bu-1");
+    expect(p.owningBusinessUnitId).toBe("bbbbbbbb-0000-0000-0000-0000000000b1");
     expect(p.siteQuality).toBeNull();
   });
 
@@ -1382,7 +1382,7 @@ describe("D33 — contract save", () => {
     expect(c["vsb_Project@odata.bind"]).toBe("/vsb_projects(p1)");
     expect(c["vsb_Subaccount@odata.bind"]).toBe("/vsb_revenuesubaccounts(sub-1)");
     expect(c["vsb_Currency@odata.bind"]).toBe("/transactioncurrencies(cur-1)");
-    expect(c["owningbusinessunit@odata.bind"]).toBe("/businessunits(bu-1)");
+    expect(c["owningbusinessunit@odata.bind"]).toBe("/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)");
     expect(c.vsb_hedgetype).toBe(3);
     expect(c.vsb_contractstartdate).toBe("2028-01-01");
     expect(c.vsb_istarrifpricestandardassumption).toBe(false);
@@ -1391,7 +1391,7 @@ describe("D33 — contract save", () => {
       "vsb_RevenueContract@odata.bind": "/vsb_projectrevenues(@created#0)",
       vsb_startdate: "2028-07-01",
       vsb_enddate: "2028-12-31",
-      "owningbusinessunit@odata.bind": "/businessunits(bu-1)",
+      "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)",
       vsb_individualcontractedmwhpa: 8000,
     });
   });
