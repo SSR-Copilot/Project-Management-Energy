@@ -460,10 +460,6 @@ export interface GatesDataset {
 
 /* ═══════════════════════════════════════════════════════════════════ reads ══ */
 
-export const STATE_SELECT = [
-  "vsb_projectstateid", "vsb_name", "vsb_order", "vsb_isvisibleonchecklist", "_owningbusinessunit_value",
-];
-
 export const TEMPLATE_SELECT = [
   "vsb_projectdefaultapprovalsid", "vsb_name", "vsb_approvalmodecode", "vsb_gateactive",
   "vsb_technologycode", "vsb_defaultapprovals", "vsb_defaultcontributors", "vsb_defaultnotifications",
@@ -475,20 +471,8 @@ export const PEOPLE_SELECT = ["aaduserid", "id", "displayname", "mail"];
 /** Graph-backed `aadusers` accepts few `or` clauses per filter; 15 is Graph's own cap. */
 export const PEOPLE_CHUNK = 15;
 
-/** `vsb_projectstates` — cached app-wide by the hook. */
-async function listProjectStates(): Promise<ProjectState[]> {
-  const rows = await fetchAll("list project states", (o) => Vsb_projectstatesService.getAll(o), {
-    select: STATE_SELECT,
-    orderBy: ["vsb_order asc"],
-  });
-  return rows.map((r) => ({
-    id: r.vsb_projectstateid,
-    name: r.vsb_name ?? "",
-    order: typeof r.vsb_order === "number" ? r.vsb_order : null,
-    visibleOnChecklist: r.vsb_isvisibleonchecklist === true,
-    businessUnitId: r._owningbusinessunit_value ?? null,
-  }));
-}
+/* The screen's project states are the one shared `Project States` read (`listProjectStates`, `data/generalData.ts`),
+ * viewed by `adminStates` (`data/projectStates.ts`, D159). */
 
 /** Gate templates for (country, technology), matched by choice CODE. */
 async function listGateTemplates(countryId: string, techCode: number): Promise<GateTemplate[]> {
@@ -661,7 +645,6 @@ export type Payload = Record<string, string | number | boolean | null>;
  * The screen's only door to Dataverse (countries come from the shared `@/data/countries`).
  */
 export const projectGatesRepository = {
-  listProjectStates,
   loadDataset,
   searchPeople,
   resolvePeople,

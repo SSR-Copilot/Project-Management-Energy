@@ -19,14 +19,13 @@ import {
   type PlanningProject, type PlanningRecord,
 } from "@/features/pm/planning/rules";
 import { fetchAll, fetchPage } from "./client";
-import { and, eq, guid, isNull, lookupEq, numberOf, or } from "./odata";
+import { and, dateOnlyOf as ymd, eq, guid, isNull, lookupEq, numberOf, or } from "./odata";
 
 type Raw = Record<string, unknown>;
 const raw = <T,>(rows: T[]): Raw[] => rows as unknown as Raw[];
 const str = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
 const num = (v: unknown): number | null => numberOf(v) ?? null;
 const formatted = (col: string): string => `${col}@OData.Community.Display.V1.FormattedValue`;
-const ymd = (v: unknown): string | null => (typeof v === "string" && v.length >= 10 ? v.slice(0, 10) : null);
 
 const PROJECT_SELECT = [
   PROJECT_COL.id, PROJECT_COL.projectNumber, PROJECT_COL.projectName, PROJECT_COL.endDate,

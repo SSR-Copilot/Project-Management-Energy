@@ -80,14 +80,7 @@ beforeEach(() => {
 });
 
 describe(" reads", () => {
-  it("UT-ADGATE-001 Project states: exact $select, no statecode filter ", async () => {
-    h.state.rows.vsb_projectstates = [{ vsb_projectstateid: "s0", vsb_name: "Draft", vsb_order: 0, vsb_isvisibleonchecklist: true, _owningbusinessunit_value: "bu" }];
-    const states = await repo.listProjectStates();
-    expect(states).toEqual([{ id: "s0", name: "Draft", order: 0, visibleOnChecklist: true, businessUnitId: "bu" }]);
-    const [call] = reads("vsb_projectstates");
-    expect(call!.options!.select).toEqual(["vsb_projectstateid", "vsb_name", "vsb_order", "vsb_isvisibleonchecklist", "_owningbusinessunit_value"]);
-    expect(call!.options!.filter).toBeUndefined();
-  });
+  // UT-ADGATE-001 (the Admin gate screen's own Project States read) moved to `data/projectStates.test.ts` (UT-PSTATES-001..): D159.
 
   it("UT-ADGATE-002 The dataset issues the documented filters, matched by technology CODE", async () => {
     h.state.rows.vsb_projectdefaultapprovalses = [{ vsb_projectdefaultapprovalsid: "t1", vsb_gateactive: true, _vsb_clusterstate_value: "s1", _vsb_approvalparticipant1_value: "30000000-0000-0000-0000-000000000001" }];

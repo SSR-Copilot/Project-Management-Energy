@@ -20,7 +20,7 @@ import {
 import { getEntraPeople } from "./adminGatesApprovals";
 import { fetchAll, fetchPage } from "./client";
 import { trace } from "@/platform/telemetry";
-import { guid, lookupEq, numberOf } from "./odata";
+import { dateOnlyOf as ymd, guid, lookupEq, numberOf } from "./odata";
 
 type Raw = Record<string, unknown>;
 type People = Awaited<ReturnType<typeof getEntraPeople>>;
@@ -44,7 +44,6 @@ async function getPeopleTolerant(ids: readonly string[]): Promise<People> {
 const raw = <T,>(rows: T[]): Raw[] => rows as unknown as Raw[];
 const str = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
 const formatted = (col: string): string => `${col}@OData.Community.Display.V1.FormattedValue`;
-const ymd = (v: unknown): string | null => (typeof v === "string" && v.length >= 10 ? v.slice(0, 10) : null);
 
 /** A person lookup, resolved through Entra; the lookup's formatted name when Entra has no row. */
 function person(r: Raw, col: string, people: People): TeamPerson | null {

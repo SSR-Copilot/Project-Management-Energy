@@ -16,6 +16,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { qk } from "@/data/keys";
+import { adminStates, projectStatesQueryOptions } from "@/data/projectStates";
 import { invalidateAfterGatesWrite } from "@/data/adminInvalidation";
 import { projectGatesRepository as repo, type GatesDataset, type Payload } from "@/data/adminGatesApprovals";
 import { CreatedIdMissingError } from "@/data/executePlan";
@@ -27,8 +28,9 @@ import {
   planSetTaskApprovalActive,
 } from "./rules";
 
+/** D159: the one shared `Project States` cache entry, viewed as every state with its raw `Order` and business unit. */
 export function useProjectStates() {
-  return useQuery({ queryKey: qk.adminGateStates, queryFn: () => repo.listProjectStates(), staleTime: Infinity });
+  return useQuery({ ...projectStatesQueryOptions(), select: adminStates });
 }
 
 export function useGatesDataset(countryId: string | undefined, technology: number | undefined) {

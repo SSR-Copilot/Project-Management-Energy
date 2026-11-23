@@ -8655,13 +8655,13 @@ A repeat visit and a visit to a second project on DEV with the `[VSB]` console l
 | HIGH | 2 | `fetchAll` returned a short list as a success at the 50-page cap (25,000 rows) | **fixed (§2.2)** |
 | HIGH | 3 | A first-visit Check List copy that stops part-way is never completed (count above zero) | NOT done: a DIVERGENCE from the canvas (copy only the missing templates), needs product approval |
 | HIGH | 4 | The owning-business-unit bind is written in about 8 places; only one validates the id; a blank id drops it silently | NOT done: replacing the copies breaks tests that use non-GUID business-unit ids, and "refuse a create without a business unit" is a product decision |
-| MEDIUM | 5 | One table cached under four keys with four copies of `useProjectStates` | open (the Check List already uses the shared key, D156) |
+| MEDIUM | 5 | One table cached under four keys with four copies of `useProjectStates` | **fixed (D159 §2)** |
 | MEDIUM | 6 | The test gate fails under load (UT-GEN-930 and 931, worker-start timeouts) | **fixed in part (§2.3)** |
-| MEDIUM | 7 | `generators/rules.ts`, 5,307 lines of unrelated jobs | open: split when Generators is next changed |
-| LOW | 8 | Every tab return refetches everything stale | open (D156 did the Check List) |
-| LOW | 9 | `@microsoft/power-apps` 1.3.1, 1.6.0 is available | open: evaluate on a branch |
-| LOW | 10 | Four copies of the date helpers | open |
-| LOW | 11 | Small dead weight (`rulemap.report.ts`, `read-pcf-port.mjs`, the unused BoP data source) | open |
+| MEDIUM | 7 | `generators/rules.ts`, 5,307 lines of unrelated jobs | **fixed (D159 §3)** |
+| LOW | 8 | Every tab return refetches everything stale | **fixed in part (D159 §4)** |
+| LOW | 9 | `@microsoft/power-apps` 1.3.1, 1.6.0 is available | **evaluated, not upgraded: no `If-Match` in 1.6.0 (D159 §5)** |
+| LOW | 10 | Four copies of the date helpers | **fixed in part (D159 §6)** |
+| LOW | 11 | Small dead weight (`rulemap.report.ts`, `read-pcf-port.mjs`, the unused BoP data source) | **mostly wrong, nothing deleted (D159 §7)** |
 | LOW | 12 | The InfoCenter link was opened without a scheme check | **fixed (§2.4)** |
 
 ### 2. Fixed now
@@ -8713,3 +8713,61 @@ A delete of a row that another user already removed (it must still read as delet
 ### 5. Needs a live check
 
 On DEV: save a new row on each project-scoped screen (Revenues, Production, Finance, Generators, Check List, Land Lease, OPEX, Contracts) and confirm none is refused; visit a half-copied cluster (delete two of its tasks in a test project) and confirm the two come back; confirm a worked-on cluster is left alone.
+## D159 — Code review findings #5, #7, #8, #9, #10, #11: one Project States cache entry, the Generators rules split by job, fewer tab-return refetches, one date helper, and two findings that were wrong (23 Nov 2026; number PROVISIONAL, may be renumbered at merge)
+
+**Status:** working tree of `RounakDev1`, **uncommitted, NOT product-approved, not run on DEV or QA**. Request: "Proceed with the fixes #5, #7 and so on". These are the findings D157 left open. Pure refactors except where marked.
+
+### 1. What was done
+
+| # | Finding | Result |
+|---|---|---|
+| 5 | One table cached under four keys, four copies of `useProjectStates` | **fixed (§2)** |
+| 7 | `generators/rules.ts`, one file for unrelated jobs | **fixed (§3)** |
+| 8 | Every tab return refetches everything stale | **fixed in part (§4)**: the one reference read that was still affected |
+| 9 | `@microsoft/power-apps` 1.3.1 vs 1.6.0 | **evaluated, NOT upgraded (§5)** |
+| 10 | Four copies of the date helpers | **fixed in part (§6)**: the copies that behave the same; the ones that differ are kept and recorded |
+| 11 | Small dead weight | **mostly wrong, nothing deleted (§7)** |
+
+### 2. #5 — one `Project States` read, one key, one freshness
+
+**Before.** Seven screens read the ten rows through four functions under four keys (`generalDataProjectStates`, `["projectStates"]`, `["capex-project-states"]`, `adminGateStates`, plus `financeReference("projectStates")`), so Project Overview then General Data read the table twice and each key went stale on its own clock (Admin: never).
+
+**After.** `listProjectStates` (`data/generalData.ts`) is the one read. It selects two more columns (`statecode`, `_owningbusinessunit_value`) and returns `active`, `orderRaw` and `businessUnitId` beside the fields it always had. The key is `qk.generalDataProjectStates`, fresh for 30 minutes (`data/projectStates.ts`, `projectStatesQueryOptions`). Each screen takes its own view with `select`, so what it shows is what it showed:
+- Project Overview and its boot prefetch: `overviewStates` = active states, `Order` as stored (null stays null).
+- Capex / Cost screens: `costStates` = active states, a missing `Order` read as 0.
+- Admin gate screen: `adminStates` = every state, the raw `Order`, the business unit copied onto saved templates.
+- General Data, Check List, Revenues, Milestones, Finance: the list as before (Finance now uses the shared options instead of its own key).
+
+Removed: `projects.listProjectStates`, `adminGatesApprovals.listProjectStates` and `STATE_SELECT`, the keys `adminGateStates` and `financeReference("projectStates")`, and the key `["capex-project-states"]`.
+
+**Behaviour changes (all small).** (a) The Admin gate screen's states are no longer kept for the whole session (`staleTime: Infinity`): 30 minutes like the others. (b) Overview and Cost states used to be ordered by the server; they are ordered in the browser, a missing `Order` read as 0, ties in read order. (c) General Data, Check List, Revenues and Milestones select two more columns of a ten-row table. **Not merged:** `costBook.loadProjectStates` (read inside every contract load) and `adminGatesApprovals.listGateStates` (the Check List settings screen) still read the table themselves; they are not hooks and have their own shapes.
+
+### 3. #7 — `generators/rules.ts` split by job
+
+`rules.ts` (5,730 lines) is now a barrel of 7 `export *` lines, so no importer changed (every importer, in the screen, its hooks, the data layer and the tests, is unchanged). The code moved unchanged, section by section, by a script that checked the import graph is acyclic: `rulesCore.ts` (columns, types, catalogue, pricing, turbines, command bar, guards, validation, save gates, permissions: 2,590 lines), `captions.ts` (441), `display.ts` (417), `plans.ts` (733), `rollback.ts` (599), `panelPlans.ts` (615), `replacePlans.ts` (388). Twenty-one helpers that two or more of the new files share are now exported (`ins`, `upd`, `del`, `ref`, `owner`, `group`, `wave`, `bulkOn`, `perfOn`, `guardedIf`, `uniqueRows`, `sumCapacity` and nine more), so they are visible through the barrel too. The source-scan test UT-GENPERF-027 (`reload.test.ts`) read `rules.ts` as text; it now reads the seven files and asserts it found entity sets, so it cannot pass on an empty file.
+
+### 4. #8 — tab-return refetch
+
+The global default is a 30 s stale time and a refetch on window focus. A reference read with a 30-minute stale time never refetches on focus, and most already had one. One did not: the standard-assumption catalogue of the CAPEX screens (`["capex-standard-assumptions", …]`) now has `staleTime` 30 minutes and `refetchOnWindowFocus: false`. **Left as it is on purpose:** the project's own rows (Contracts, payment targets, DevCo links: `staleTime: 0`, "re-read on every visit", CONTR-010) and every other project-scoped read keep refetching on focus: that is what shows a second user's change (the comment in `Providers.tsx`).
+
+### 5. #9 — SDK 1.6.0, evaluated
+
+The 1.6.0 package was unpacked and compared with 1.3.1 file by file. The data layer adds: `partitionId` on update, delete and file calls (elastic tables), `nextLink` on `retrieveMultipleRecords` (with a check that it targets the same table), and `retrieveSavedQueryAsync`. **There is no `If-Match` / ETag handling in either version**, so upgrading does NOT close the update race (`data/client.ts` still needs its existence read). Not upgraded: the paging code changed underneath `fetchAll` and the benefit the audit hoped for is not there. Revisit when a release notes optimistic concurrency.
+
+### 6. #10 — date helpers
+
+`opexRules.addMonths` is now the shared `domain/dates.addMonths` (it was a byte-for-byte copy); `landLeaseRules.addMonths` and `periodWrites.addMonths` keep their text-in text-out signature but clamp through the shared function (`dateOnly` of `data/odata.ts` for the text). The three identical `ymd` helpers of `data/planning.ts`, `production.ts` and `team.ts` are `dateOnlyOf` in `data/odata.ts`. **Not merged, and why:** the `toDate` copies differ (`domain/dates` reads a date-only text as UTC midnight, `opexRules` / `landLeaseRules` as local noon, `contracts.ts` as local midnight, `landLeaseRules` also cuts a full timestamp to ten characters). Making them one would change which instant a Date holds and therefore comparisons at day boundaries; the audit's own case (a day early) needs a browser west of UTC, and no user is. `monthsOf` (four one-line copies with different inputs) and `opexRules.ymd` (a different format) stay.
+
+### 7. #11 — dead weight, corrected
+
+- `e2e/screens/land-lease/rulemap.report.ts` is **not dead**: the parity harness loads `e2e/screens/<screen>/*.report.ts` by name (coverage map G3, D80). knip lists it because nothing imports it.
+- `scripts/read-pcf-port.mjs` is **not dead**: it is the documented way the vendored CAPEX grid renderer was produced (`PCF-RENDERER-PORT.md` and four other docs); it needs PCF clones that are in a sibling workspace.
+- The registered `Assumptions BoP Contracts` Fabric SQL source (D54) is unused by code (Contracts reads the Dataverse copy, a recorded DIVERGENCE in `data/contracts.ts`). **Not removed:** removing it changes the deployed app's connection references, needs `pac code delete-data-source` (which has dropped other registrations before, CONVENTIONS rule 9), a `check:power` count change (96 to 95) and a DEV push. A product / platform decision; it is a tidy-up, not a defect.
+
+### 8. Tests
+
+`UT-PSTATES-001…007` (`data/projectStates.test.tsx`: the one read and its columns, the three views, the key and freshness, the four hooks sharing one request, a later screen reading nothing); `UT-DATESHARED-001…003`; `UT-STDASSUME-QUERY-001`. **Changed:** `UT-BOOT-020` (the Status filter's states are the shared read), the Admin gate screen tests (they mock the shared read through `asSharedStates`), `UT-GENPERF-027` (§3). **Removed:** `UT-ADGATE-001` (the Admin screen's own read; its checks moved to UT-PSTATES-001, 004). The 39 Generators test files (723 tests) pass unchanged against the barrel.
+
+### 9. Needs a live check
+
+On DEV with the `[VSB]` console lines: open Project Overview, then General Data, then a Cost screen, then the Admin gate screen: `list project states` appears once. The Overview Status filter lists the same states as before (inactive ones absent). The Admin gate screen still lists all states. A Generators save, a Delete and a Replace still work (the code moved, it did not change).

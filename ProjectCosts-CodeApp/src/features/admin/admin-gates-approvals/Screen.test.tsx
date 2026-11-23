@@ -23,13 +23,19 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
 const repo = vi.hoisted(() => ({
-  listProjectStates: vi.fn(),
   loadDataset: vi.fn(),
   searchPeople: vi.fn(),
   resolvePeople: vi.fn(),
 }));
 
 vi.mock("@/data/adminGatesApprovals", () => ({ projectGatesRepository: repo }));
+
+/** D159: the states are the one shared `Project States` read, which the hook views through `adminStates`. */
+const states = vi.hoisted(() => ({ list: vi.fn() }));
+vi.mock("@/data/generalData", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/data/generalData")>()),
+  listProjectStates: states.list,
+}));
 
 /** The writes are WritePlans run by `executePlan` (through `runPlan`); `PlanError` and the rest stay real. */
 const exec = vi.hoisted(() => vi.fn());
@@ -55,7 +61,7 @@ import type { WritePlan } from "@/data/writePlan";
 import { DataError } from "@/platform/errors";
 import { ERROR_HINT } from "@/platform/userMessage";
 import {
-  FIXTURE_APPROVALS, FIXTURE_CHECKLISTS, FIXTURE_COUNTRIES, FIXTURE_COUNTRY_ROWS, FIXTURE_STATES, FIXTURE_TEMPLATES, fixtureDataset,
+  asSharedStates, FIXTURE_APPROVALS, FIXTURE_CHECKLISTS, FIXTURE_COUNTRIES, FIXTURE_COUNTRY_ROWS, FIXTURE_STATES, FIXTURE_TEMPLATES, fixtureDataset,
   HIDDEN_CHECKLISTS, person,
 } from "./fixtures";
 import { GATE_BLANK_MESSAGE } from "./rules";
@@ -116,7 +122,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   access.admin = true;
   countriesService.getAll.mockResolvedValue({ success: true, data: FIXTURE_COUNTRY_ROWS });
-  repo.listProjectStates.mockResolvedValue(FIXTURE_STATES);
+  states.list.mockResolvedValue(asSharedStates(FIXTURE_STATES));
   repo.loadDataset.mockResolvedValue(fixtureDataset());
   repo.searchPeople.mockResolvedValue([]);
   exec.mockReset();
@@ -399,9 +405,9 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
   });
 
   it("UT-ADGATE-917 under a gate whose next state is terminal, task approvals can still be saved; the gate cannot", async () => {
-    repo.listProjectStates.mockResolvedValue(
+    states.list.mockResolvedValue(asSharedStates(
       FIXTURE_STATES.map((s) => (s.order === 2 ? { ...s, name: "Abandoned", visibleOnChecklist: false } : s)),
-    );
+    ));
     renderScreen();
     await screen.findByText("Grid connection request");
     fireEvent.click(taskEdit());
@@ -579,7 +585,7 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
     const asJson = (ns: number[]) =>
       JSON.stringify(ns.map((n) => ({ PersonaKey: person(n).entraId, PersonaName: person(n).name, PersonaRole: person(n).mail })));
     // Visible states 0..5 only: Cluster 5 is the highest visible state (PGAS:2705-2717).
-    repo.listProjectStates.mockResolvedValue(FIXTURE_STATES.map((s) => (s.order === 6 ? { ...s, visibleOnChecklist: false } : s)));
+    states.list.mockResolvedValue(asSharedStates(FIXTURE_STATES.map((s) => (s.order === 6 ? { ...s, visibleOnChecklist: false } : s))));
     const gate5 = {
       ...FIXTURE_TEMPLATES[1]!, id: "40000000-0000-0000-0000-000000000005", name: " ", stateId: FIXTURE_STATES[5]!.id,
       gateActive: false, contributors: "[]", notifications: asJson([7]),
@@ -646,9 +652,9 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
   });
 
   it("UT-ADGATE-927 the Gate field is the canvas disabled dropdown (shared ChoiceField, error wired) and task-row icons use RowActions gap 4", async () => {
-    repo.listProjectStates.mockResolvedValue(
+    states.list.mockResolvedValue(asSharedStates(
       FIXTURE_STATES.map((s) => (s.order === 2 ? { ...s, name: "Abandoned", visibleOnChecklist: false } : s)),
-    );
+    ));
     const reference = render(
       <FluentProvider theme={vsbTheme}>
         <RowActions tooltip="always" tone="brand" gap={4} actions={[{ key: "edit", icon: <EditRegular />, label: "ref", testId: "ref", onClick: () => {} }]} />

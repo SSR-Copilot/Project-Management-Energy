@@ -12,7 +12,6 @@ const note = (what: string) => { calls.list.push(what); };
 vi.mock("@/data/projects", () => ({
   loadProjectPage: vi.fn(async (req: { page: number }) => { note(`projectPage:${req.page}`); if (calls.rejectProjects) throw new Error("boom"); return { rows: [], totalRows: 0, page: req.page, pageSize: 200, totalPages: 1, hasNext: false }; }),
   listCountries: vi.fn(async () => { note("countries"); return []; }),
-  listProjectStates: vi.fn(async () => { note("projectStates"); return []; }),
 }));
 vi.mock("@/data/project", () => ({
   loadProject: vi.fn(async (id: string) => { note(`sessionProject:${id}`); return undefined; }),
@@ -57,7 +56,8 @@ describe("boot prefetch", () => {
   it("UT-BOOT-020 on the project list it starts the chunk, the first page and the two filter lists", async () => {
     const qc = newClient();
     await boot(qc, "#/projects");
-    expect(calls.list.sort()).toEqual(["chunk:overview", "countries", "projectPage:1", "projectStates"]);
+    // D159: the Status filter's states are the one shared `Project States` read (the General Data mock's `gdStates`).
+    expect(calls.list.sort()).toEqual(["chunk:overview", "countries", "gdStates", "projectPage:1"]);
   });
 
   it("UT-BOOT-021 the first page lands under the exact key the screen reads", async () => {

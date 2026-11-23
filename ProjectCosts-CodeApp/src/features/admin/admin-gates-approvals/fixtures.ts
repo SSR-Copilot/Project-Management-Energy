@@ -5,6 +5,7 @@
 import type {
   DefaultChecklist, GateTaskApproval, GateTemplate, GatesDataset, PersonRef, ProjectState,
 } from "@/data/adminGatesApprovals";
+import type { SharedProjectState } from "@/data/generalData";
 import type { CountryRow } from "@/domain/countryPicker";
 import { MODE } from "./rules";
 
@@ -36,6 +37,13 @@ export const FIXTURE_STATES: ProjectState[] = [
   { id: stateId(6), name: "Cluster 6", order: 6, visibleOnChecklist: true, businessUnitId: BU_ID },
   { id: stateId(7), name: "Inactive/ On-hold", order: 7, visibleOnChecklist: false, businessUnitId: BU_ID },
 ];
+
+/** The states as the one shared `Project States` read returns them (`listProjectStates`), which the hook views through `adminStates` (D159). */
+export const asSharedStates = (states: readonly ProjectState[]): SharedProjectState[] =>
+  states.map((s) => ({
+    id: s.id, name: s.name, order: s.order ?? 0, isVisibleOnChecklist: s.visibleOnChecklist, clusterDescription: null,
+    active: true, orderRaw: s.order, businessUnitId: s.businessUnitId,
+  }));
 
 export const person = (n: number): PersonRef => ({
   entraId: `30000000-0000-0000-0000-0000000000${String(n).padStart(2, "0")}`,

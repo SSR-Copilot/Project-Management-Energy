@@ -10,7 +10,7 @@
  */
 import { queryOptions } from "@tanstack/react-query";
 import {
-  listCountries, listProjectStates, loadProjectPage, loadProjectStateOrder,
+  listCountries, loadProjectPage, loadProjectStateOrder,
 } from "@/data/projects";
 import { EMPTY_APPLIED_CAPACITY, resolveAppliedCapacity, type ProjectFilter, type SortState } from "./rules";
 
@@ -70,11 +70,8 @@ export const countriesQueryOptions = () => queryOptions({
   staleTime: 30 * 60 * 1000,
 });
 
-export const projectStatesQueryOptions = () => queryOptions({
-  queryKey: ["projectStates"] as const,
-  queryFn: listProjectStates,
-  staleTime: 30 * 60 * 1000,
-});
+/** The Status filter's states: the one shared `Project States` cache entry (D159), read through `overviewStates` by the hook. */
+export { projectStatesQueryOptions } from "@/data/projectStates";
 
 /**
  * The selected project's cluster-state `Order`, for the Simulate gate. One definition for the hook

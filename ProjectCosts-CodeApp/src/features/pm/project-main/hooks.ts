@@ -16,6 +16,7 @@ import {
   deleteProject, listCountryAreas, loadProjectManagerLabel,
   searchProjectManagers, type ProjectPage,
 } from "@/data/projects";
+import { overviewStates } from "@/data/projectStates";
 import { startupFlags } from "@/app/startupFlags";
 import { trace } from "@/platform/telemetry";
 import { useDebouncedValue } from "@/features/shared/useDebouncedValue";
@@ -229,7 +230,8 @@ export function useCountryAreas(countryId: string | null) {
 }
 
 export function useProjectStates() {
-  return useQuery(projectStatesQueryOptions());
+  // D159: the one shared `Project States` entry, viewed as the ACTIVE states with their stored `Order` (as the canvas Filter does).
+  return useQuery({ ...projectStatesQueryOptions(), select: overviewStates });
 }
 
 /** The typeahead. Debounced, and silent below two characters. */

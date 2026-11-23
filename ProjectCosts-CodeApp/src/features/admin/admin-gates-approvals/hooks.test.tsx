@@ -11,7 +11,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
 const repo = vi.hoisted(() => ({
-  listProjectStates: vi.fn(), loadDataset: vi.fn(), searchPeople: vi.fn(),
+  loadDataset: vi.fn(), searchPeople: vi.fn(),
   resolvePeople: vi.fn(),
 }));
 vi.mock("@/data/adminGatesApprovals", () => ({ projectGatesRepository: repo }));

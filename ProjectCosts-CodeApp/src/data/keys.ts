@@ -41,7 +41,6 @@ export const qk = {
   adminChecklistTasks: (tabId: string | null) => ["adminChecklistTasks", tabId ?? ""] as const,
   adminChecklistLocks: ["adminChecklistLocks"] as const,
   /** Admin Gates & Approvals: the states, one Country + Technology dataset, the placeholder key and the Entra lookup. */
-  adminGateStates: ["adminGateStates"] as const,
   /** Prefix of every dataset (and of the disabled `adminGateDatasetNone`). */
   adminGateDatasetAll: ["adminGateDataset"] as const,
   adminGateDataset: (countryId: string, technology: number) => ["adminGateDataset", countryId, technology] as const,

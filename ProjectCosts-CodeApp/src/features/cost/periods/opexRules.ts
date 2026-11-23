@@ -39,6 +39,7 @@
  */
 import { inRange, isDecimal, isNumeric, orZero, parseNumber } from "@/domain/numeric";
 import { canvasNumberText, localeInfo, numberFormat } from "@/domain/locale";
+import { addMonths } from "@/domain/dates";
 
 /* ═══════════════════════════════════════════════════════════════════ dates ══ */
 
@@ -46,15 +47,7 @@ import { canvasNumberText, localeInfo, numberFormat } from "@/domain/locale";
  * Power Fx `DateAdd(date, n, TimeUnit.Months)` — clamps the day to the last day of the target
  * month, so 31 Jan + 1 month is 28/29 Feb rather than rolling into March.
  */
-export function addMonths(date: Date, months: number): Date {
-  const day = date.getDate();
-  const out = new Date(date.getTime());
-  out.setDate(1);
-  out.setMonth(out.getMonth() + months);
-  const lastDay = new Date(out.getFullYear(), out.getMonth() + 1, 0).getDate();
-  out.setDate(Math.min(day, lastDay));
-  return out;
-}
+export { addMonths };   // D159: the one definition (`fn_Common.DateAddMonths`, `domain/dates.ts`); this file had a byte-for-byte copy
 
 /** Midday parse, so a date-only ISO string cannot shift a day under a negative UTC offset. */
 export function toDate(value: string | Date | null | undefined): Date | null {

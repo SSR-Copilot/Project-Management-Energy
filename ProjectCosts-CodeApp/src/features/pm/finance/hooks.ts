@@ -52,7 +52,7 @@ import { financePerf } from "@/data/financeFlags";
 import { qk } from "@/data/keys";
 import type { ScreenData } from "@/data/notConnected";
 import { usePlanWrite } from "@/data/usePlanWrite";
-import { listProjectStates } from "@/data/generalData";
+import { projectStatesQueryOptions } from "@/data/projectStates";
 import {
   countActiveTurbines, findFinancingInputsByKey, listBanks, listDebtAssumptions,
   listFinancingCategories, listFinancingInputsRaw, listKfwTranches, listRepaymentAmounts,
@@ -100,7 +100,7 @@ export function useFinanceProject(projectId: string | undefined): ScreenData<Fin
     queryFn: () => loadFinanceProject(
       projectId!,
       financePerf().parallelReads
-        ? () => qc.fetchQuery({ queryKey: qk.financeReference("projectStates"), queryFn: listProjectStates, staleTime: REFERENCE_STALE })
+        ? () => qc.fetchQuery(projectStatesQueryOptions())   // D159: the one shared `Project States` entry
         : undefined,
     ),
     enabled: Boolean(projectId),

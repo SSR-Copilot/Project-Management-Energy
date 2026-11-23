@@ -5,7 +5,8 @@ import { costRepository } from "@/data/costRepository";
 import { NO_FOCUS_REFETCH } from "@/data/adminQueryPresets";
 import { loadActiveWtgCount, loadStandardAssumptions } from "@/data/standardContracts";
 import { deleteComment, loadComments, saveComment } from "@/data/comments";
-import { loadCapexCategories, loadMilestoneDurations, loadProjectStates, standardContractExists } from "@/data/costBook";
+import { loadCapexCategories, loadMilestoneDurations, standardContractExists } from "@/data/costBook";
+import { costStates, projectStatesQueryOptions } from "@/data/projectStates";
 import type { PeriodWriteContext, StandardContractArgs } from "@/data/periodWrites";
 import { LeaseStepsError, type LeaseWrite } from "@/features/cost/periods/landLeaseRules";
 import { useProjectExtras } from "@/features/cost/contracts/hooks";
@@ -760,6 +761,10 @@ export function useStandardAssumptions(subaccountIds: readonly string[]) {
     queryKey: ["capex-standard-assumptions", key],
     enabled: subaccountIds.length > 0,
     queryFn: () => loadStandardAssumptions(subaccountIds),
+    // D159: master data an administrator maintains on the Settings screens, so it is not re-read on every return to the tab
+    // (the app default is a 30 s stale time and a refetch on window focus); the sibling reference reads here already do this.
+    staleTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
   const wtgCount = useQuery({
     queryKey: ["active-wtg-count", projectId],
@@ -782,15 +787,12 @@ export function useStandardAssumptions(subaccountIds: readonly string[]) {
  * `Project States` — the ten rows the "Link to Milestone" dropdown builds its `Items` from.
  *
  * Global master data, so it is keyed on nothing and cached for the session rather than per
- * project; `loadProjectStates` already sorts by `Order`, and `milestoneOptions`
+ * project. D159: it is the one shared `Project States` cache entry (`data/projectStates.ts`), viewed as the active states in
+ * `Order` (`costStates`), so opening a Cost screen after another screen reads nothing; `milestoneOptions`
  * (`capex-costs/rules.ts`) does the 1..6 filtering the canvas' `Items` does.
  */
 export function useProjectStates() {
-  return useQuery({
-    queryKey: ["capex-project-states"],
-    staleTime: 30 * 60 * 1000,
-    queryFn: () => loadProjectStates(),
-  });
+  return useQuery({ ...projectStatesQueryOptions(), select: costStates });
 }
 
 /**

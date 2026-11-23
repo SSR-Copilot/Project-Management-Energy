@@ -330,7 +330,10 @@ describe("targeted reloads — the safety net: every table a plan writes is cove
   });
 
   it("UT-GENPERF-027 every entity set rules.ts mentions is mapped here or is a read-only catalogue (a plan builder that writes a new table fails this)", () => {
-    const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "rules.ts"), "utf8");
+    // D159: `rules.ts` is a barrel over these files; the plan builders are in `plans.ts`, `rollback.ts`, `panelPlans.ts` and `replacePlans.ts`.
+    const here = dirname(fileURLToPath(import.meta.url));
+    const source = ["rulesCore", "captions", "display", "plans", "rollback", "panelPlans", "replacePlans"]
+      .map((f) => readFileSync(join(here, `${f}.ts`), "utf8")).join("\n");
     const names = new Set<string>();
     for (const m of source.matchAll(/\bES(?:_PLANT)?\.([A-Za-z]+)/g)) {
       const full = m[0].startsWith("ES_PLANT") ? (ES_PLANT as Record<string, string>)[m[1]!] : (ES as Record<string, string>)[m[1]!];
@@ -340,6 +343,7 @@ describe("targeted reloads — the safety net: every table a plan writes is cove
     // Catalogue tables rules.ts only BINDS to (`ref(...)`); no plan writes them and no Generators query is refreshed for them.
     const readOnly = new Set<string>([ES_PLANT.generators, ES_PLANT.inverters, ES_PLANT.substructures, ES_PLANT.pvModules]);
     const mapped = new Set(Object.keys(TABLE_QUERIES).map((t) => t.split("#")[0]!));
+    expect(names.size, "the scan found no entity set: the files above moved").toBeGreaterThan(10);
     for (const name of names) expect(mapped.has(name) || readOnly.has(name), `${name} is neither mapped nor read-only`).toBe(true);
   });
 

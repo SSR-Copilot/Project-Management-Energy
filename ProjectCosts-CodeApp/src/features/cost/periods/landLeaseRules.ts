@@ -42,6 +42,7 @@
  */
 import { inRange, isDecimal, parseNumber, round } from "@/domain/numeric";
 import { canvasNumberText, localeInfo, rangeMessageFor } from "@/domain/locale";
+import { addMonths as addMonthsOnDate } from "@/domain/dates";
 import { bind } from "@/data/odata";
 
 /* ═════════════════════════════════════════════════════════════════ option sets ══ */
@@ -680,12 +681,7 @@ function toIso(d: Date): string {
 export function addMonths(iso: string | Date, months: number): string {
   const d = toDate(iso);
   if (!d) return "";
-  const day = d.getDate();
-  d.setDate(1);
-  d.setMonth(d.getMonth() + months);
-  const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-  d.setDate(Math.min(day, last));
-  return toIso(d);
+  return toIso(addMonthsOnDate(d, months));   // D159: the clamping is the shared `addMonths`; only the text in and out is local
 }
 
 export function addDays(iso: string | Date, days: number): string {

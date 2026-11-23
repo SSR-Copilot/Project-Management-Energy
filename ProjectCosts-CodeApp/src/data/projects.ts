@@ -503,23 +503,8 @@ export async function listCountryAreas(countryId: string | null): Promise<Lookup
   return rows.map((r) => ({ id: r.vsb_countryareaid, name: r.vsb_name ?? "" }));
 }
 
-/** `cbx_..._Filter_Status.Items = Sort('Project States', Order, Ascending)`. */
-export async function listProjectStates(): Promise<(Lookup & { order: number | null })[]> {
-  const rows = await fetchAll(
-    "list project states",
-    (o) => Vsb_projectstatesService.getAll(o),
-    {
-      select: ["vsb_projectstateid", "vsb_name", "vsb_order"],
-      filter: ACTIVE,
-      orderBy: ["vsb_order asc"],
-    },
-  );
-  return rows.map((r) => ({
-    id: r.vsb_projectstateid,
-    name: r.vsb_name ?? "",
-    order: r.vsb_order ?? null,
-  }));
-}
+/* `cbx_..._Filter_Status.Items = Sort('Project States', Order, Ascending)` is the shared read in `data/generalData.ts`,
+ * viewed by `overviewStates` (`data/projectStates.ts`, D159). */
 
 /** The four `systemusers` columns the picker reads, for the typeahead and for the chip's name lookup. */
 const SYSTEMUSER_COLUMNS = [

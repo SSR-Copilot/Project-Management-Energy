@@ -99,6 +99,13 @@ export function dateOnly(value: Date): string {
   return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
 }
 
+/**
+ * The `yyyy-mm-dd` part of a Dataverse date value read from a row, or null when the value is not a date text.
+ * One definition for the screens that keep a date as text (D159; Planning, Production and Team each had a copy).
+ */
+export const dateOnlyOf = (value: unknown): string | null =>
+  typeof value === "string" && value.length >= 10 ? value.slice(0, 10) : null;
+
 /** Dataverse `statecode` 0 = Active for every custom table in this solution. */
 export const ACTIVE = "statecode eq 0";
 

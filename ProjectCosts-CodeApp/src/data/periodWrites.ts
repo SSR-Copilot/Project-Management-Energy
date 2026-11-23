@@ -66,7 +66,8 @@ import { OPEX_MSG, planFollowingPeriodStarts, type ChainPeriod } from "@/feature
 import type { CostPeriod, PeriodMode } from "@/features/cost/costing/model";
 import { deleteRecord, fetchAll } from "./client";
 import { ES, ES_PLANT } from "./dataverseNames";
-import { ACTIVE, and, bind, eq, guid, lookupEq, lookupIn, money } from "./odata";
+import { ACTIVE, and, bind, dateOnly, eq, guid, lookupEq, lookupIn, money } from "./odata";
+import { addMonths as addMonthsOnDate } from "@/domain/dates";
 import {
   LAND_LEASE_PERIOD_CHOICE, LAND_LEASE_SECURED, THRESHOLD_TYPE_VALUE,
   landLeasePeriodIndex, readAggregation, writeAggregation,
@@ -1031,13 +1032,7 @@ export interface StandardContractArgs {
 function addMonths(iso: string, months: number): string {
   const d = new Date(`${iso}T12:00:00`);
   if (Number.isNaN(d.getTime())) return iso;
-  const day = d.getDate();
-  d.setDate(1);
-  d.setMonth(d.getMonth() + months);
-  const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-  d.setDate(Math.min(day, last));
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  return dateOnly(addMonthsOnDate(d, months));   // D159: the shared clamping and the shared local date text (rule 18)
 }
 
 /**

@@ -31,7 +31,7 @@ import { CHOICE_PRODUCTION, OANDM_SUBACCOUNT_NAME } from "./dataverseNames";
 import { fetchAll, fetchPage } from "./client";
 import { listDeviceTypes, listGeneratorTypes, listProjectTurbines, listPvTypes } from "./generators";
 import { loadCountryInflation } from "./landLease";
-import { and, eq, guid, inList, lookupEq, numberOf } from "./odata";
+import { and, dateOnlyOf as ymd, eq, guid, inList, lookupEq, numberOf } from "./odata";
 
 type Raw = Record<string, unknown>;
 const str = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
@@ -39,7 +39,6 @@ const num = (v: unknown): number | null => numberOf(v) ?? null;
 const bool = (v: unknown): boolean | null => (typeof v === "boolean" ? v : null);
 const raw = <T,>(rows: T[]): Raw[] => rows as unknown as Raw[];
 /** A Dataverse date-only value as `yyyy-mm-dd`. */
-const ymd = (v: unknown): string | null => (typeof v === "string" && v.length >= 10 ? v.slice(0, 10) : null);
 
 /* ═══════════════════════════════════════════════════════════════ the project ══ */
 
