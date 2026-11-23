@@ -72,7 +72,7 @@ const project = (over: Partial<RevenueProject> = {}): RevenueProject => ({
   areaName: null, cod: d("2028-01-01"), fid: d("2026-06-30"), construction: d("2027-03-01"),
   legallyBindingPermits: d("2026-01-15"), applicationSubmitted: d("2025-05-01"),
   projectDevelopmentStarted: d("2024-02-01"), feasibilityStudies: d("2023-01-01"), netYieldP50: 120000, totalCapacity: 50,
-  endDate: d("2055-12-31"), clusterStateName: "Cluster 4", owningBusinessUnitId: "bu-1", ...over,
+  endDate: d("2055-12-31"), clusterStateName: "Cluster 4", owningBusinessUnitId: "bbbbbbbb-0000-0000-0000-0000000000b1", ...over,
 }) as RevenueProject;
 
 const form = (over: Partial<RevenueFormState>): RevenueFormState => ({
@@ -243,7 +243,7 @@ describe("UT-REVPERF contract Save — parallel volume writes", () => {
   it("UT-REVPERF-016 the owner bind (CONVENTIONS rule 4) is on every volume, and absent in both paths when the project has no business unit", async () => {
     const withOwner = await execute(planFor({ edit: false, stored: 0, years: 3 }, true));
     for (const l of withOwner.lines.filter((x) => x.startsWith(`create|${VOLUMES}|`))) {
-      expect(JSON.parse(l.split("|").slice(3).join("|"))["owningbusinessunit@odata.bind"]).toBe("/businessunits(bu-1)");
+      expect(JSON.parse(l.split("|").slice(3).join("|"))["owningbusinessunit@odata.bind"]).toBe("/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)");
     }
     const none = { edit: false, stored: 0, years: 3, owner: null } as const;
     const a = await execute(planFor(none, false));
@@ -443,7 +443,7 @@ describe("UT-REVPERF contract Save: the 16-wide create group (D146, REVENUE_PERF
     expect(creates).toHaveLength(17);
     for (const body of creates) {
       expect(body["vsb_RevenueContract@odata.bind"]).toBe(`/${CONTRACTS}(r1)`);
-      expect(body["owningbusinessunit@odata.bind"]).toBe("/businessunits(bu-1)");
+      expect(body["owningbusinessunit@odata.bind"]).toBe("/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)");
     }
   });
 

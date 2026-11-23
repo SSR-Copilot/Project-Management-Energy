@@ -54,6 +54,9 @@ export async function fetchAll<T>(
   options: FetchAllOptions,
 ): Promise<T[]> {
   const { maxPages = DEFAULT_MAX_PAGES, ...query } = options;
+  // A caller that names its own `maxPages` (a search box: one page) chose to read a bounded slice. Only the DEFAULT cap
+  // means "read everything", and hitting it is a failure (D157).
+  const boundedByCaller = options.maxPages !== undefined;
   const rows: T[] = [];
   let skipToken: string | undefined;
   let pages = 0;
@@ -75,13 +78,17 @@ export async function fetchAll<T>(
       skipToken = result.skipToken;
       pages += 1;
       if (pages >= maxPages && skipToken) {
-        // Truncating silently is exactly the canvas behaviour this function exists to avoid,
-        // so say so rather than returning a plausible-looking short list.
+        // Truncating silently is exactly the canvas behaviour this function exists to avoid.
         trace(
           "error",
           `${operation} stopped after ${pages} pages with more rows available — the filter is too broad`,
           { rows: rows.length },
         );
+        // D157: a read that was meant to be complete must not return a plausible-looking short list as a success (a caller
+        // that diffs, totals or deletes against it would act on partial data). It fails; the screen shows its load error.
+        if (!boundedByCaller) {
+          throw new DataError(operation, `more than ${rows.length} rows match, so the read was stopped after ${pages} pages and is incomplete`);
+        }
         break;
       }
     } while (skipToken);

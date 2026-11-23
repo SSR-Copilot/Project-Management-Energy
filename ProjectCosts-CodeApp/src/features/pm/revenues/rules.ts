@@ -66,7 +66,7 @@ import {
 import { addDays, addMonths, addYears } from "@/domain/dates";
 import { forLanguage } from "@/features/pm/generators/rules";
 import { CHOICE_FINANCE, ES, ES_FINANCE } from "@/data/dataverseNames";
-import { bind, dateOnly } from "@/data/odata";
+import { bind, dateOnly, owningBusinessUnitBind as ownerBind } from "@/data/odata";
 import { createdRowRef, refusePlan, together, type PlannedWrite, type WritePlan } from "@/data/writePlan";
 import { LEAF_DELETE_CONCURRENCY, WIDE_GROUP_CONCURRENCY } from "@/data/concurrency";
 import { REVENUE_PERF, REVENUE_PRICE, type PriceLookupMode, type RevenuePerfOverrides } from "@/data/revenuesFlags";
@@ -2946,8 +2946,7 @@ const NAV = {
 
 /* ═════════════════════════════════════════════════════════════ write plans ═════ */
 
-const ownerBind = (businessUnitId: string | null): Record<string, string> =>
-  businessUnitId ? { [`${NAV.owningBusinessUnit}@odata.bind`]: bind("businessunits", businessUnitId) } : {};
+// D158: the owning-business-unit bind is `owningBusinessUnitBind` (`@/data/odata`), imported above as `ownerBind`.
 
 const ymdOrNull = (d: Date | null): string | null => (d ? dateOnly(d) : null);
 

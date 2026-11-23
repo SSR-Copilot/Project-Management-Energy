@@ -26,7 +26,7 @@ const baseProject: RevenueProject = {
   technology: "Wind", areaName: null, cod: d("2028-01-01"), fid: null, construction: null,
   legallyBindingPermits: null, applicationSubmitted: null, projectDevelopmentStarted: null,
   feasibilityStudies: null, netYieldP50: 120000, totalCapacity: 40, endDate: d("2055-12-31"),
-  clusterStateName: "Cluster 4", owningBusinessUnitId: "bu-fr", clusterStateOrder: 4,
+  clusterStateName: "Cluster 4", owningBusinessUnitId: "bbbbbbbb-0000-0000-0000-0000000000f2", clusterStateOrder: 4,
 };
 
 const noFlags: StandardFlags = {
@@ -196,7 +196,7 @@ describe("UT-REV Screen (connected)", () => {
     ]);
     expect(plan.writes[0]!.data).toMatchObject({
       vsb_tariffprice: 66.5, vsb_tariffpricep90: 66.5, vsb_hedgedvolume: 70,
-      "owningbusinessunit@odata.bind": "/businessunits(bu-fr)",
+      "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000f2)",
     });
   });
 
@@ -269,7 +269,7 @@ describe("UT-REV Screen (connected)", () => {
     expect(plan.writes[0]!.data).toMatchObject({
       vsb_name: "Balancing Price 1", vsb_shiftofcoddatemonths: 3, vsb_balancingpriceeurpln: 4.5,
       vsb_contractdurationyear: null, vsb_contractdurationmonth: null,
-      "owningbusinessunit@odata.bind": "/businessunits(bu-fr)",
+      "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000f2)",
     });
   });
 

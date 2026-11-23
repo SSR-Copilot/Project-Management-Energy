@@ -28,7 +28,7 @@ const baseProject: FinanceProject = {
   technology: "Wind", areaName: null, cod: d("2028-01-01"), fid: null, construction: d("2027-03-01"),
   legallyBindingPermits: d("2026-01-15"), applicationSubmitted: null, projectDevelopmentStarted: null,
   feasibilityStudies: null, netYieldP50: 120000, totalCapacity: 40, endDate: d("2055-12-31"),
-  clusterStateName: "Cluster 4", owningBusinessUnitId: "bu-1", clusterStateOrder: 4,
+  clusterStateName: "Cluster 4", owningBusinessUnitId: "bbbbbbbb-0000-0000-0000-0000000000b1", clusterStateOrder: 4,
   financingOptions: CHOICE_FINANCE.financingOptions.debtFinancing,
 };
 

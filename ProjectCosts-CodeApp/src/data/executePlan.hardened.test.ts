@@ -129,7 +129,7 @@ describe("a hardened delete, sequential", () => {
     expect(err.deleted).toEqual([{ entitySet: SET, id: g(9) }]);
   });
 
-  it("UT-PLAN-926 \"does not exist\" text on a 400 is NOT gone for a hardened delete, but the unhardened delete still accepts it", async () => {
+  it("UT-PLAN-926 \"does not exist\" text on a 400 is NOT gone, for a hardened delete or (since D157) an unhardened one", async () => {
     const script = { [g(1)]: [{ status: 400, message: "Entity Other Does Not Exist" } as Answer] };
     const s = stub({ script });
     const err = await failed(run(planOf(hd(1)), s));
@@ -137,9 +137,11 @@ describe("a hardened delete, sequential", () => {
     expect((err.cause as DataError).status).toBe(400);
     expect(s.attempts.get(g(1))).toBe(1);
     expect(s.reads).toEqual([]);
+    // D157: the unhardened delete accepted this text as "the row is gone" (it was `ok.deleted`); it is now the same failure.
     const s2 = stub({ script });
-    const ok = await run(planOf(plain(1)), s2);
-    expect(ok.deleted).toEqual([{ entitySet: SET, id: g(1) }]);
+    const err2 = await failed(run(planOf(plain(1)), s2));
+    expect(err2).toBeInstanceOf(PlanError);
+    expect((err2.cause as DataError).status).toBe(400);
   });
 
   it("UT-PLAN-927 an UNHARDENED delete is exactly as before: a 404 is done with no read, a 500 is not retried", async () => {

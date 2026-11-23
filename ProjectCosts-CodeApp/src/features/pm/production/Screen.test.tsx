@@ -20,7 +20,7 @@ const baseProject: ProductionProject = {
   id: "p1", projectIdText: "DE-0001", projectName: "Windpark Nord", countryId: "c1", countryName: "Germany", technology: 952850000,
   totalCapacity: 22.4, endDate: "2055-12-31", cod: "2028-09-01", plantPvCapacity: 5,
   grossYield: 12_000, windSpeed: 7, irradiation: null, netYieldP50: 20_400, netYieldP75: 18_000, netYieldP90: 17_000,
-  standardCostCreated: true, owningBusinessUnitId: "bu-1",
+  standardCostCreated: true, owningBusinessUnitId: "bbbbbbbb-0000-0000-0000-0000000000b1",
 };
 
 const yieldRow = (over: Partial<EnergyYieldRow>): EnergyYieldRow => ({
@@ -158,7 +158,7 @@ describe("Project Production Screen (connected)", () => {
     expect(req.payload).toMatchObject({
       [YIELD_COL.description]: "East", [YIELD_COL.windSpeed]: 7.5, [YIELD_COL.grossYield]: 10_000,
       [YIELD_COL.totalLosses]: 15, [YIELD_COL.netYieldP50]: 8_500, [YIELD_COL.uncertainty]: 10,
-      [YIELD_COL.type]: CHOICE_PRODUCTION.yieldType.wtg, "owningbusinessunit@odata.bind": "/businessunits(bu-1)",
+      [YIELD_COL.type]: CHOICE_PRODUCTION.yieldType.wtg, "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)",
     });
     expect(req.seasonality.on).toBe(false);
   });

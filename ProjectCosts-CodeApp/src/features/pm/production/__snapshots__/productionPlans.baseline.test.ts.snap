@@ -15,7 +15,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_uncertainty": 10,
    "vsb_netyieldp75mwh": 9512,
    "vsb_netyieldp90mwh": 8893,
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)",
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)",
    "vsb_type": 100,
    "vsb_productionlossesp50": false,
    "vsb_productionuncertaintyp75andp90": false,
@@ -45,7 +45,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_november": 8,
    "vsb_december": 8,
    "vsb_PVEnergyYield@odata.bind": "/vsb_energyyields(@created#0)",
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)"
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)"
   },
   "reason": "the seasonality values",
   "concurrent": true
@@ -59,7 +59,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_netyieldp50reduction": 0,
    "vsb_isstandardvalue": false,
    "vsb_PVEnergyYield@odata.bind": "/vsb_energyyields(@created#0)",
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)"
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)"
   },
   "reason": "the negative price 2028",
   "concurrent": true
@@ -73,7 +73,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_netyieldp50reduction": 0,
    "vsb_isstandardvalue": false,
    "vsb_PVEnergyYield@odata.bind": "/vsb_energyyields(@created#0)",
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)"
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)"
   },
   "reason": "the negative price 2029",
   "concurrent": true
@@ -87,7 +87,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_netyieldp50reduction": 0,
    "vsb_isstandardvalue": false,
    "vsb_PVEnergyYield@odata.bind": "/vsb_energyyields(@created#0)",
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)"
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)"
   },
   "reason": "the negative price 2030",
   "concurrent": true
@@ -101,7 +101,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_netyieldp50reduction": 0,
    "vsb_isstandardvalue": false,
    "vsb_PVEnergyYield@odata.bind": "/vsb_energyyields(@created#0)",
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)"
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)"
   },
   "reason": "the negative price 2031",
   "concurrent": true
@@ -115,7 +115,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_netyieldp50reduction": 0,
    "vsb_isstandardvalue": false,
    "vsb_PVEnergyYield@odata.bind": "/vsb_energyyields(@created#0)",
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)"
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)"
   },
   "reason": "the negative price 2032",
   "concurrent": true
@@ -129,7 +129,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_netyieldp50reduction": 0,
    "vsb_isstandardvalue": false,
    "vsb_PVEnergyYield@odata.bind": "/vsb_energyyields(@created#0)",
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)"
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)"
   },
   "reason": "the negative price 2033",
   "concurrent": true
@@ -143,7 +143,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_netyieldp50reduction": 0,
    "vsb_isstandardvalue": false,
    "vsb_PVEnergyYield@odata.bind": "/vsb_energyyields(@created#0)",
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)"
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)"
   },
   "reason": "the negative price 2034",
   "concurrent": true
@@ -157,7 +157,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_netyieldp50reduction": 0,
    "vsb_isstandardvalue": false,
    "vsb_PVEnergyYield@odata.bind": "/vsb_energyyields(@created#0)",
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)"
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)"
   },
   "reason": "the negative price 2035",
   "concurrent": true
@@ -171,7 +171,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_netyieldp50reduction": 0,
    "vsb_isstandardvalue": false,
    "vsb_PVEnergyYield@odata.bind": "/vsb_energyyields(@created#0)",
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)"
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)"
   },
   "reason": "the negative price 2036",
   "concurrent": true
@@ -185,7 +185,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_netyieldp50reduction": 0,
    "vsb_isstandardvalue": false,
    "vsb_PVEnergyYield@odata.bind": "/vsb_energyyields(@created#0)",
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)"
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)"
   },
   "reason": "the negative price 2037",
   "concurrent": true
@@ -199,7 +199,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_netyieldp50reduction": 0,
    "vsb_isstandardvalue": false,
    "vsb_PVEnergyYield@odata.bind": "/vsb_energyyields(@created#0)",
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)"
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)"
   },
   "reason": "the negative price 2038",
   "concurrent": true
@@ -213,7 +213,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_netyieldp50reduction": 0,
    "vsb_isstandardvalue": false,
    "vsb_PVEnergyYield@odata.bind": "/vsb_energyyields(@created#0)",
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)"
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)"
   },
   "reason": "the negative price 2039",
   "concurrent": true
@@ -227,7 +227,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_netyieldp50reduction": 0,
    "vsb_isstandardvalue": false,
    "vsb_PVEnergyYield@odata.bind": "/vsb_energyyields(@created#0)",
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)"
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)"
   },
   "reason": "the negative price 2040",
   "concurrent": true
@@ -241,7 +241,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_netyieldp50reduction": 0,
    "vsb_isstandardvalue": false,
    "vsb_PVEnergyYield@odata.bind": "/vsb_energyyields(@created#0)",
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)"
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)"
   },
   "reason": "the negative price 2041",
   "concurrent": true
@@ -255,7 +255,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_netyieldp50reduction": 0,
    "vsb_isstandardvalue": false,
    "vsb_PVEnergyYield@odata.bind": "/vsb_energyyields(@created#0)",
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)"
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)"
   },
   "reason": "the negative price 2042",
   "concurrent": true
@@ -340,7 +340,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_duedateonetimepayment": "2029-01-01",
    "vsb_amountonetimepayment": 1234.57,
    "vsb_secured": 952850000,
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)",
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)",
    "vsb_duedateonetimepayment2": null,
    "vsb_amountonetimepayment2": null,
    "vsb_duedateonetimepayment3": null,
@@ -363,7 +363,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_name": "-LL 01-WTG A_1",
    "vsb_ProjectCost@odata.bind": "/vsb_landleaseprojectcosts(@created#0)",
    "vsb_GeneratorInProject@odata.bind": "/vsb_generatorinprojects(g1)",
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)"
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)"
   },
   "reason": "a land lease WTG allocation"
  },
@@ -374,7 +374,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_name": "-LL 01-WTG A_2",
    "vsb_ProjectCost@odata.bind": "/vsb_landleaseprojectcosts(@created#0)",
    "vsb_GeneratorInProject@odata.bind": "/vsb_generatorinprojects(g2)",
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)"
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)"
   },
   "reason": "a land lease WTG allocation"
  },
@@ -385,7 +385,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_name": "-LL 01-WTG A_3",
    "vsb_ProjectCost@odata.bind": "/vsb_landleaseprojectcosts(@created#0)",
    "vsb_GeneratorInProject@odata.bind": "/vsb_generatorinprojects(g3)",
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)"
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)"
   },
   "reason": "a land lease WTG allocation"
  },
@@ -396,7 +396,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_name": "-LL 01-WTG A_4",
    "vsb_ProjectCost@odata.bind": "/vsb_landleaseprojectcosts(@created#0)",
    "vsb_GeneratorInProject@odata.bind": "/vsb_generatorinprojects(g4)",
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)"
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)"
   },
   "reason": "a land lease WTG allocation"
  },
@@ -412,7 +412,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_duedateonetimepayment": "2029-01-01",
    "vsb_amountonetimepayment": 1234.57,
    "vsb_secured": 952850000,
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)",
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)",
    "vsb_duedateonetimepayment2": null,
    "vsb_amountonetimepayment2": null,
    "vsb_duedateonetimepayment3": null,
@@ -435,7 +435,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_name": "-LL 02-WTG A_1",
    "vsb_ProjectCost@odata.bind": "/vsb_landleaseprojectcosts(@created#5)",
    "vsb_GeneratorInProject@odata.bind": "/vsb_generatorinprojects(g1)",
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)"
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)"
   },
   "reason": "a land lease WTG allocation"
  },
@@ -446,7 +446,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_name": "-LL 02-WTG A_2",
    "vsb_ProjectCost@odata.bind": "/vsb_landleaseprojectcosts(@created#5)",
    "vsb_GeneratorInProject@odata.bind": "/vsb_generatorinprojects(g2)",
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)"
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)"
   },
   "reason": "a land lease WTG allocation"
  },
@@ -457,7 +457,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_name": "-LL 02-WTG A_3",
    "vsb_ProjectCost@odata.bind": "/vsb_landleaseprojectcosts(@created#5)",
    "vsb_GeneratorInProject@odata.bind": "/vsb_generatorinprojects(g3)",
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)"
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)"
   },
   "reason": "a land lease WTG allocation"
  },
@@ -468,7 +468,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_name": "-LL 02-WTG A_4",
    "vsb_ProjectCost@odata.bind": "/vsb_landleaseprojectcosts(@created#5)",
    "vsb_GeneratorInProject@odata.bind": "/vsb_generatorinprojects(g4)",
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)"
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)"
   },
   "reason": "a land lease WTG allocation"
  },
@@ -484,7 +484,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_duedateonetimepayment": "2029-01-01",
    "vsb_amountonetimepayment": 1234.57,
    "vsb_secured": 952850000,
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)",
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)",
    "vsb_duedateonetimepayment2": null,
    "vsb_amountonetimepayment2": null,
    "vsb_duedateonetimepayment3": null,
@@ -507,7 +507,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_name": "-LL 03-WTG A_1",
    "vsb_ProjectCost@odata.bind": "/vsb_landleaseprojectcosts(@created#10)",
    "vsb_GeneratorInProject@odata.bind": "/vsb_generatorinprojects(g1)",
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)"
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)"
   },
   "reason": "a land lease WTG allocation"
  },
@@ -518,7 +518,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_name": "-LL 03-WTG A_2",
    "vsb_ProjectCost@odata.bind": "/vsb_landleaseprojectcosts(@created#10)",
    "vsb_GeneratorInProject@odata.bind": "/vsb_generatorinprojects(g2)",
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)"
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)"
   },
   "reason": "a land lease WTG allocation"
  },
@@ -529,7 +529,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_name": "-LL 03-WTG A_3",
    "vsb_ProjectCost@odata.bind": "/vsb_landleaseprojectcosts(@created#10)",
    "vsb_GeneratorInProject@odata.bind": "/vsb_generatorinprojects(g3)",
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)"
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)"
   },
   "reason": "a land lease WTG allocation"
  },
@@ -540,7 +540,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_name": "-LL 03-WTG A_4",
    "vsb_ProjectCost@odata.bind": "/vsb_landleaseprojectcosts(@created#10)",
    "vsb_GeneratorInProject@odata.bind": "/vsb_generatorinprojects(g4)",
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)"
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)"
   },
   "reason": "a land lease WTG allocation"
  },
@@ -555,7 +555,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_aggregation": 952850000,
    "vsb_landleasedurationyears": 2,
    "vsb_landleasedurationmonths": 6,
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)",
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)",
    "vsb_eurmwh": 2,
    "vsb_eurmw": 1,
    "vsb_eurwtg": 3,
@@ -576,7 +576,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_aggregation": 952850000,
    "vsb_landleasedurationyears": 2,
    "vsb_landleasedurationmonths": 6,
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)",
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)",
    "vsb_eurmwh": 2,
    "vsb_eurmw": 1,
    "vsb_eurwtg": 3,
@@ -597,7 +597,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_aggregation": 952850000,
    "vsb_landleasedurationyears": 2,
    "vsb_landleasedurationmonths": 6,
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)",
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)",
    "vsb_eurmwh": 2,
    "vsb_eurmw": 1,
    "vsb_eurwtg": 3,
@@ -634,7 +634,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_inflationstartyear": 2029,
    "vsb_inflationcountryarea": "DE",
    "vsb_distributionfrequency": 12,
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)",
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)",
    "vsb_alignwithprojectduration": false,
    "vsb_isstartdatestandardassumption": true,
    "vsb_isstandardcontract": true,
@@ -669,7 +669,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_inflationstartyear": 2029,
    "vsb_inflationcountryarea": "DE",
    "vsb_distributionfrequency": 12,
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)",
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)",
    "vsb_alignwithprojectduration": false,
    "vsb_isstartdatestandardassumption": true,
    "vsb_isstandardcontract": true,
@@ -704,7 +704,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_inflationstartyear": 2029,
    "vsb_inflationcountryarea": "DE",
    "vsb_distributionfrequency": 12,
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)",
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)",
    "vsb_alignwithprojectduration": false,
    "vsb_isstartdatestandardassumption": true,
    "vsb_isstandardcontract": true,
@@ -739,7 +739,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_inflationstartyear": 2029,
    "vsb_inflationcountryarea": "DE",
    "vsb_distributionfrequency": 12,
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)",
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)",
    "vsb_alignwithprojectduration": false,
    "vsb_isstartdatestandardassumption": true,
    "vsb_isstandardcontract": true,
@@ -775,7 +775,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_inflationstartyear": 2029,
    "vsb_inflationcountryarea": "DE",
    "vsb_distributionfrequency": 12,
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)",
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)",
    "vsb_alignwithprojectduration": false,
    "vsb_isstartdatestandardassumption": true,
    "vsb_isstandardcontract": true,
@@ -811,7 +811,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_inflationstartyear": 2029,
    "vsb_inflationcountryarea": "DE",
    "vsb_distributionfrequency": 12,
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)",
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)",
    "vsb_alignwithprojectduration": false,
    "vsb_isstartdatestandardassumption": true,
    "vsb_isstandardcontract": true,
@@ -847,7 +847,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_inflationstartyear": 2029,
    "vsb_inflationcountryarea": "DE",
    "vsb_distributionfrequency": 12,
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)",
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)",
    "vsb_alignwithprojectduration": false,
    "vsb_isstartdatestandardassumption": true,
    "vsb_isstandardcontract": true,
@@ -883,7 +883,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_inflationstartyear": 2029,
    "vsb_inflationcountryarea": "DE",
    "vsb_distributionfrequency": 12,
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)",
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)",
    "vsb_alignwithprojectduration": false,
    "vsb_isstartdatestandardassumption": true,
    "vsb_isstandardcontract": true,
@@ -919,7 +919,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_inflationstartyear": 2029,
    "vsb_inflationcountryarea": "DE",
    "vsb_distributionfrequency": 12,
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)",
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)",
    "vsb_alignwithprojectduration": false,
    "vsb_isstartdatestandardassumption": true,
    "vsb_isstandardcontract": true,
@@ -955,7 +955,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_inflationstartyear": 2029,
    "vsb_inflationcountryarea": "DE",
    "vsb_distributionfrequency": 12,
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)",
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)",
    "vsb_alignwithprojectduration": false,
    "vsb_isstartdatestandardassumption": true,
    "vsb_isstandardcontract": true,
@@ -991,7 +991,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_inflationstartyear": 2029,
    "vsb_inflationcountryarea": "DE",
    "vsb_distributionfrequency": 12,
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)",
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)",
    "vsb_alignwithprojectduration": false,
    "vsb_isstartdatestandardassumption": true,
    "vsb_isstandardcontract": true,
@@ -1027,7 +1027,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_inflationstartyear": 2029,
    "vsb_inflationcountryarea": "DE",
    "vsb_distributionfrequency": 12,
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)",
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)",
    "vsb_alignwithprojectduration": false,
    "vsb_isstartdatestandardassumption": true,
    "vsb_isstandardcontract": true,
@@ -1063,7 +1063,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_inflationstartyear": 2029,
    "vsb_inflationcountryarea": "DE",
    "vsb_distributionfrequency": 12,
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)",
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)",
    "vsb_alignwithprojectduration": false,
    "vsb_isstartdatestandardassumption": true,
    "vsb_isstandardcontract": true,
@@ -1100,7 +1100,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_inflationstartyear": 2029,
    "vsb_inflationcountryarea": "DE",
    "vsb_distributionfrequency": 12,
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)",
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)",
    "vsb_alignwithprojectduration": false,
    "vsb_isstartdatestandardassumption": true,
    "vsb_isstandardcontract": true,
@@ -1136,7 +1136,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_inflationstartyear": 2029,
    "vsb_inflationcountryarea": "DE",
    "vsb_distributionfrequency": 12,
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)",
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)",
    "vsb_alignwithprojectduration": false,
    "vsb_isstartdatestandardassumption": true,
    "vsb_isstandardcontract": true,
@@ -1172,7 +1172,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_inflationstartyear": 2029,
    "vsb_inflationcountryarea": "DE",
    "vsb_distributionfrequency": 12,
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)",
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)",
    "vsb_alignwithprojectduration": false,
    "vsb_isstartdatestandardassumption": true,
    "vsb_isstandardcontract": true,
@@ -1209,7 +1209,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_inflationstartyear": 2029,
    "vsb_inflationcountryarea": "DE",
    "vsb_distributionfrequency": 12,
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)",
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)",
    "vsb_alignwithprojectduration": false,
    "vsb_isstartdatestandardassumption": true,
    "vsb_isstandardcontract": true,
@@ -1246,7 +1246,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_inflationstartyear": 2029,
    "vsb_inflationcountryarea": "DE",
    "vsb_distributionfrequency": 12,
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)",
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)",
    "vsb_alignwithprojectduration": false,
    "vsb_isstartdatestandardassumption": true,
    "vsb_isstandardcontract": true,
@@ -1283,7 +1283,7 @@ exports[`UT-PRODBASE write-plan baseline (the code before optimization) > UT-PRO
    "vsb_inflationstartyear": 2029,
    "vsb_inflationcountryarea": "DE",
    "vsb_distributionfrequency": 12,
-   "owningbusinessunit@odata.bind": "/businessunits(bu-1)",
+   "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)",
    "vsb_alignwithprojectduration": false,
    "vsb_isstartdatestandardassumption": true,
    "vsb_isstandardcontract": true,

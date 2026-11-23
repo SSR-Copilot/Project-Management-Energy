@@ -114,7 +114,7 @@ const project = (over: Partial<FinanceProject> = {}): FinanceProject => ({
   totalCapacity: 50,
   endDate: d("2055-12-31"),
   clusterStateName: "Cluster 4",
-  owningBusinessUnitId: "bu-1",
+  owningBusinessUnitId: "bbbbbbbb-0000-0000-0000-0000000000b1",
   financingOptions: null,
   ...over,
 });
@@ -1717,7 +1717,7 @@ describe("D34 — write plans", () => {
       "vsb_Project@odata.bind": "/vsb_projects(P1)", "vsb_FinancingCategory@odata.bind": "/vsb_financingcategories(c1)",
       vsb_freeequity: CHOICE_FINANCE.freeEquity.percentage, vsb_freeequityvalue: 10, vsb_shareholderloanvalue: 90,
       vsb_isstandardvalue: '[{"locIsStandardFreeEquity":true,"locIsStandardShareholderLoan":true}]',
-      "owningbusinessunit@odata.bind": "/businessunits(bu-1)",
+      "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)",
     });
     const jobs = seedJobs(seedsAllowed(seeds, false), project());
     expect(jobs[1]!.errorText!("boom")).toBe("Error while creating VAT-Financing financing input: boom");
@@ -1766,7 +1766,7 @@ describe("D34 — write plans", () => {
       vsb_name: "Windpark Nord-DSRF/DSRA", vsb_typedsradrsf: CHOICE_FINANCE.dsraDsrfType.dsra, vsb_margin: -1.5,
       vsb_commitmentfeevalue: null, vsb_commitmentfeeperiodyear: null, vsb_commitmentfeeperiodmonth: null,
       vsb_upfrontfeevalue: null, vsb_percentageoffuturedebtservice: 100, vsb_endofdebtservicesavings: "2045-12-31",
-      vsb_durationoffuturedebtservicemmyy: "0600", "owningbusinessunit@odata.bind": "/businessunits(bu-1)",
+      vsb_durationoffuturedebtservicemmyy: "0600", "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)",
     });
   });
 
@@ -1789,7 +1789,7 @@ describe("D34 — write plans", () => {
       vsb_energyyielddebtsizing: CHOICE_FINANCE.energyYieldDebtSizing.p75,
       vsb_seniordebtstandardassumptionjson: '[{"FinancialCloseDate":true}]',
       vsb_uniquekeystring: "P1-SeniorDebt-termsheet-bank-B7-nokfw",
-      "owningbusinessunit@odata.bind": "/businessunits(bu-1)", "vsb_FinancingCategory@odata.bind": "/vsb_financingcategories(c3)",
+      "owningbusinessunit@odata.bind": "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)", "vsb_FinancingCategory@odata.bind": "/vsb_financingcategories(c3)",
     });
     expect(write(plan, 1)).toMatchObject({
       vsb_name: "2029 - Value", vsb_repaymentamount: 1000, vsb_repaymentyear: "2029",

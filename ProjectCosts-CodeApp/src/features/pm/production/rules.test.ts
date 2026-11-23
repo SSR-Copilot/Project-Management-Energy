@@ -48,7 +48,7 @@ const project = (over: Partial<ProductionProject> = {}): ProductionProject => ({
   id: "p1", projectIdText: "DE-0001", projectName: "Windpark Nord", countryId: "c1", countryName: "Germany", technology: 952850000,
   totalCapacity: 22.4, endDate: "2055-12-31", cod: "2028-09-01", plantPvCapacity: 5,
   grossYield: 12_000, windSpeed: 7.25, irradiation: null, netYieldP50: 12_000, netYieldP75: 11_000, netYieldP90: 10_000,
-  standardCostCreated: false, owningBusinessUnitId: "bu-1",
+  standardCostCreated: false, owningBusinessUnitId: "bbbbbbbb-0000-0000-0000-0000000000b1",
   ...over,
 });
 
@@ -279,7 +279,7 @@ describe("the yield payload", () => {
     expect(YIELD_COL.irradiation in p).toBe(false);
     expect(YIELD_COL.productionAllocation in p).toBe(false);
     expect(p[BIND.project]).toBe("/vsb_projects(p1)");
-    expect(p[BIND.owner]).toBe("/businessunits(bu-1)");
+    expect(p[BIND.owner]).toBe("/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)");
   });
   it("UT-PROD-013b PV writes irradiation and the allocation mode, never wind or allocation", () => {
     const f = changeIrradiation(form({ allocationInput: "Input Irradiation" }), "1000", 5, "en-US");
@@ -496,7 +496,7 @@ describe("write plans", () => {
     ]);
     for (const w of plan.writes.slice(1)) {
       expect(w.data![BIND.energyYield]).toBe(`/vsb_energyyields(${createdRowRef(0)})`);
-      expect(w.data![BIND.owner]).toBe("/businessunits(bu-1)");
+      expect(w.data![BIND.owner]).toBe("/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)");
     }
   });
   it("UT-PROD-101 Edit with the toggles off removes the stored seasonality and every negative price", () => {
@@ -710,7 +710,7 @@ describe("standard contract generation", () => {
     expect(cost).toMatchObject({ op: "create", entitySet: ES_PLANT.landLeaseProjectCosts });
     expect(cost.data).toMatchObject({
       [BIND.project]: "/vsb_projects(p1)", [BIND.subaccount]: "/vsb_landleasesubaccounts(lls1)",
-      [BIND.currency]: "/transactioncurrencies(cur1)", [BIND.owner]: "/businessunits(bu-1)",
+      [BIND.currency]: "/transactioncurrencies(cur1)", [BIND.owner]: "/businessunits(bbbbbbbb-0000-0000-0000-0000000000b1)",
       vsb_name: "Windpark Nord-Land lease-LL Standard", vsb_amountonetimepayment: 1_234.57,
       vsb_secured: CHOICE_PRODUCTION.landLeaseSecured.yes, vsb_inflationstartyear: 2029, vsb_inflationprofile: 1.8,
       vsb_isstandardcontract: true, vsb_isstartdatestandardassumption: true,

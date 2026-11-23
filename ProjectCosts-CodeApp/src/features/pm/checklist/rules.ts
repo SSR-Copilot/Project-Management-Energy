@@ -766,6 +766,44 @@ export function planChecklistMaterialisation(
   return plan;
 }
 
+/* ═══════════════════════════════════════════ completing an interrupted copy (D158) ════ */
+
+/** What the copy probe reads of ONE row of a cluster (any status): enough to match it to a template and to see whether anyone worked on it. */
+export interface CopyProbeRow {
+  /** `vsb_projectdefaultchecklist` — the text key of the template the row was copied from. */
+  templateId: string | null;
+  taskState: number | null;
+  comment: string | null;
+  approvalChecklistState: number | null;
+}
+
+/**
+ * D158 — whether anybody has worked on this row: a task state other than "none", a comment, or an approval state other than "not
+ * started". A freshly copied row has none of them (the copy writes `TASK.none` and no approval state, D29).
+ */
+export const copyProbeRowTouched = (r: CopyProbeRow): boolean =>
+  (r.taskState !== null && r.taskState !== TASK.none)
+  || (r.comment !== null && r.comment.trim() !== "")
+  || (r.approvalChecklistState !== null && r.approvalChecklistState !== ACS.notStarted);
+
+/**
+ * D158 (`completeCopy`) — the templates still to copy into a cluster that already has rows. DIVERGENCE from the canvas, which copies only
+ * into a cluster with NO row (`shouldMaterialiseChecklist`): a copy that stopped part-way (a throttled or failed create) was never finished.
+ *
+ * Nothing is copied when the cluster has no row (that is the normal first copy, decided by the count), when ANY row has been worked on
+ * (a template an admin adds later must never reach a project's work in progress, and a new gate-relevant task could block its move), or
+ * when every template already has a row of ANY status (an inactive row still counts, as the canvas count does). Rows are matched to
+ * templates by `vsb_projectdefaultchecklist`; a row with no template key matches nothing. Pure.
+ */
+export function templatesMissingFromCluster(
+  templates: readonly DefaultChecklistTemplate[],
+  existing: readonly CopyProbeRow[],
+): DefaultChecklistTemplate[] {
+  if (existing.length === 0 || existing.some(copyProbeRowTouched)) return [];
+  const have = new Set(existing.map((r) => r.templateId?.toLowerCase()).filter((x): x is string => Boolean(x)));
+  return templates.filter((t) => !have.has(t.id.toLowerCase()));
+}
+
 /** The state `planEnsureTracking` creates a missing row with — what the materialisation guard then sees. */
 const ensuredTrackingState = (selected: { name: string }): number =>
   selected.name === "Draft" ? ACS.inProgress : ACS.notStarted;
@@ -791,10 +829,15 @@ export function planPrepareCluster(args: {
   ctx: { projectId: string; owningBusinessUnitId: string | null };
   /** B1 (D138): the materialisation as one bulk create. Absent = the single creates, as before. */
   materialise?: MaterialiseOptions;
+  /** D158 (`completeCopy`): the templates a cluster that already has rows is still missing (`templatesMissingFromCluster`). Absent = none. */
+  completeWith?: readonly DefaultChecklistTemplate[];
 }): WritePlan {
   const plan = planEnsureTracking(args.selected, args.tracking, args.ctx);
-  if (needsTemplates(args.tracking, args.selected, args.existingRowCount)) {
-    const rows = planChecklistMaterialisation(args.templates, {
+  const copyAll = needsTemplates(args.tracking, args.selected, args.existingRowCount);
+  // A cluster with no row gets every template; one with rows gets only what it is missing (never both).
+  const toCopy = copyAll ? args.templates : (args.completeWith ?? []);
+  if (toCopy.length > 0 || copyAll) {
+    const rows = planChecklistMaterialisation([...toCopy], {
       projectId: args.ctx.projectId, clusterStateId: args.selected.id,
       owningBusinessUnitId: args.ctx.owningBusinessUnitId,
     }, args.materialise);

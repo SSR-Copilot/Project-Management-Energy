@@ -65,14 +65,14 @@ export function unwrap<T>(result: IOperationResult<T>, operation: string): T {
  * For a DELETE: a row that is already gone is the outcome the delete wanted, so a 404 or
  * Dataverse's `0x80040217` "Does Not Exist" counts as done (a stale list, a double click, or another
  * user's delete — "Permit could not be deleted … Does Not Exist", 28 Oct 2026). Any other failure throws.
+ *
+ * D157: "gone" is ONLY HTTP 404 or the code `0x80040217`, exactly as `unwrapDeleteStrict` reads it (this is that function without the
+ * return value). Until D157 the free text "does not exist" anywhere in the error also counted, so a 400 that names ANOTHER missing
+ * object (a cascade, a plug-in, a related row) was reported as "this row is deleted" while the row stayed. DIVERGENCE (a safety
+ * fix, the canvas shows the error); the old rule is not kept.
  */
 export function unwrapDelete(result: IOperationResult<unknown>, operation: string): void {
-  if (result.success) return;
-  const status = statusOf(result.error);
-  let detail = "";
-  try { detail = typeof result.error === "string" ? result.error : JSON.stringify(result.error) ?? ""; } catch { detail = String(result.error); }
-  if (status === 404 || /0x80040217|does not exist/i.test(detail)) return;
-  throw new DataError(operation, result.error, status);
+  unwrapDeleteStrict(result, operation);
 }
 
 /**

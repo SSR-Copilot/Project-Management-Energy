@@ -59,7 +59,7 @@ const project = (over: Partial<ProductionProject> = {}): ProductionProject => ({
   id: "p1", projectIdText: "DE-0001", projectName: "Nord", countryId: "c1", countryName: "Germany", technology: 952850000,
   totalCapacity: 22.4, endDate: "2055-12-31", cod: null, plantPvCapacity: 5,
   grossYield: 0, windSpeed: 0, irradiation: null, netYieldP50: 0, netYieldP75: 0, netYieldP90: 0,
-  standardCostCreated: true, owningBusinessUnitId: "bu-1", ...over,
+  standardCostCreated: true, owningBusinessUnitId: "bbbbbbbb-0000-0000-0000-0000000000b1", ...over,
 });
 
 /** A QueryClient whose reload only finishes when the test says so, counting the invalidations. */
