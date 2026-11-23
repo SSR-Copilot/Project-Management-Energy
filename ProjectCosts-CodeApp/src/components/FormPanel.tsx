@@ -5,7 +5,7 @@
  * `panel-close`) and `aria-label` (`closeLabel`, default "Close panel").
  *
  * Every prop below `onDismiss` is OPTIONAL and, left out, gives the plain panel this component always was
- * (✕ / Escape / backdrop call `onDismiss()` at once). The Application Settings screens use them for the
+ * (✕ / Escape call `onDismiss()` at once; a backdrop click does nothing, as in the canvas). The Application Settings screens use them for the
  * save lock, the discard guard and the message / footer slots:
  *   - `width`: a preset or a number of px (540 Milestones, 650, …), always capped at 100vw.
  *     `"full"` is Contracts' `min(960px, 100vw)`; `"wide"` keeps its `min(960px, 50vw)`.
@@ -88,8 +88,10 @@ export interface FormPanelProps {
   /** Extra class on the drawer surface, for screen-scoped chrome overrides (Contracts). Default none. */
   panelClassName?: string;
   /**
-   * Opt-in (PM Revenues): a click outside the panel does NOT close it — the canvas panel closes
-   * only through its ✕ or Cancel. Escape still closes. Off by default (the backdrop dismisses).
+   * A click outside the panel does NOT close it — the canvas panel closes only through its ✕ or
+   * Cancel, on every screen. ON by default (the canvas has no light dismiss anywhere); pass
+   * `false` only for a panel that deliberately wants the backdrop to dismiss. Escape still closes
+   * unless `keepOpenOnEscape` is set.
    */
   keepOpenOnOutsideClick?: boolean;
   /**
@@ -117,7 +119,7 @@ export interface FormPanelProps {
 export function FormPanel({
   open, title, width = "wide", children, footer, onDismiss, closeTestId, closeLabel, closeTooltip, closeTooltipBox = false,
   busy = false, busyLabel, dirty = false, discardText, actions, messages, closePrompt, promptRequest, onPromptCancel,
-  coverLabel, ariaLabel, panelClassName, keepOpenOnOutsideClick = false, keepOpenOnEscape = false, centerClose = false,
+  coverLabel, ariaLabel, panelClassName, keepOpenOnOutsideClick = true, keepOpenOnEscape = false, centerClose = false,
   titleTooltip, closeIconColor,
 }: FormPanelProps) {
   const locked = busy || busyLabel !== undefined;

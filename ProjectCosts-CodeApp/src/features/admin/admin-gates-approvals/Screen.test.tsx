@@ -704,7 +704,8 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
     // Stored OFF, but Save writes `true` for Draft, so the toggle shows what will be saved.
     expect(toggle).toBeChecked();
     expect(toggle).toBeDisabled();
-    expect(screen.getByText("The Draft gate is always active.")).toBeInTheDocument();
+    // The hint under the toggle was removed (user, 23 Nov 2026).
+    expect(screen.queryByText("The Draft gate is always active.")).not.toBeInTheDocument();
   });
 
   it("UT-ADGATE-936 a mode change that hides saved people warns before Save (SOURCE DEFECT fix kept, D153); Reset Gate's band text is the canvas one", async () => {

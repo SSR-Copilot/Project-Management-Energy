@@ -251,7 +251,7 @@ describe("CheckListSettingsScreen", () => {
     }));
   });
 
-  it("UT-ADCHK-909 a successful save closes the panel and shows a success message", async () => {
+  it("UT-ADCHK-909 a successful save closes the panel without a success message (the canvas shows none)", async () => {
     const u = user();
     renderScreen();
     await expandDraft(u);
@@ -259,8 +259,9 @@ describe("CheckListSettingsScreen", () => {
     await u.click(screen.getAllByRole("button", { name: "Add Task" })[0] as HTMLElement);
     await u.type(await screen.findByRole("textbox", { name: "Description", ...PORTAL }), "Fresh");
     await u.click(screen.getByRole("button", { name: "Save", ...PORTAL }));
-    expect(await screen.findByText("Checklist item was successfully saved.")).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByText("Add Task", { selector: "h2" })).not.toBeInTheDocument());
+    expect(api.createTask).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("Checklist item was successfully saved.")).not.toBeInTheDocument();
   });
 
   it("UT-ADCHK-910 a 403 shows the permission message", async () => {
@@ -584,7 +585,7 @@ describe("CheckListSettingsScreen — gap closure", () => {
     await u.click(screen.getByRole("button", { name: "Save", ...PORTAL }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Close panel", ...PORTAL })).toBeDisabled());
     write.resolve("new-id");
-    expect(await screen.findByText("Checklist item was successfully saved.")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("Add Task", { selector: "h2" })).not.toBeInTheDocument());
   });
 
   it("UT-ADCHK-927 a pending Completion Date write shows a spinner on that row only; no full-screen overlay", async () => {
@@ -1069,6 +1070,38 @@ describe("CheckListSettingsScreen — canvas parity, 20 Nov 2026 (row icons, Add
     expect(pathOf(confirm)).toBe(tick);
     expect(getComputedStyle(within(dialog).getByRole("button", { name: "Cancel", ...PORTAL })).width).toBe("96px");
     expect(getComputedStyle(dialog).width).toBe("490px");
+  });
+
+  it("UT-ADCHK-950 an empty cluster shows the column header band and no rows, with no 'No tasks' text (canvas: header always visible, gallery empty)", async () => {
+    const u = user();
+    renderScreen();
+    await screen.findByText("Draft to Cluster 1");
+    // The fixtures' "Cluster 6" (caption "Criteria After Cluster 6 Entry") has no tasks; fold it open.
+    await u.click(screen.getByRole("button", { name: "Criteria After Cluster 6 Entry" }));
+    const table = await screen.findByRole("table", { name: "Criteria After Cluster 6 Entry tasks" });
+    expect(within(table).getAllByRole("columnheader").map((h) => h.textContent)).toEqual(
+      expect.arrayContaining(["Description", "Holding Description", "Gate Relevance", "Completion Date", "Active"]),
+    );
+    expect(within(table).queryAllByRole("row").length).toBe(1);
+    expect(screen.queryByText("No tasks in this cluster yet.")).not.toBeInTheDocument();
+  });
+
+  it("UT-ADCHK-951 the task editor shows no 'Value cannot be blank.' once closing: the screen drops the form before the drawer has left", async () => {
+    const u = user();
+    renderScreen();
+    await expandDraft(u);
+    await screen.findByText("Site identified");
+    await u.click(screen.getAllByRole("button", { name: "Add Task" })[0] as HTMLElement);
+    // Open: a blank Description shows the canvas message straight away (L1056).
+    expect(await screen.findByText("Value cannot be blank.")).toBeInTheDocument();
+    await u.type(await screen.findByRole("textbox", { name: "Description", ...PORTAL }), "Typed");
+    expect(screen.queryByText("Value cannot be blank.")).not.toBeInTheDocument();
+    // ✕: the screen empties the form at once, while the drawer is still on screen; the message must not come back.
+    await u.click(screen.getByTestId("pcf_com_Admin_ProjectGates_Approvals_Form_CommandBar_1"));
+    await u.click(await screen.findByRole("button", { name: "Discard", ...PORTAL }));
+    expect(screen.queryByText("Value cannot be blank.")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("Add Task", { selector: "h2" })).not.toBeInTheDocument());
+    expect(screen.queryByText("Value cannot be blank.")).not.toBeInTheDocument();
   });
 
   it("UT-ADCHK-949 the cluster Reorder command shows the canvas ItemIconName NumberedList", async () => {

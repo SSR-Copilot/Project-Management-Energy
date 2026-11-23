@@ -7,6 +7,7 @@
  * its ISO-2 code badge when one is known, else a neutral tile. `compact` keeps the original
  * 24 x 16 flag for the dropdown options.
  */
+import { useId } from "react";
 import { makeStyles, mergeClasses, tokens } from "@fluentui/react-components";
 import { pickerCountryConfig } from "@/domain/countryPicker";
 import { palette } from "@/theme/tokens";
@@ -55,6 +56,55 @@ export interface CountryFlagProps {
 const W = 24;
 const H = 16;
 
+/*
+ * The Croatian coat of arms, simplified to what survives a 24 x 16 drawing: a 5 x 5
+ * red-and-white chequered shield (red in the top-left corner, as on the real flag) centred on
+ * the flag and overlapping all three stripes, with a thin white outline so it stands off the
+ * red stripe. The five small crown shields above it are too small to draw at this size.
+ */
+const SHIELD_X = 8.5;
+const SHIELD_Y = 3.5;
+const SHIELD_W = 7;
+const SHIELD_H = 9;
+const CELLS = 5;
+const CELL_W = SHIELD_W / CELLS;
+const CELL_H = SHIELD_H / CELLS; // the rounded bottom clips the corners of the last row
+
+/** Shield outline: straight sides, rounded bottom. */
+const SHIELD_PATH = [
+  `M ${SHIELD_X} ${SHIELD_Y}`,
+  `H ${SHIELD_X + SHIELD_W}`,
+  `V ${SHIELD_Y + SHIELD_H - SHIELD_W / 2}`,
+  `A ${SHIELD_W / 2} ${SHIELD_W / 2} 0 0 1 ${SHIELD_X} ${SHIELD_Y + SHIELD_H - SHIELD_W / 2}`,
+  "Z",
+].join(" ");
+
+function CroatianShield() {
+  // The clip id must be unique per rendered SVG: several flags share one document.
+  const clipId = `hr-shield-${useId()}`;
+  const cells = [];
+  for (let row = 0; row < CELLS; row++) {
+    for (let col = 0; col < CELLS; col++) {
+      if ((row + col) % 2 === 1) continue; // white cells are the shield's white background
+      cells.push(
+        <rect
+          key={`${row}-${col}`}
+          x={SHIELD_X + col * CELL_W} y={SHIELD_Y + row * CELL_H} width={CELL_W} height={CELL_H} fill="#FF0000"
+        />,
+      );
+    }
+  }
+  return (
+    <>
+      <defs>
+        <clipPath id={clipId}><path d={SHIELD_PATH} /></clipPath>
+      </defs>
+      <path d={SHIELD_PATH} fill="#FFFFFF" stroke="#FFFFFF" strokeWidth={0.8} />
+      <g clipPath={`url(#${clipId})`}>{cells}</g>
+    </>
+  );
+}
+
 export function CountryFlag({ country, variant = "flag", fallbackCode, selected = false, compact = false }: CountryFlagProps) {
   const styles = useStyles();
   const cfg = pickerCountryConfig(country);
@@ -77,9 +127,14 @@ export function CountryFlag({ country, variant = "flag", fallbackCode, selected 
   let body;
   const flag = cfg?.flag;
   if (flag?.kind === "h") {
-    body = flag.colors.map((c, i) => (
-      <rect key={`${c}${i}`} x={0} y={(H / flag.colors.length) * i} width={W} height={H / flag.colors.length} fill={c} />
-    ));
+    body = (
+      <>
+        {flag.colors.map((c, i) => (
+          <rect key={`${c}${i}`} x={0} y={(H / flag.colors.length) * i} width={W} height={H / flag.colors.length} fill={c} />
+        ))}
+        {flag.emblem === "hr-shield" && <CroatianShield />}
+      </>
+    );
   } else if (flag?.kind === "v") {
     body = flag.colors.map((c, i) => (
       <rect key={`${c}${i}`} x={(W / flag.colors.length) * i} y={0} width={W / flag.colors.length} height={H} fill={c} />

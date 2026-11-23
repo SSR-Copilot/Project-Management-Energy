@@ -120,7 +120,9 @@ export function TaskEditorDrawer({
             value={form.name}
             maxLength={MAX_TEXT_LENGTH}
             // `lbl_Admin_Checklist_Form_Fields_Name_ErrorMessage.Visible: =IsBlank(Trim(…))` — shown whenever blank.
-            error={errors.name}
+            // While the drawer closes, the screen has already dropped the editor state and hands in an empty form,
+            // which would flash "Value cannot be blank." for the close animation (user, 23 Nov 2026): no message once closed.
+            error={open ? errors.name : undefined}
             errorClassName={styles.error}
             validationIcon={null}
             onChange={(name) => onChange({ ...form, name })}

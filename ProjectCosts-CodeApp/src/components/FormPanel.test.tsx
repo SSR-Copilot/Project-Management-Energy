@@ -372,12 +372,12 @@ describe("FormPanel", () => {
     expect(spy).toHaveBeenCalledTimes(1);
   });
 
-  it("UT-SETPANEL-023 keepOpenOnOutsideClick: a backdrop click keeps the panel open; ✕ and Escape still close", async () => {
+  it("UT-SETPANEL-023 default: a backdrop click keeps the panel open (canvas has no light dismiss); ✕ and Escape still close", async () => {
     const backdrop = () => document.querySelector<HTMLElement>(".fui-OverlayDrawer__backdrop, [class*='backdrop']");
     const kept = vi.fn();
     const { unmount } = render(
       <FluentProvider theme={vsbTheme}>
-        <FormPanel open title="T" onDismiss={kept} keepOpenOnOutsideClick><input aria-label="Name" /></FormPanel>
+        <FormPanel open title="T" onDismiss={kept}><input aria-label="Name" /></FormPanel>
       </FluentProvider>,
     );
     expect(backdrop()).not.toBeNull();
@@ -389,11 +389,11 @@ describe("FormPanel", () => {
     expect(kept).toHaveBeenCalledTimes(2);
     unmount();
 
-    // Default: the same backdrop click dismisses.
+    // Explicit opt-out: the same backdrop click dismisses.
     const dismissed = vi.fn();
     render(
       <FluentProvider theme={vsbTheme}>
-        <FormPanel open title="T" onDismiss={dismissed}><input aria-label="Name" /></FormPanel>
+        <FormPanel open title="T" onDismiss={dismissed} keepOpenOnOutsideClick={false}><input aria-label="Name" /></FormPanel>
       </FluentProvider>,
     );
     fireEvent.click(backdrop()!);
