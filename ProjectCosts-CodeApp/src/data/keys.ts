@@ -126,6 +126,9 @@ export const qk = {
   checklistAll: (projectId: string) => ["pmChecklist", projectId] as const,
   checklist: (projectId: string, part: string, ...rest: readonly (string | number)[]) =>
     ["pmChecklist", projectId, part, ...rest] as const,
+  /** D156 (`scopedGates`): the Check List's gate settings depend on the country and technology only, so they are cached by those. */
+  checklistGates: (countryId: string, technology: number | string) => ["pmChecklistGates", countryId, technology] as const,
+  checklistGatesAll: ["pmChecklistGates"] as const,
   /** PM Team (D30). Everything project-scoped sits under `teamAll(projectId)`. */
   teamAll: (projectId: string) => ["pmTeam", projectId] as const,
   team: (projectId: string, part: string) => ["pmTeam", projectId, part] as const,

@@ -3,7 +3,7 @@
  * approval settings both resolve the Portfolio Manager's mail; before D138 each resolved it on its own.
  * BASELINE (dbc412d): 2 lookups for one manager across the two reads.
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const svc = vi.hoisted(() => ({
   entra: vi.fn<(ids: readonly string[]) => Promise<Map<string, { mail?: string }>>>(),
@@ -18,6 +18,7 @@ vi.mock("./generalData", () => ({ listProjectStates: vi.fn() }));
 
 import { listChecklistApprovalSettings, listChecklistGates } from "./checklist";
 import { resetChecklistPeopleCache } from "./checklistPeople";
+import { setChecklistPerfFlags } from "./checklistPerfFlags";
 
 const MANAGER = "aaaaaaaa-0000-0000-0000-000000000001";
 const OTHER = "aaaaaaaa-0000-0000-0000-000000000002";
@@ -25,6 +26,8 @@ const gate = (pm: string | null) => ({ id: `g-${pm}`, clusterStateId: "s", appro
   defaultApprovals: null, defaultContributors: null, defaultNotifications: null });
 const approval = (pm: string | null) => ({ id: `a-${pm}`, projectDefaultChecklistId: "t1", approvalMode: 1, gateActive: true,
   portfolioManagerId: pm, defaultApprovers: null, defaultContributors: null, defaultNotifications: null });
+
+afterEach(() => { setChecklistPerfFlags(null); });
 
 beforeEach(() => {
   resetChecklistPeopleCache();
@@ -70,7 +73,8 @@ describe("Cluster Check List — people lookups per visit", () => {
     expect(svc.entra).toHaveBeenCalledTimes(2);
   });
 
-  it("UT-CHKPERF-014 an answer older than the 30 s the screen's queries stay fresh is not reused", async () => {
+  it("UT-CHKPERF-014 with `longPeopleCache` OFF (the D138 behaviour), an answer older than the 30 s the screen's queries stay fresh is not reused", async () => {
+    setChecklistPerfFlags({ longPeopleCache: false });
     vi.useFakeTimers();
     try {
       svc.gates.mockResolvedValue([gate(MANAGER)]);
@@ -81,5 +85,42 @@ describe("Cluster Check List — people lookups per visit", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("UT-CHKPERF-015 (D156, `longPeopleCache`) an answer is reused for 30 minutes: a visit 31 s and 29 min later does not ask Entra again, one 31 min later does", async () => {
+    vi.useFakeTimers();
+    try {
+      svc.gates.mockResolvedValue([gate(MANAGER)]);
+      svc.approvals.mockResolvedValue([approval(MANAGER)]);
+      await listChecklistGates({ countryId: "c", technology: 1 });
+      vi.advanceTimersByTime(31_000);
+      await listChecklistGates({ countryId: "c", technology: 1 });
+      expect(svc.entra).toHaveBeenCalledTimes(1);
+      vi.advanceTimersByTime(29 * 60_000 - 31_000);
+      // the approval settings read the same person: still the one answer
+      const a = await listChecklistApprovalSettings(["t1"]);
+      expect(a[0]!.portfolioManagerMail).toBe(`${MANAGER}@x.test`);
+      expect(svc.entra).toHaveBeenCalledTimes(1);
+      vi.advanceTimersByTime(2 * 60_000);
+      await listChecklistGates({ countryId: "c", technology: 1 });
+      expect(svc.entra).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("UT-CHKPERF-016 (D156) the long cache still drops a FAILED lookup at once, and the Refresh clears a good one", async () => {
+    svc.gates.mockResolvedValue([gate(MANAGER)]);
+    svc.entra.mockImplementationOnce(async () => { throw new Error("graph 500"); });
+    const first = await listChecklistGates({ countryId: "c", technology: 1 });
+    expect(first[0]!.portfolioManagerMail).toBeNull();
+    const second = await listChecklistGates({ countryId: "c", technology: 1 });
+    expect(second[0]!.portfolioManagerMail).toBe(`${MANAGER}@x.test`);
+    expect(svc.entra).toHaveBeenCalledTimes(2);
+    await listChecklistGates({ countryId: "c", technology: 1 });
+    expect(svc.entra).toHaveBeenCalledTimes(2);
+    resetChecklistPeopleCache();
+    await listChecklistGates({ countryId: "c", technology: 1 });
+    expect(svc.entra).toHaveBeenCalledTimes(3);
   });
 });

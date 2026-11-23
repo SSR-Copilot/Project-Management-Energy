@@ -802,6 +802,17 @@ Implemented in the worktree `optimize-finance-perf`, uncommitted until approved.
 | Cluster Checklist | Tests pin which plans may reload only the rows (every other plan builder is checked), the early cluster against the full sequence in 400 generated cases, the screen with the gates held back, and an opt-in modelled benchmark that reproduces the baseline with the switches off | **new** (test gate) |
 | Cluster Checklist | Entra lookups off the critical path, a boot prefetch, pre-flighted guards of a Move, an optimistic Complete | **proposed (not approved)**, see D150; the 5x target was not reached (best 1.83x modelled) |
 
+## Cluster Checklist: the reference reads are kept and shared, not repeated (23 Nov 2026, D156, number provisional) — new / divergences (not approved, not run on DEV)
+
+MODELLED from the dependency chain; nothing was timed. Every change is behind a switch in `data/checklistPerfFlags.ts` (`CHECKLIST_PERF_ALL_OFF` is D150's behaviour exactly).
+
+| Screen | Change | Status |
+|---|---|---|
+| Cluster Check List | A Portfolio Manager's mail from Entra is reused for 30 minutes instead of 30 seconds. Every visit older than 30 s asked Entra twice (the gate rows, which the loader waits for, and the approval settings, which the approval-dependent row actions wait for). The Refresh still clears it; a failed lookup is still dropped at once. UT-CHKPERF-015, 016 | new (DIVERGENCE (freshness): a changed mail is seen at Refresh or after 30 minutes; the canvas read it at every visit. Switch `longPeopleCache`) |
+| Cluster Check List | The gate settings are cached by country and technology, not per project: the next project of the same country and technology reads no gates and no mails. UT-CHKREF-001, 002 | new (switch `scopedGates`) |
+| Cluster Check List | The project states come from the 30-minute cache the other Project Management screens share, not a read per visit; the canvas reads them once per session. UT-CHKREF-001, 004 | new (DIVERGENCE (freshness): up to 30 minutes old; no staler than the canvas. Switch `sharedStates`) |
+| Cluster Check List | Returning to the browser tab no longer re-runs the gate, approval-settings and Entra reads; the project, trackings and rows still refetch (what a second user changes). UT-CHKREF-005, 006 | new (switch `quietFocus`) |
+| Cluster Check List | The command bar's Refresh still refreshes everything: it also invalidates the shared states and the gate scope. UT-CHKREF-007…009. Tests: the 30 s lifetime test UT-CHKPERF-014 now runs with the switch off | new (tests) |
 ## Generators screen: targeted reloads, a split load gate and a prefetch (19 Nov 2026, D141, number provisional) — new / divergences (not approved, not run on DEV)
 
 | Screen | Change | Status |

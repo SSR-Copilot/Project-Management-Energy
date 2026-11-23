@@ -27,6 +27,22 @@
  *    OFF: the templates and the settings are read when the visit and the reload ask, as before.
  *  - `wideCopy` (default ON): the template creates of a first visit are one group sixteen wide instead of eight (the
  *    `WIDE_GROUP_CONCURRENCY` of Production, D145, and Generators, D144). Same rows, same payloads.
+ *
+ * D156 — the reference reads (what no write of this screen changes: the project states, the gate settings, the approval
+ * settings and the Portfolio Managers' mails from Entra). They are read the same way, they are only kept and shared differently:
+ *  - `longPeopleCache` (default ON): an Entra answer is reused for 30 MINUTES (`PEOPLE_FRESH_LONG_MS`), not 30 seconds. The gate
+ *    rows and the approval settings each wait for the Entra lookup of their Portfolio Managers (the loader waits for the gates'; the
+ *    row actions that depend on the approval mode wait for the settings'), so every visit older than 30 seconds paid two extra
+ *    round trips for a mail that almost never changes. The command bar's Refresh still clears the cache. DIVERGENCE (timing only):
+ *    a mail changed in Entra is picked up at the next Refresh, or after 30 minutes. OFF: 30 seconds.
+ *  - `scopedGates` (default ON): the gate settings are cached by country and technology, which is all they depend on, instead of
+ *    per project, so opening another project of the same country and technology does not read them (and their Entra mails) again.
+ *    The full Refresh re-reads them. OFF: one cache entry per project.
+ *  - `sharedStates` (default ON): the project states come from the 30-minute cache the other Project Management screens share
+ *    (`qk.generalDataProjectStates`, already prefetched at start-up) instead of being read again on every visit. The canvas reads
+ *    them once per session (App.OnStart). The full Refresh re-reads them. OFF: a read per project and visit (30 s).
+ *  - `quietFocus` (default ON): the reference reads above are not refetched when the browser window regains focus. The project,
+ *    the trackings and the rows still are (they carry what a second user changes). OFF: every stale query refetches on focus.
  */
 export interface ChecklistPerfFlags {
   targetedReload: boolean;
@@ -34,6 +50,10 @@ export interface ChecklistPerfFlags {
   earlyVisit: boolean;
   prefetchCopy: boolean;
   wideCopy: boolean;
+  longPeopleCache: boolean;
+  scopedGates: boolean;
+  sharedStates: boolean;
+  quietFocus: boolean;
 }
 
 /** The switches as shipped. */
@@ -43,11 +63,16 @@ export const CHECKLIST_PERF: Readonly<ChecklistPerfFlags> = {
   earlyVisit: true,
   prefetchCopy: true,
   wideCopy: true,
+  longPeopleCache: true,
+  scopedGates: true,
+  sharedStates: true,
+  quietFocus: true,
 };
 
 /** Every switch at its OLD behaviour: today's requests exactly (tests, and the rollback in one line). */
 export const CHECKLIST_PERF_ALL_OFF: Readonly<ChecklistPerfFlags> = {
   targetedReload: false, earlyRows: false, earlyVisit: false, prefetchCopy: false, wideCopy: false,
+  longPeopleCache: false, scopedGates: false, sharedStates: false, quietFocus: false,
 };
 
 let override: Partial<ChecklistPerfFlags> | null = null;
