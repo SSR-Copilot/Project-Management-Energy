@@ -8,13 +8,16 @@
  * a bounded queue and are sent (or dropped) once `startAppInsights` knows the answer.
  *
  * Sends, once started:
- *  - the platform metrics `setConfig({ logger })` receives (`sessionLoadSummary`, `networkRequest`)
- *    as custom events, as in Microsoft's guide;
+ *  - the platform's `networkRequest` metrics (`setConfig({ logger })`) as DEPENDENCIES (`sanitize.ts`
+ *    `toDependency`), so the Dataverse calls appear in Performance, Failures and the Application Map;
+ *    before 24 Nov 2026 they were custom events, which no portal blade shows as network calls;
+ *  - the platform's `sessionLoadSummary` as a custom event, as in Microsoft's guide, plus its
+ *    `timeToAppInteractive` as the custom metric of that name (the Metrics blade charts those);
  *  - every `trace()` entry (`platform/telemetry.ts`) as a trace, or an exception when it carries an
  *    `Error`;
  *  - page views on each hash-route change, named after the screen.
- * The SDK's own fetch / XHR tracking is off: the platform's `networkRequest` metric already covers
- * every Dataverse call, and the SDK would record full query URLs.
+ * The SDK's own fetch / XHR tracking is off: the host makes the Dataverse calls and reports them back
+ * as `networkRequest` metrics, so the SDK could not see them anyway, and it would record full query URLs.
  */
 import type { ApplicationInsights, ITelemetryItem } from "@microsoft/applicationinsights-web";
 import type { Metric } from "@microsoft/power-apps/telemetry";
@@ -22,7 +25,7 @@ import { rootCauseDetail } from "@/platform/errors";
 import { logAction } from "@/platform/requestLog";
 import { addSink, trace, type Severity, type TraceEntry } from "@/platform/telemetry";
 import { cspAdvice, discardMeaning, isIngestionBlocked, parseConnectionString } from "./diagnostics";
-import { routeName, stripQuery, stripUrlQueries, toEventPayload } from "./sanitize";
+import { routeName, stripQuery, stripUrlQueries, toDependency, toEventPayload } from "./sanitize";
 import { screenName } from "./screenNames";
 
 /**
@@ -255,11 +258,28 @@ export function startAppInsights(connectionString: string | undefined, loadError
 /** Settles when `startAppInsights` has finished starting the SDK (or failed to). For tests. */
 export const appInsightsStarted = (): Promise<void> => started;
 
-/** A platform metric (`sessionLoadSummary` / `networkRequest`) as a custom event of that name. */
+/** The custom metric `sessionLoadSummary.timeToAppInteractive` is charted as. */
+export const APP_INTERACTIVE_METRIC = "timeToAppInteractive";
+
+/**
+ * A platform metric: a `networkRequest` as a dependency (one row in the `dependencies` table, see
+ * `toDependency`); a `sessionLoadSummary` as a custom event of that name and, when it has a
+ * `timeToAppInteractive`, as the custom metric `APP_INTERACTIVE_METRIC`.
+ */
 export function trackMetric(metric: Metric): void {
   if (client === null) return; // OPT-29 (B8): telemetry is off, so the payload is not built (`send` would drop it)
+  if (metric.type === "networkRequest") {
+    const dependency = toDependency(metric.data);
+    send((ai) => ai.trackDependencyData(dependency));
+    return;
+  }
   const payload = { name: metric.type, ...toEventPayload(metric.data) };
-  send((ai) => ai.trackEvent(payload));
+  const { timeToAppInteractive: interactive, appLoadResult } = metric.data;
+  // One queued action per metric, so the pending cap (`MAX_PENDING`) still counts metrics.
+  send((ai) => {
+    ai.trackEvent(payload);
+    if (typeof interactive === "number") ai.trackMetric({ name: APP_INTERACTIVE_METRIC, average: interactive }, { appLoadResult });
+  });
 }
 
 /** One `trace()` entry: an exception when it carries an `Error` and is an error, else a trace. */

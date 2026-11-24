@@ -8904,3 +8904,37 @@ Three independent reviewers (Cost, PM/app/Generators/Check List, Admin/shared) r
 Noted, not changed: the Check List Settings clusters' failure now reads "list project states" instead of "Load checklist clusters" (the 30-minute freshness is already in §10); `readClusterTracking` uses `top: 1` with no `$orderby` (the old full list was unordered too); `readClusterTask` keeps the `guid()`-guarded filter string the repo uses elsewhere; `adminInvalidation.ts` now imports the chart module.
 
 Correction recorded by the review: the first version of the tier rule split only on entity set, so a tier could hold allocation creates, updates and deletes together, and the selected-period update beside the follower updates; a failed create could leave a delete landed (an allocation lost without replacement) and a refused period update could leave the followers' start dates rewritten. Fixed before this record was closed; the wave counts in §6 are the corrected ones. Also fixed after the Cost review: the DevCo-contracts read in Contracts now sets `staleTime: 0` explicitly (the client default is 30 s), two comments corrected (the payer-defaults read for a category with no accounts sends one request the old code did not; stale `costBook.ts` header), and `capex-costs/comments.ts` restored to LF line endings (an agent's edit had rewritten the whole file as CRLF and hidden a 30-line change). Noted, not changed: payment-target and DevCo-link cache keys are the exact sorted id list (about 18 KB at 500+ contracts; collision-free), the "before" wave figures in the B2 tests are recorded constants (the old code is not kept as an oracle there, unlike OPT-10 and OPT-11), the currency table is shared for 5 minutes including the ACTIVE-only save-time lookup.
+
+## D161 — Application Insights: Dataverse requests sent as dependencies, app-load time as a custom metric (24 Nov 2026; number PROVISIONAL, may be renumbered at merge)
+
+**Status:** code in the working tree, not on DEV. Unit tests pass; not yet checked against a real resource.
+**Report:** "there is no network logs and metrics in Application Insights, user and session is visible" (24 Nov 2026).
+
+### 1. Why the portal showed users and sessions but no network calls and no metrics
+
+- Users and Sessions come from the `pageViews` table, which `trackPageView` and the auto route tracking fill. Telemetry was therefore arriving (the D122 CSP entry is in place in that environment).
+- The SDK's own fetch / XHR tracking is off (`disableAjaxTracking`, `disableFetchTracking`; D-era privacy rule: no `$filter` values leave the browser). Turning it on would not help: the host makes the Dataverse calls and reports them back as `networkRequest` metrics (CA-28), so the SDK inside the app never sees them.
+- Those `networkRequest` metrics were forwarded as **custom events** (`customEvents | where name == "networkRequest"`). No portal blade reads network calls from there: Performance, Failures > Dependencies, the Application Map and the browser network view all read the `dependencies` table, which was empty.
+- The Metrics blade was empty for the same reason: nothing called `trackMetric`, so `customMetrics` was empty, and the standard browser metrics other than counts read `dependencies` and `browserTimings`.
+
+### 2. What changed (`src/appInsights/sanitize.ts`, `src/appInsights/appInsights.ts`, `src/platform/powerClient.ts`)
+
+- `toDependency(data, id?)` (pure, `sanitize.ts`): a `networkRequest` metric as an `IDependencyTelemetry`: `name` = `METHOD /path` with GUIDs folded to `:id` (one row per entity set), `data` = the URL without its query, `target` = the host when the URL is absolute, `type` = `HTTP`, `duration`, `responseCode` = the status (0 when the host sent none, D122 §7), `success` = status < 400, `responseSize` as a property. The id is random (`crypto.randomUUID`), never derived from data.
+- `trackMetric` sends a `networkRequest` with `trackDependencyData` **instead of** `trackEvent` (the custom event is no longer sent; nothing in the repo queried it). A `sessionLoadSummary` stays a custom event and, when it carries `timeToAppInteractive`, also goes out as the custom metric `timeToAppInteractive` (dimension `appLoadResult`), in the same queued action so `MAX_PENDING` still counts metrics.
+- `powerClient.ts` forwards and logs only the two typed metrics. The host's `dataRequestsSummary` (D122 "noticed, not changed") is ignored instead of printing `[VSB] HTTP undefined undefined → undefined · NaN ms` and adding NaN to the open action's timings.
+- No user identity is attached (unchanged, D122 §6). The query-stripping rule is unchanged: the dependency's `data` and `name` carry no query.
+
+### 3. Tests
+
+`UT-AI-007`, `UT-AI-008` (`sanitize.test.ts`: the mapping, the 4xx/5xx and missing-status cases, the relative URL, the random id); `UT-AI-012` (now a dependency and no event), `UT-AI-020` (undefined status → code 0, success), `UT-AI-021` (custom event plus custom metric; no metric without `timeToAppInteractive`). The fake SDKs gained `trackMetric` / `trackDependencyData`. `UT-AI-018` (the queue cap) is unchanged and still passes.
+
+### 4. How to confirm in the Azure portal (not done)
+
+After a deploy, open the app, use a few screens, wait about five minutes, then in Logs:
+`union pageViews, customEvents, dependencies, customMetrics | where timestamp > ago(1h) | summarize count() by itemType` should show `dependency` and `customMetric` rows. Performance > Dependencies lists `GET /api/data/v9.2/<entity set>` rows with durations; Failures > Dependencies lists the 4xx/5xx ones; Metrics > Custom offers `timeToAppInteractive`. The Application Map shows the Dataverse host as a dependency node.
+
+### 5. Not done / open
+
+- Not checked against a real ingestion endpoint; the host's `statusCode` being undefined on DEV (D122 §7) is still unexplained, and such rows show as code 0 successes.
+- `browserTimings` (page load time) depends on the SDK's `PageViewPerformance`, which is unchanged here; whether it arrives from inside the Power Apps player was not checked.
+- The `networkRequest` custom event is gone; if a saved query or workbook reads it, re-add one `trackEvent` next to the `trackDependencyData` call.

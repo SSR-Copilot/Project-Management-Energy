@@ -33,8 +33,8 @@ export function ensureInitialized(): Promise<IContext> {
     setConfig({
       logger: {
         logMetric: (metric: Metric) => {
-          trackMetric(metric);
           if (metric.type === "sessionLoadSummary") {
+            trackMetric(metric);
             const d = metric.data;
             trace(
               d.successfulAppLaunch ? "information" : "error",
@@ -45,13 +45,18 @@ export function ensureInitialized(): Promise<IContext> {
             );
             return;
           }
-          const d = metric.data;
-          // Every request the SDK sends, from any screen, goes to the console (`platform/requestLog.ts`).
-          logHttp(d);
-          // Only the failures are worth a buffer slot; a healthy app makes hundreds of these.
-          if (d.statusCode >= 400) {
-            trace("error", `${d.method} ${d.url} → ${d.statusCode} (${d.duration} ms)`, d, true);
+          if (metric.type === "networkRequest") {
+            trackMetric(metric);
+            const d = metric.data;
+            // Every request the SDK sends, from any screen, goes to the console (`platform/requestLog.ts`).
+            logHttp(d);
+            // Only the failures are worth a buffer slot; a healthy app makes hundreds of these.
+            if (d.statusCode >= 400) {
+              trace("error", `${d.method} ${d.url} → ${d.statusCode} (${d.duration} ms)`, d, true);
+            }
           }
+          // The host also emits metrics the SDK's `Metric` type does not list (`dataRequestsSummary`, D122):
+          // without this check they were logged as a request with undefined fields. Ignored.
         },
       },
     });
