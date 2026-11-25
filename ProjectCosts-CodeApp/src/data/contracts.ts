@@ -26,13 +26,12 @@ import type { Vsb_bopprojectscontractses } from "@/generated/models/Vsb_bopproje
 import type { Vsb_bopcontractspaymenttargetses } from "@/generated/models/Vsb_bopcontractspaymenttargetsesModel";
 import type { Vsb_bopcontractsdevcocostses } from "@/generated/models/Vsb_bopcontractsdevcocostsesModel";
 import type { Vsb_bopcontractsstandardassumptionses } from "@/generated/models/Vsb_bopcontractsstandardassumptionsesModel";
-import type { Vsb_capexaccountlists } from "@/generated/models/Vsb_capexaccountlistsModel";
 import type { Vsb_capexprojectcontracts } from "@/generated/models/Vsb_capexprojectcontractsModel";
 import { DataError, unwrap } from "@/platform/errors";
 import { logAction, loggedCall } from "@/platform/requestLog";
 import { trace } from "@/platform/telemetry";
 import { deleteRecord, fetchAll, updateRecordIfExists } from "./client";
-import { loadCapexChartRows } from "./capexChart";
+import { listActiveCapexAccounts, toAccountRow } from "./capexAccounts";
 import { DELETE_CONCURRENCY, WRITE_CONCURRENCY, mapLimit } from "./concurrency";
 import { ACTIVE, and, chunk, dateOnly, eq, lookupEq, lookupIn, numberOf } from "./odata";
 import {
@@ -120,16 +119,6 @@ function toPaymentTarget(row: Vsb_bopcontractspaymenttargetses): PaymentTarget {
     paymentDate: row.vsb_paymentdate,
     totalCostsContract: row.vsb_totalcostscontract,
     note: row.vsb_note,
-  };
-}
-
-function toAccountRow(row: Vsb_capexaccountlists): AccountRow {
-  return {
-    id: row.vsb_capexaccountlistid,
-    number: row.vsb_number ?? "",
-    name: row.vsb_name,
-    order: row.vsb_order,
-    parentId: row._vsb_parentaccount_value,
   };
 }
 
@@ -295,8 +284,9 @@ export async function listCapexAccounts(options: { includeInactive?: boolean } =
   // B2 (OPT-07c): the default read is the one shared chart read (`./capexChart`: the same select, ACTIVE filter and `vsb_number asc`
   // order), shared with the cost book, the tab strip, the Summary totals and Add Cost from Table, and dropped after any admin account
   // write. `includeInactive` (the project Contracts screen's DevCo picker, 23 Nov 2026) needs every state, which the shared read does
-  // not hold, so it keeps its own unfiltered read exactly as before.
-  if (!options.includeInactive) return (await loadCapexChartRows()).map(toAccountRow);
+  // not hold, so it keeps its own unfiltered read exactly as before. The default path and `toAccountRow` live in `./capexAccounts`
+  // (D162 FE-AD-07), which the Application Settings Contracts screen imports without this module.
+  if (!options.includeInactive) return listActiveCapexAccounts();
   const rows = await fetchAll(
     "list CAPEX accounts",
     (o) => Vsb_capexaccountlistsService.getAll(o),

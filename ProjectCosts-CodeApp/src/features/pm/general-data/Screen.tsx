@@ -74,10 +74,16 @@ import {
   LOCATION_DIALOG, MAP_MESSAGES, applyMapLocation, mapMarker, shouldConfirmMapLocation,
 } from "./rules";
 import { useDeviceLocation } from "./useDeviceLocation";
+import { probeRender } from "@/platform/renderProbe";
 import type { LatLng } from "./ProjectMap";
 
-/** The Azure Maps SDK is fetched only when this screen opens (`ProjectMap`). */
-const ProjectMap = lazy(() => import("./ProjectMap"));
+/**
+ * The Azure Maps SDK is fetched only when this screen opens (`ProjectMap`). The screen starts the chunk from its first
+ * mount effect, while its reads are still running (FE-P1-01, D162), instead of after the loading state: the map always
+ * shows on General Data. `lazy` and that effect share this one loader (the module is fetched once).
+ */
+const loadProjectMap = () => import("./ProjectMap");
+const ProjectMap = lazy(loadProjectMap);
 import {
   useCountries, useCountryAreas, useEntraPeople, useEntraSearch, useGeneralDataProject,
   useGeneralDataWrites, useGermanTradeTaxRate, useProjectReader, useMilestoneDurations, useMunicipalitySearch,
@@ -359,6 +365,9 @@ export default function GeneralDataScreen() {
   const isNewProject = !projectId;
   const lang = locale;
   const user = useCurrentUser().data;
+  // The map chunk loads beside the reads, not after them (FE-P1-01, UT-GDATA-FE-003). A failed load is left to the
+  // `lazy` render, which shows the map's own error state as before.
+  useEffect(() => { loadProjectMap().catch(() => undefined); }, []);
 
   const record = useGeneralDataProject(projectId);
   const countriesQ = useCountries();
@@ -609,6 +618,24 @@ export default function GeneralDataScreen() {
     setDraft(null);
   };
 
+  // The municipality box's chosen value and its options (see `muniComboProps` below), memoized on the list and the
+  // chosen name: a German Area lists up to ~5,000 municipalities, and they were rebuilt (with two linear finds) on every
+  // render of the screen, every keystroke in any field included (FE-P1-02a, D162; UT-GDATA-FE-001). Before the early
+  // returns, as hooks must be.
+  const storedMunicipality = (muniMode === "germany" ? live?.municipalityGermany : live?.municipalityFrance) ?? "";
+  const storedMunicipalityUid = useMemo(
+    () => municipalities.data.find((m) => m.municipality === storedMunicipality)?.uid,
+    [municipalities.data, storedMunicipality],
+  );
+  const muniOptions = useMemo(() => {
+    probeRender("GeneralDataMuniOptions");
+    return municipalities.data.map((m) => (
+      <Option key={m.uid} value={m.uid} text={m.municipality} data-testid={`general-data-municipality-suggestion-${m.uid}`}>
+        {m.municipality}
+      </Option>
+    ));
+  }, [municipalities.data]);
+
   const loadError = record.error ?? countriesQ.error ?? statesQ.error ?? shareholdersQ.error ?? trackingsQ.error;
   if (loadError) {
     return (
@@ -631,8 +658,6 @@ export default function GeneralDataScreen() {
    *    nothing is typed), the chosen one ticked; France — nothing below three letters;
    *  - leaving the box puts the chosen value back; picking runs the canvas `OnChange`.
    */
-  const storedMunicipality = (muniMode === "germany" ? live?.municipalityGermany : live?.municipalityFrance) ?? "";
-  const storedMunicipalityUid = municipalities.data.find((m) => m.municipality === storedMunicipality)?.uid;
   const pickMunicipality = (key: string | undefined) => {
     setMuniSearch("");
     setMuniEditing(false);
@@ -679,11 +704,6 @@ export default function GeneralDataScreen() {
     onOptionSelect: (_: unknown, d: { optionValue?: string }) => pickMunicipality(d.optionValue),
     ...(municipalities.data.length === 0 ? { listbox: { className: s.hiddenListbox } } : {}),
   };
-  const muniOptions = municipalities.data.map((m) => (
-    <Option key={m.uid} value={m.uid} text={m.municipality} data-testid={`general-data-municipality-suggestion-${m.uid}`}>
-      {m.municipality}
-    </Option>
-  ));
 
   const deleteRow = entities.find((e) => e.key === deleteTarget);
   const panelErrors = draft ? shareholderPanelErrors(draft, entities, lang) : {};

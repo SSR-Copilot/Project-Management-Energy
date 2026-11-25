@@ -28,12 +28,17 @@
  * Shared building blocks: the footer is the shared `PanelButtons look="brand"` (brand-outline
  * Cancel; Save keeps `aria-label="Save"` while it shows "Saving…"), the error bar is
  * `PanelMessages` (`role="alert"`), and both texts are the shared `TextField`.
+ *
+ * FE-AD-02 (D162): the form is the drawer's own state, seeded from `seed` whenever `seedKey` changes (every `editor.open`), as
+ * the other admin panels keep theirs; Save hands it to the screen (`onSave(form)`). Typing renders the drawer only, never the
+ * screen's open task tables (UT-ADCHK-FE-001). `dirty` is computed here from the seed.
  */
+import { useState } from "react";
 import { Switch, makeStyles, mergeClasses, tokens } from "@fluentui/react-components";
 import { FormPanel, HINTS, PanelButtons, PanelMessages, TextField, useCanvasRequiredMark } from "@/components";
 import type { TaskForm } from "@/data/adminDefaultChecklists";
 import { palette } from "@/theme/tokens";
-import { MAX_TEXT_LENGTH, validateTask } from "./rules";
+import { MAX_TEXT_LENGTH, taskFormChanged, validateTask } from "./rules";
 
 const useStyles = makeStyles({
   /** `con_Admin_Checklist_Form_Fields`: no `LayoutGap`; the panel body's 20 px padding is its `PaddingTop` 20. */
@@ -61,23 +66,31 @@ const useStyles = makeStyles({
 
 export interface TaskEditorDrawerProps {
   open: boolean;
+  /** Changes on every open (`editor.key`): the form is re-seeded from `seed`. */
+  seedKey: number;
   mode: "create" | "edit";
-  form: TaskForm;
-  /** The form differs from the values the panel opened with (discard guard). */
-  dirty: boolean;
+  /** The values the panel opens with; the form differing from them makes the panel dirty (discard guard). */
+  seed: TaskForm;
   error: string | null;
   saving: boolean;
   /** The admin rule is not met: Save is disabled. */
   readOnly?: boolean;
-  onChange: (form: TaskForm) => void;
-  onSave: () => void;
+  onSave: (form: TaskForm) => void;
   onCancel: () => void;
 }
 
 export function TaskEditorDrawer({
-  open, mode, form, dirty, error, saving, readOnly = false, onChange, onSave, onCancel,
+  open, seedKey, mode, seed, error, saving, readOnly = false, onSave, onCancel,
 }: TaskEditorDrawerProps) {
   const styles = useStyles();
+  const [state, setState] = useState(() => ({ seedKey, seed, form: seed }));
+  // A new open re-seeds during render (React's "adjust state when a prop changes"), so its first frame shows the new values.
+  const current = state.seedKey === seedKey ? state : { seedKey, seed, form: seed };
+  if (current !== state) setState(current);
+  const { form } = current;
+  const onChange = (next: TaskForm) => setState((s) => ({ ...s, form: next }));
+  // Closed, the panel is never dirty (the last form stays in state until the next open).
+  const dirty = open && taskFormChanged(current.seed, form);
   const requiredMark = useCanvasRequiredMark();
   const errors = validateTask(form);
   const valid = !errors.name;
@@ -98,7 +111,7 @@ export function TaskEditorDrawer({
       closeTestId="pcf_com_Admin_ProjectGates_Approvals_Form_CommandBar_1"
       // `ItemIconColor: gblAppTheme.palette.themeTertiary` (L964): the ✕ is light blue, not white.
       closeIconColor={palette.themeTertiary}
-      footer={<PanelButtons look="brand" disabled={!(valid && !readOnly)} saving={saving} onSave={onSave} savingLabel="Saving…"
+      footer={<PanelButtons look="brand" disabled={!(valid && !readOnly)} saving={saving} onSave={() => onSave(form)} savingLabel="Saving…"
         // The canvas Save hint is the copy-pasted "Filter projects details list view." (SOURCE DEFECT): "Save".
         saveTooltip={HINTS.save}
         saveTestId="pcf_but_Admin_Checklist_Form_Buttons_Save"
@@ -107,7 +120,7 @@ export function TaskEditorDrawer({
       <form
         className={mergeClasses(styles.body, requiredMark.root)}
         aria-label={title}
-        onSubmit={(e) => { e.preventDefault(); if (valid && !saving) onSave(); }}
+        onSubmit={(e) => { e.preventDefault(); if (valid && !saving) onSave(form); }}
       >
         <PanelMessages error={error} />
 
@@ -120,8 +133,7 @@ export function TaskEditorDrawer({
             value={form.name}
             maxLength={MAX_TEXT_LENGTH}
             // `lbl_Admin_Checklist_Form_Fields_Name_ErrorMessage.Visible: =IsBlank(Trim(…))` — shown whenever blank.
-            // While the drawer closes, the screen has already dropped the editor state and hands in an empty form,
-            // which would flash "Value cannot be blank." for the close animation (user, 23 Nov 2026): no message once closed.
+            // No message once closed: the close animation must never flash "Value cannot be blank." (user, 23 Nov 2026).
             error={open ? errors.name : undefined}
             errorClassName={styles.error}
             validationIcon={null}

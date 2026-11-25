@@ -8,9 +8,9 @@
  *
  * THE CONTROL TREE, and what renders each part:
  *
- *   gal_LandLease_Content_Subaccounts                 -> `cards.map(<SubaccountCard/>)`
+ *   gal_LandLease_Content_Subaccounts                 -> `ordered.map(<SubaccountCard/>)`
  *     con_…_CardHeader_1 + ico_…_Up_2 / _Down_2       -> the card's header button + chevron
- *     con_…_CardBody_1                                -> rendered only when `!card.isFolded`
+ *     con_…_CardBody_1                                -> rendered only when `open` (not `IsFolded`)
  *       pcf_…_SubaccountsCommandBar_1                 -> `leaseCommands(...)` -> five buttons
  *       con_…_CostsTableHeader_1 (16 labels)          -> `landLeaseColumns(iso)`
  *       gal_…_CardBody_Costs_1                        -> `subaccountPeriodRows(...)`
@@ -91,6 +91,7 @@ import {
 } from "./landLeaseRules";
 import { canvasScrollbar, scrollButton } from "./canvasScrollbar";
 import { useStableCallback } from "@/components/useStableCallback";
+import { probeRender } from "@/platform/renderProbe";
 
 /** OPT-29 (B8): `localeCompare(b, undefined, { sensitivity: "accent" })`, pooled once (UT-COLLATOR-OPT-001). */
 const ACCENT_COLLATOR = collator(undefined, { sensitivity: "accent" });
@@ -756,12 +757,15 @@ export default function LandLeaseScreen() {
    * every time the reference data refetched.
    */
   const ordered = useMemo(() => orderedSubaccounts(subaccounts), [subaccounts]);
-  const cards = useMemo(
-    () => ordered.map((c) => ({ ...c, isFolded: folds[c.id] ?? c.isFolded })),
-    [ordered, folds],
-  );
-  const toggleCard = (subaccountId: string) =>
-    setFolds(Object.fromEntries(toggleFold(cards, subaccountId).map((c) => [c.id, c.isFolded])));
+  /*
+   * FE-C2-06 (D162): the cards rendered are `ordered`'s own objects, and the fold travels as a separate `open` flag, so a
+   * fold click changes the props of the clicked card only. A card object rebuilt with its fold (`{...c, isFolded}`) was new
+   * for EVERY card on every click, and every memoised `SubaccountCard` rendered again.
+   */
+  const isFolded = (c: LeaseSubaccountCard) => folds[c.id] ?? c.isFolded;
+  const toggleCard = (subaccountId: string) => setFolds(Object.fromEntries(
+    toggleFold(ordered.map((c) => ({ ...c, isFolded: isFolded(c) })), subaccountId).map((c) => [c.id, c.isFolded]),
+  ));
 
   const contracts = useMemo(() => buildContracts(costs, periods), [costs, periods]);
   const columns = useMemo(
@@ -1126,10 +1130,11 @@ export default function LandLeaseScreen() {
       ) : null}
 
       <div className={styles.cardList}>
-        {cards.map((card) => (
+        {ordered.map((card) => (
           <SubaccountCard
             key={card.id}
             card={card}
+            open={!isFolded(card)}
             columns={columns}
             contracts={contracts}
             costById={costById}
@@ -1254,11 +1259,14 @@ export default function LandLeaseScreen() {
 /* ══════════════════════════════════════════════════════════════════ the card ══ */
 
 const SubaccountCard = memo(function SubaccountCard({
-  card, columns, contracts, costById, ctx, selection, selectedPeriod, selectedCost,
+  card, open, columns, contracts, costById, ctx, selection, selectedPeriod, selectedCost,
   selectedContract, costs, hasMatchingAssumption, permissions,
   onToggle, onSelectRow, onCommand, writeDisabled,
 }: {
+  /** The sub-account; its own `isFolded` is the initial one, not read here (FE-C2-06). */
   card: LeaseSubaccountCard;
+  /** Not `IsFolded`: the card's body shows (FE-C2-06, a separate flag so a fold re-renders this card only). */
+  open: boolean;
   columns: ReturnType<typeof landLeaseColumns>;
   contracts: LeaseContract[];
   costById: Map<string, LeaseCostRow>;
@@ -1279,6 +1287,7 @@ const SubaccountCard = memo(function SubaccountCard({
   /** D58 — `writeCommandsDisabled`: a load or a write is running, so no new write may start. */
   writeDisabled: boolean;
 }) {
+  probeRender(`SubaccountCard:${card.id}`);
   const styles = useStyles();
   const commandRow = useCommandRowStyles();
   const standardClass = useStandardValueClass();
@@ -1289,7 +1298,6 @@ const SubaccountCard = memo(function SubaccountCard({
    * `subaccountPeriodRows` compares code units, which put every capitalised name first. The
    * rows are re-ordered here for display, start date still breaking a tie.
    */
-  const open = !card.isFolded;
   // OPT-26 (D160): a folded card draws neither the rows nor the command bar, so it computes neither; an open card
   // recomputes them only when its own data changes.
   const rows = useMemo(() => open

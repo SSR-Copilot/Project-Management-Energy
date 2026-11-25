@@ -55,18 +55,31 @@ export function actionName(kind: "Load" | "Write", key: readonly unknown[] | und
 }
 
 export function attachQueryLog(client: QueryClient): () => void {
-  const loads = new Map<string, (ok: boolean) => void>();
+  const loads = new Map<string, (ok: boolean, note?: string) => void>();
   const writes = new Map<number, (ok: boolean) => void>();
 
   const stopQueries = client.getQueryCache().subscribe((event) => {
-    if (event.type !== "updated") return;
     const hash = event.query.queryHash;
+    /*
+     * D162 (FE-SH-07): a load can end without `success` or `error`. `cancelQueries` (default `revert`) puts the query back with
+     * `setState`, and a query can be removed while fetching. Its scope used to stay open, so every later request was counted into it
+     * and tagged with its id until that same key happened to settle again, which for an inactive key is never.
+     */
+    if (event.type === "removed") {
+      loads.get(hash)?.(true, "cancelled");
+      loads.delete(hash);
+      return;
+    }
+    if (event.type !== "updated") return;
     const action = event.action.type;
     if (action === "fetch" && !loads.has(hash)) {
       const key = event.query.queryKey;
       loads.set(hash, beginAction(actionName("Load", key) ?? `Load ${keyText(key)}`));
     } else if (action === "success" || action === "error") {
       loads.get(hash)?.(action === "success");
+      loads.delete(hash);
+    } else if (action === "setState" && event.query.state.fetchStatus === "idle" && loads.has(hash)) {
+      loads.get(hash)?.(true, "cancelled");
       loads.delete(hash);
     }
   });

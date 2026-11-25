@@ -47,7 +47,8 @@ vi.mock("@/data/adminContract", async () => {
   };
 });
 
-vi.mock("@/data/contracts", () => ({ listCapexAccounts: api.listCapexAccounts }));
+// FE-AD-07 (D162): the screen reads the active chart through `@/data/capexAccounts`, no longer `@/data/contracts`.
+vi.mock("@/data/capexAccounts", () => ({ listActiveCapexAccounts: api.listCapexAccounts }));
 
 /** The admin rule (`useAdminAccess`): Application Administrator or Controller Own Data. */
 const access = vi.hoisted(() => ({ admin: true }));

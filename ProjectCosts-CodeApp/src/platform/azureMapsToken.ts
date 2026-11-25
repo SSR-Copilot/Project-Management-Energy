@@ -10,7 +10,8 @@
  *
  *   - One flow call per token lifetime per browser: the token is cached in memory and `localStorage` (reloads and new
  *     tabs reuse it). It is read-only, rate-limited and short-lived, so that is acceptable (Xebia test S1/S2, 2 Nov 2026).
- *   - A background refresh fetches a new one `REFRESH_MARGIN_MS` before expiry, so no map request waits for the flow.
+ *   - While a map is on screen (`retainAzureMapsToken`), a background refresh fetches a new one `REFRESH_MARGIN_MS`
+ *     before expiry, so no map request waits for the flow. With no map there is no background flow run (FE-P1-05).
  *   - Parallel requests share one flow call.
  *   - `invalidateAzureMapsToken` (after a 401/403 from Azure Maps) drops it; the next request fetches a new one.
  *   - A failure is a `MapTokenError` with a `kind` the map turns into one plain sentence (`MAP_MESSAGES`); for
@@ -108,19 +109,47 @@ let cached: Cached | null = null;
 let loaded = false;
 let inFlight: Promise<string> | null = null;
 let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+/** The maps on screen (`retainAzureMapsToken`). The background refresh runs only while there is one (FE-P1-05, D162). */
+let mapsMounted = 0;
 
 const fresh = (c: Cached | null): c is Cached => !!c && c.expiresAt - Date.now() > REFRESH_MARGIN_MS;
 
-function store(c: Cached | null): void {
-  cached = c;
+/**
+ * (Re)arms the background refresh for the cached token. A minute before the margin, so no map request waits for the
+ * flow. A token already inside the margin gets no timer: the next request fetches a new one, and a flow that keeps
+ * answering short-lived tokens never loops. With no map on screen there is no timer either (FE-P1-05): the timer used
+ * to re-arm itself after every fetch, so once General Data had been opened the tab ran the flow every token lifetime
+ * for the rest of the session, on every screen. A map mounted later gets its token on demand (`getToken`).
+ */
+function armRefresh(): void {
   if (refreshTimer) clearTimeout(refreshTimer);
   refreshTimer = null;
-  // A minute before the margin, so no map request waits for the flow. A token already inside the margin gets no
-  // timer: the next request fetches a new one, and a flow that keeps answering short-lived tokens never loops.
+  const c = cached;
   const due = c ? c.expiresAt - REFRESH_MARGIN_MS - Date.now() - 60_000 : 0;
-  if (c && due > 0) {
+  if (c && mapsMounted > 0 && due > 0) {
     refreshTimer = setTimeout(() => { cached = null; void azureMapsToken().catch(() => undefined); }, due);
   }
+}
+
+/**
+ * Called by a map when it is created; the function it returns, when the map is disposed. While at least one map is on
+ * screen the cached token is refreshed in the background (UT-MAPTOKEN-FE-001..003).
+ */
+export function retainAzureMapsToken(): () => void {
+  mapsMounted += 1;
+  if (mapsMounted === 1) armRefresh();
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    mapsMounted -= 1;
+    if (mapsMounted === 0) armRefresh();
+  };
+}
+
+function store(c: Cached | null): void {
+  cached = c;
+  armRefresh();
   try {
     if (c) localStorage.setItem(STORE_KEY, JSON.stringify(c));
     else localStorage.removeItem(STORE_KEY);
@@ -180,6 +209,7 @@ export function invalidateAzureMapsToken(): void {
 
 /** Tests only: forget the module state. */
 export function resetAzureMapsTokenForTests(): void {
+  mapsMounted = 0;
   loaded = false;
   inFlight = null;
   lastFailure = null;

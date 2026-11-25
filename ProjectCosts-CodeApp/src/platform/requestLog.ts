@@ -245,30 +245,33 @@ export function logAction(message: string, level: "info" | "warn" = "info"): voi
 
 const MAX_OPS_SHOWN = 6;
 
-function summary(s: Scope, ok: boolean): string {
+function summary(s: Scope, ok: boolean, note?: string): string {
   const ops = [...s.ops].map(([k, n]) => (n > 1 ? `${k} ×${n}` : k));
   const shown = ops.slice(0, MAX_OPS_SHOWN).join("; ") + (ops.length > MAX_OPS_SHOWN ? `; +${ops.length - MAX_OPS_SHOWN} more` : "");
   const elapsed = now() - s.started;
   return `${s.name}: ${round(elapsed)} ms, ${s.requests} request${s.requests === 1 ? "" : "s"}`
     + `${s.failed ? ` (${s.failed} failed)` : ""}, ${s.rows} row${s.rows === 1 ? "" : "s"}`
-    + `${ok ? "" : ", FAILED"}${elapsed >= SLOW_ACTION_MS ? " · SLOW" : ""}${shown ? ` — ${shown}` : ""} [${s.id}]`;
+    + `${ok ? "" : ", FAILED"}${note ? `, ${note}` : ""}${elapsed >= SLOW_ACTION_MS ? " · SLOW" : ""}${shown ? ` — ${shown}` : ""} [${s.id}]`;
 }
 
-/** Opens an ACTION. `end(ok)` prints its summary line; calling it twice prints once. */
-export function beginAction(name: string): (ok: boolean) => void {
+/**
+ * Opens an ACTION. `end(ok)` prints its summary line; calling it twice prints once. `note` is printed after the outcome
+ * (D162, FE-SH-07: `cancelled` for a load TanStack abandoned, so its scope closes instead of tagging every later line).
+ */
+export function beginAction(name: string): (ok: boolean, note?: string) => void {
   sequence += 1;
   const scope: Scope = { id: `a${sequence}`, name, started: now(), requests: 0, failed: 0, httpMs: 0, rows: 0, ops: new Map() };
   scopes.add(scope);
   let done = false;
-  return (ok) => {
+  return (ok, note) => {
     if (done) return;
     done = true;
     flushDataLog();
     scopes.delete(scope);
     const slow = now() - scope.started >= SLOW_ACTION_MS;
-    recent.push(`${scope.name} ${ok ? "ok" : "FAILED"}`);
+    recent.push(`${scope.name} ${ok ? "ok" : "FAILED"}${note ? ` ${note}` : ""}`);
     if (recent.length > RECENT_MAX) recent.shift();
-    emit(ok && !slow ? "info" : "warn", `${LOG_PREFIX} ACTION ${summary(scope, ok)}`);
+    emit(ok && !slow ? "info" : "warn", `${LOG_PREFIX} ACTION ${summary(scope, ok, note)}`);
   };
 }
 

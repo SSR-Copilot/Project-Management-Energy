@@ -20,8 +20,15 @@ import { appTabUrl, resolvePlayAppUrl } from "@/app/deepLinks";
 import { AppRoutes } from "@/app/routes";
 import { adminEntriesVisible } from "@/app/adminAccess";
 import { adminPageTitle } from "@/app/adminTitles";
-import { lastError } from "@/platform/telemetry";
+import { useHasTracedError } from "@/app/useHasTracedError";
 import { ReportProblemPanel } from "@/features/shared/report-problem/ReportProblemPanel";
+
+/*
+ * D162 (FE-SH-02): one element for the whole session. A new `<AppRoutes/>` per `App` render re-rendered the active screen for
+ * shell-only changes (the report panel opening or closing, the current user arriving). With the same element React skips it;
+ * navigation and the session still reach the routes through their contexts, exactly as before.
+ */
+const ROUTES = <AppRoutes />;
 
 export default function App() {
   const { session, project, projectId, envVars, loading, error } = useSession();
@@ -34,6 +41,8 @@ export default function App() {
    * virtual table behind `companyName` must not hold up the app's first paint.
    */
   const currentUser = useCurrentUser();
+  /* D162 (FE-SH-08): subscribed, so the header's warning icon appears when the error is traced, not at the next unrelated render. */
+  const tracedError = useHasTracedError();
 
   const onCostScreen = pathname.startsWith("/costs/");
   /*
@@ -140,7 +149,7 @@ export default function App() {
       {...(envVars.vsb_VSBCloudInfoCenterUrl
         ? { infoCenterUrl: envVars.vsb_VSBCloudInfoCenterUrl }
         : {})}
-      hasError={Boolean(error) || Boolean(lastError())}
+      hasError={Boolean(error) || tracedError}
       onReportProblem={() => setReportOpen(true)}
       /*
        * `cmp_Header` user menu, `appSettingsKey` → `Navigate('Admin Project Default Checklists Screen')`,
@@ -162,7 +171,7 @@ export default function App() {
           {...(onCostScreen ? { action: { label: "Back to Projects", onClick: () => navigate("/projects") } } : {})}
         />
       ) : (
-        <AppRoutes />
+        ROUTES
       )}
       <ReportProblemPanel open={reportOpen} onDismiss={() => setReportOpen(false)} />
     </AppShell>

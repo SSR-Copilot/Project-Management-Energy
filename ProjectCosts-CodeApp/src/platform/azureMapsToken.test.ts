@@ -8,7 +8,7 @@ vi.mock("./requestLog", () => ({ logError: vi.fn() }));
 
 import {
   REFRESH_MARGIN_MS, RETRY_AFTER_FAILURE_MS, azureMapsToken, invalidateAzureMapsToken, kindOfFlowErrorCode, mapErrorKind,
-  resetAzureMapsTokenForTests, tokenExpiry,
+  resetAzureMapsTokenForTests, retainAzureMapsToken, tokenExpiry,
 } from "./azureMapsToken";
 
 /** A JWT-shaped token whose `exp` is `msFromNow` ahead (Azure Maps SAS tokens are JWTs). */
@@ -67,6 +67,8 @@ describe("UT-AZMAP Azure Maps SAS token cache", () => {
   it("UT-AZMAP-005 the flow's expiresutc is used when the token carries no exp", async () => {
     vi.useFakeTimers();
     flow.getAzureMapsSasToken.mockImplementation(async () => ({ sastoken: "opaque", expiresutc: new Date(Date.now() + 2 * HOUR).toISOString(), errorcode: null, errormessage: null }));
+    // A map is on screen: the background refresh runs only then (FE-P1-05, UT-MAPTOKEN-FE-001).
+    retainAzureMapsToken();
     await azureMapsToken();
     await azureMapsToken();
     expect(flow.getAzureMapsSasToken).toHaveBeenCalledTimes(1);
@@ -131,5 +133,46 @@ describe("UT-AZMAP Azure Maps SAS token cache", () => {
     expect(mapErrorKind(new Error("Http status code: 403"))).toBe("accessDenied");
     expect(mapErrorKind(new Error("Failed to fetch"))).toBe("unavailable");
     expect(mapErrorKind(new Error("style is not done loading"))).toBe("unknown");
+  });
+});
+
+describe("UT-MAPTOKEN-FE the background refresh runs only while a map is on screen (D162 B4, FE-P1-05)", () => {
+  const answer = () => flow.getAzureMapsSasToken.mockImplementation(async () => (
+    { sastoken: "opaque", expiresutc: new Date(Date.now() + 2 * HOUR).toISOString(), errorcode: null, errormessage: null }));
+
+  it("UT-MAPTOKEN-FE-001 with no map mounted a fetched token arms no refresh: no flow run in the background", async () => {
+    vi.useFakeTimers();
+    answer();
+    await azureMapsToken();
+    await vi.advanceTimersByTimeAsync(4 * HOUR);
+    expect(flow.getAzureMapsSasToken).toHaveBeenCalledTimes(1);
+  });
+
+  it("UT-MAPTOKEN-FE-002 the map's release stops the refresh; a token asked for later is fetched on demand", async () => {
+    vi.useFakeTimers();
+    answer();
+    const release = retainAzureMapsToken();
+    await azureMapsToken();
+    release();
+    await vi.advanceTimersByTimeAsync(3 * HOUR);
+    expect(flow.getAzureMapsSasToken).toHaveBeenCalledTimes(1);
+    // The cached token is past its margin now: the next request fetches a new one.
+    await azureMapsToken();
+    expect(flow.getAzureMapsSasToken).toHaveBeenCalledTimes(2);
+  });
+
+  it("UT-MAPTOKEN-FE-003 a map mounted again re-arms the refresh for the cached token; two maps keep it until both are gone", async () => {
+    vi.useFakeTimers();
+    answer();
+    await azureMapsToken();
+    const releaseA = retainAzureMapsToken();
+    const releaseB = retainAzureMapsToken();
+    releaseA();
+    releaseA(); // a second call of the same release counts once
+    await vi.advanceTimersByTimeAsync(2 * HOUR - REFRESH_MARGIN_MS);
+    expect(flow.getAzureMapsSasToken).toHaveBeenCalledTimes(2);
+    releaseB();
+    await vi.advanceTimersByTimeAsync(4 * HOUR);
+    expect(flow.getAzureMapsSasToken).toHaveBeenCalledTimes(2);
   });
 });

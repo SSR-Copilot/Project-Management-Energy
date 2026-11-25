@@ -30,7 +30,7 @@
  * dropped). Standard values render blue + italic (rule 20): `financeCardStandard` for the cards,
  * each panel's own flags for the inputs.
  */
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Button, Dropdown, Option, Switch, Text, Tooltip,
   makeStyles, mergeClasses, tokens,
@@ -43,12 +43,13 @@ import {
   type Command, CommandBar, ConfirmDialog, DateField, EmptyState, FIELD_APPEARANCE, FormPanel, LoadingOverlay,
   PanelButtons, ReadOnlyField, TextField, WriteFeedback, useCanvasListStyles, useFieldControlClass, useStandardListboxStyles,
   useStandardValueClass,
-  ExpandChevron,
+  ExpandChevron, useStableCallback,
 } from "@/components";
 import { DATE_PICKER_FORMAT, dateFromIso, type CanvasDateFormat } from "@/domain/canvasDate";
 import { localDayOf } from "@/domain/dates";
 import { rowStr as str } from "@/data/rowValues";
 import { useSession } from "@/app/SessionContext";
+import { probeRender } from "@/platform/renderProbe";
 import { CHOICE_FINANCE } from "@/data/dataverseNames";
 import { media, palette, space } from "@/theme/tokens";
 import {
@@ -79,7 +80,7 @@ import {
   validateStepUpMargin, validateTenorAgainstRepaymentStart, validateUpfrontFee, validateVatBankMargin,
   validateVatFacilityAmount, validateYearMonthPair, vatBaseRateDefault, vatSaveJob, yearMonthLabel,
   type DecommissioningForm, type DsraForm, type EquityForm, type FinancingInputRow,
-  type FreeEquityMode, type RepaymentRow, type SeniorDebtFormState, type StepUpRow, type TrancheRow,
+  type BankRow, type FinancingCategory, type FreeEquityMode, type RepaymentRow, type SeniorDebtFormState, type StepUpRow, type TrancheRow,
   type VatForm,
   financeCardStandard, trancheFinancialCloseIsStandard,
   PANEL_MAX_LENGTH, monthsOnYearsPicked, shouldRegenerateRepayments, stepUpPeriodChangeAllowed, trancheFormTitle,
@@ -690,217 +691,96 @@ const LOCK_BULLETS = ["• General", "• Milestones", "• Generator", "• Pro
 type Panel = "none" | "equity" | "vat" | "tranche" | "dsra" | "decommissioning";
 type Dialog = "none" | "category" | "trancheActivation" | "trancheDeletion" | "dsra";
 
-/* ═══════════════════════════════════════════════════════════════════ screen ══ */
+/**
+ * One yearly box of the Individual repayment schedule (`txt_SeniorDebtData_RepaymentAmount`, `InpForm_2`). Memoized
+ * (FE-P2-02, D162): the Screen holds the rows, so a keystroke in ONE box re-rendered all of them (26–31 for a usual
+ * tenor). `row` is the row's own object (an edit replaces only that one), `index` its place and `onValue` the Screen's
+ * stable setter: the Revenues `VolumeRow` pattern (D146). Markup, the repeated literal test id and `aria-label` are those
+ * the Screen rendered inline.
+ */
+const RepaymentAmountRow = memo(function RepaymentAmountRow({ row, index, unit, country, lang, disabled, onValue }: {
+  row: RepaymentRow; index: number; unit: string; country: string | null; lang: string; disabled: boolean;
+  onValue: (index: number, value: string) => void;
+}) {
+  probeRender(`FinanceRepaymentRow:${row.year}`);
+  return (
+    <TextField
+      label={`${row.year}${FIN_LABEL.repaymentAmountInfix}${unit}`} required
+      testId="txt_SeniorDebtData_RepaymentAmount" ariaLabel="txt_SeniorDebtData_RepaymentAmount" maxLength={PANEL_MAX_LENGTH.other} counter={false}
+      value={row.value} disabled={disabled}
+      error={row.valid ? undefined : validateRepaymentAmount(row.value, country, lang).message}
+      onChange={(v) => onValue(index, v)}
+    />
+  );
+});
 
-export default function ProjectFinanceScreen() {
+/** A Senior Debt input as the tranche command bar and dialogs read it. */
+const toTrancheRow = (i: FinancingInputRow): TrancheRow => ({
+  id: i.id, trancheStatus: num(i.raw[INPUT_COL.trancheStatus]), status: i.status,
+  canEdit: i.canEdit, canDelete: i.canDelete,
+});
+
+/** A tranche's display name: the card title and the Activate / Delete dialogs. */
+const trancheNameOf = (i: FinancingInputRow | null, banks: readonly BankRow[]): string => (i === null ? "" : trancheDisplayName(
+  num(i.raw[INPUT_COL.trancheStatus]),
+  bankDisplayName(str(i.raw[INPUT_COL.bank]), str(i.raw[INPUT_COL.otherBankName]), banks),
+  i.raw[INPUT_COL.kfwTranche] === CHOICE_FINANCE.yesNo.yes,
+  str(i.raw[INPUT_COL.kfwTrancheValue]),
+));
+
+interface FinanceCardsProps {
+  /** The categories with a card (Order ≠ 6). */
+  cards: readonly FinancingCategory[];
+  inputs: readonly FinancingInputRow[];
+  /** The Senior Debt inputs, in read order. */
+  trancheInputs: readonly FinancingInputRow[];
+  folded: ReadonlySet<number>;
+  trancheFolded: ReadonlyMap<string, boolean>;
+  selectedTrancheId: string | null;
+  busy: boolean;
+  locked: boolean;
+  banks: readonly BankRow[];
+  totalCapex: number;
+  activeTurbines: number;
+  country: string | null;
+  lang: string;
+  onToggleCategoryFold: (order: number) => void;
+  onToggleTrancheFold: (id: string, folded: boolean) => void;
+  onSelectTranche: (id: string | null) => void;
+  onTrancheCommand: (key: string) => void;
+  onCategoryCommand: (order: number, input: FinancingInputRow | null, key: string) => void;
+  onEditDsra: () => void;
+  onToggleDsra: () => void;
+}
+
+/**
+ * `gal_ProjectFinance_DisplayProject_Body_Form_FinancingInputs` — the category cards (FE-P2-01, D162). Memoized: the five
+ * panel drafts live in the Screen, so every panel keystroke, radio or dropdown change re-rendered every unfolded card (25
+ * `ReadOnlyField`s, a Tooltip and 3 Buttons per open tranche) and re-parsed the cards' standard flags. Its props are the
+ * read rows, the fold and selection state, two flags and handlers with a fixed identity (`useStableCallback`), so a panel
+ * keystroke renders none of it (UT-FIN-FE-001). Markup, captions, `aria-label`s and test ids are those the Screen rendered
+ * inline.
+ */
+const FinanceCards = memo(function FinanceCards({
+  cards, inputs, trancheInputs, folded, trancheFolded, selectedTrancheId, busy, locked, banks, totalCapex, activeTurbines,
+  country, lang, onToggleCategoryFold, onToggleTrancheFold, onSelectTranche, onTrancheCommand, onCategoryCommand,
+  onEditDsra, onToggleDsra,
+}: FinanceCardsProps) {
+  probeRender("FinanceCards");
   const s = useStyles();
-  const { projectId, locale } = useSession();
-  const lang = locale;
-  // Card and box numbers in the user's language (`Text(n, fmt, Language())`): one place, so no call site can forget it.
   const fmtCard = (v: number | null | undefined, pattern: string) => fmtCardIn(v, pattern, lang);
   const fmtAmount = (v: number | null | undefined) => fmtAmountIn(v, lang);
   const formatDscr = (v: number | null | undefined) => formatDscrIn(v, lang);
   const formatUpfrontFee = (option: number | null, value: number | null) => formatUpfrontFeeIn(option, value, lang);
-
-  const projectQ = useFinanceProject(projectId);
-  const project = projectQ.data;
-  const categoriesQ = useFinancingCategories();
-  const categories = categoriesQ.data;
-  const slicesQ = useDebtAssumptions(project?.countryName ?? null);
-  const inputsQ = useFinancingInputs(projectId, categories);
-  const repaymentsQ = useRepaymentAmounts(projectId);
-  const stepUpsQ = useStepUpMargins(projectId);
-  const banksQ = useBanks();
-  const kfwQ = useKfwTranches();
-  // `capexQ` and `turbinesQ` are called below, after the card and panel state they depend on (`lazyReads`).
-  const writes = useFinanceWrites(projectId);
-
-  // The debt standard is usable only once its rows are in: while they load, or if the Fabric read
-  // fails, the Fabric-built seeds stay withheld and the SQL resets stay disabled (no "standard"
-  // zeros from an empty row set).
-  const assumptionsLoading = slicesQ.isLoading;
-  const assumptionsConnected = Boolean(project?.countryName) && slicesQ.connected
-    && !assumptionsLoading && !slicesQ.error;
-  const loading = projectQ.isLoading || categoriesQ.isLoading || inputsQ.isLoading;
-  const loadError = projectQ.error ?? categoriesQ.error ?? inputsQ.error ?? repaymentsQ.error ?? stepUpsQ.error;
-  const inputs = inputsQ.data;
-  const banks = banksQ.data;
-  const country = project?.countryName ?? null;
   const unit = currencySuffix(country);
-  const busy = writes.progress !== null;
-
-  const tech = project ? toDebtTech(project.technology) : "other";
-  const standard = useMemo(
-    () => (project ? buildSeniorDebtStandard(slicesQ.data.debt, tech, project, { language: lang }) : null),
-    [project, slicesQ.data.debt, tech, lang],
-  );
-  const dsraStandard = useMemo(
-    () => buildDsraStandard(slicesQ.data.dsra, tech, { language: lang }),
-    [slicesQ.data.dsra, tech, lang],
-  );
-  const decStandard = useMemo(
-    () => (project
-      ? buildDecommissioningStandard(slicesQ.data.decommissioning, tech, project, { language: lang })
-      : null),
-    [project, slicesQ.data.decommissioning, tech, lang],
-  );
-
-  /* ─────────────────────────────────────────────────────────── on visit ── */
-
-  // `OnVisible`: the guarded 'Financing Options' patch, then the missing seeds — once per visit.
-  const visited = useRef<string | null>(null);
-  useEffect(() => {
-    if (!project || !projectId || loading || loadError || categories.length === 0) return;
-    // Wait for the debt assumptions: the Senior Debt, DSRA/DSRF and Decommissioning seeds are built
-    // from them (a failed read still lets Equity / VAT seed, `seedsAllowed`).
-    if (assumptionsLoading) return;
-    // Seed only from this visit's own read of the inputs, never from the cache of an earlier visit.
-    if (!inputsQ.fresh) return;
-    if (visited.current === projectId) return;
-    visited.current = projectId;
-    const optionPlan = planFinancingOptionOnVisit(project);
-    const seeds = seedsAllowed(planSeeds(
-      project, buildCategoryMap(categories), inputs.map((i) => i.categoryId ?? ""),
-      standard ?? buildSeniorDebtStandard([], tech, project), dsraStandard,
-      decStandard ?? buildDecommissioningStandard([], tech, project),
-    ), assumptionsConnected);
-    void (async () => {
-      if (financePerf().concurrentWrites) {
-        // One job: the option patch and every seed together, ONE reload (D137). The canvas `IfError` per
-        // seed is kept: a failing seed stops no other and each failure is named.
-        const job = seedGroupJob({
-          seeds, project, optionPlan, action: FINANCE_WRITE_ACTION, reload: reloadKeys(projectId, optionPlan ? "option" : "inputs"),
-        });
-        if (job) await writes.run(job);
-        return;
-      }
-      if (optionPlan) await writes.run(financingOptionJob(optionPlan));
-      for (const job of seedJobs(seeds, project)) await writes.run(job);
-    })();
-    // The visit writes depend only on the loaded rows of this project.
-  }, [project, projectId, loading, loadError, categories, inputs, inputsQ.fresh, standard, dsraStandard, decStandard, tech, assumptionsConnected, assumptionsLoading, writes]);
-
-  /* ─────────────────────────────────────────────────────────── local state ── */
-
-  // B9 — the category cards start FOLDED (`AddColumns(colFinancingCategories, IsFolded, true)`).
-  const [folded, setFolded] = useState<ReadonlySet<number>>(
-    () => new Set(CATEGORY_CARD_ORDERS),
-  );
-  const [trancheFolded, setTrancheFolded] = useState<ReadonlyMap<string, boolean>>(new Map());
-  const [panel, setPanel] = useState<Panel>("none");
-  const [dialog, setDialog] = useState<Dialog>("none");
-
-  /*
-   * `lazyReads`: the CAPEX total feeds only the Equity PANEL (the card's loan line is `100 - value` for a percentage and
-   * is not shown for a fixed value), and the turbine count only the Decommissioning card's Per Turbine total. Neither is
-   * read until that panel or card is open; once wanted, it stays wanted for the visit (a latch), so folding a card again
-   * never reads again. With the switch off both are read at mount, as before.
-   */
-  const lazy = financePerf().lazyReads;
-  const [capexLatched, setCapexLatched] = useState(false);
-  const [turbinesLatched, setTurbinesLatched] = useState(false);
-  const capexWanted = !lazy || capexLatched || panel === "equity";
-  const turbinesWanted = !lazy || turbinesLatched || panel === "decommissioning" || !folded.has(CATEGORY_ORDER.decommissioning);
-  // State adjusted while rendering (the React-documented form of "derive it from a prop"), not in an effect.
-  if (lazy && capexWanted && !capexLatched) setCapexLatched(true);
-  if (lazy && turbinesWanted && !turbinesLatched) setTurbinesLatched(true);
-  const capexQ = useTotalDevexCapex(projectId, capexWanted);
-  const turbinesQ = useActiveTurbineCount(projectId, turbinesWanted);
-  const totalCapex = capexQ.data;
-  const activeTurbines = turbinesQ.data;
-  /** The Equity Save and its messages wait for the total while it is being read (no figure checked against a 0). */
-  const capexLoading = capexQ.isLoading;
-  const [selectedTrancheId, setSelectedTrancheId] = useState<string | null>(null);
-  const [toggleTarget, setToggleTarget] = useState<FinancingInputRow | null>(null);
-  const [equity, setEquity] = useState<EquityForm | null>(null);
-  const [vat, setVat] = useState<VatForm | null>(null);
-  const [dsra, setDsra] = useState<DsraForm | null>(null);
-  // The form the open Equity / VAT-Financing / DSRA panel started with: its Save stays off until the form differs (D111).
-  const [openedForm, setOpenedForm] = useState<unknown>(null);
-  const [decom, setDecom] = useState<DecommissioningForm | null>(null);
-  const [tranche, setTranche] = useState<SeniorDebtFormState | null>(null);
-  const [repaymentRows, setRepaymentRows] = useState<RepaymentRow[]>([]);
-  const [stepUpRows, setStepUpRows] = useState<StepUpRow[]>([]);
-
-  /* ─────────────────────────────────────────────────────────── derived rows ── */
-
-  const categoryOf = (order: number) => categories.find((c) => c.order === order) ?? null;
   const inputOf = (order: number): FinancingInputRow | null =>
     inputs.find((i) => i.categoryOrder === order) ?? null;
   const equityInput = inputOf(CATEGORY_ORDER.equity);
   const vatInput = inputOf(CATEGORY_ORDER.vatFinancing);
   const dsraInput = inputOf(CATEGORY_ORDER.dsraDsrf);
   const decInput = inputOf(CATEGORY_ORDER.decommissioning);
-  // `Sort(Filter(colFinancingInputInProject, Category = SeniorDebt), 'Created On', Ascending)`.
-  const trancheInputs = inputs.filter((i) => i.categoryOrder === CATEGORY_ORDER.seniorDebt);
-  const cards = categories.filter((c) => c.order !== CATEGORY_ORDER.cashSweep);
-
-  const tranches: TrancheRow[] = trancheInputs.map((i) => ({
-    id: i.id, trancheStatus: num(i.raw[INPUT_COL.trancheStatus]), status: i.status,
-    canEdit: i.canEdit, canDelete: i.canDelete,
-  }));
-  const selectedTranche = tranches.find((t) => t.id === selectedTrancheId) ?? null;
-  const selectedTrancheInput = trancheInputs.find((t) => t.id === selectedTrancheId) ?? null;
-  const trancheBar = seniorDebtCommandBar(tranches, selectedTranche, true);
-
-  const lockBullets = project ? pageLock(project) : LOCK_BULLETS;
-  // `con_Milestones_Page_LockMessage_8.Visible` (with the Draft bullet) — the Financing Options and
-  // gallery `DisplayMode` gate.
-  const locked = !loading && isPageLocked(project);
-  // `gal_…_FinancingInputs.Visible: And(!IsBlank('Cluster State'.Name), 'Cluster State'.Name <> "Draft")`.
-  const galleryVisible = Boolean(project?.clusterStateName) && project?.clusterStateName !== "Draft";
-  const [pendingOption, setPendingOption] = useState<number | null>(null);
-  // `Coalesce('Financing Options', 'Debt Financing')` (Y:2381): a blank column shows Debt Financing (D109),
-  // and so does New Project mode, where `gblRecordSelectedProject` itself is blank (D112). A saved
-  // project waits for its row, so the radio never flashes the default before the stored choice.
-  const financingOption = project || !projectId ? financingOptionShown(pendingOption, project?.financingOptions) : null;
-
-  const trancheName = (i: FinancingInputRow | null): string => (i === null ? "" : trancheDisplayName(
-    num(i.raw[INPUT_COL.trancheStatus]),
-    bankDisplayName(str(i.raw[INPUT_COL.bank]), str(i.raw[INPUT_COL.otherBankName]), banks),
-    i.raw[INPUT_COL.kfwTranche] === CHOICE_FINANCE.yesNo.yes,
-    str(i.raw[INPUT_COL.kfwTrancheValue]),
-  ));
-
-  const tenorTranches = trancheInputs.map((t) => ({
-    tenorYears: num(t.raw[INPUT_COL.tenorDurationYear]),
-    tenorMonths: num(t.raw[INPUT_COL.tenorDurationMonth]),
-    status: t.status,
-  }));
-
-  /* ─────────────────────────────────────────────────────────── panel openers ── */
-
-  const closePanel = () => {
-    setPanel("none");
-    setEquity(null); setVat(null); setDsra(null); setDecom(null); setTranche(null);
-  };
-
-  const openTranche = (existing: FinancingInputRow | null) => {
-    if (!project) return;
-    writes.clear();
-    setRepaymentRows(existing ? repaymentRowsOf(existing.id, repaymentsQ.data, lang) : []);
-    setStepUpRows(existing ? stepUpRowsOf(existing.id, stepUpsQ.data, lang) : []);
-    setTranche(openTrancheForm({ existing, project, standard, banks, tranches: trancheInputs, language: lang }));
-    setPanel("tranche");
-  };
-
-  const patchTranche = (p: Partial<SeniorDebtFormState>) =>
-    setTranche((f) => (f ? { ...f, ...p, formDirty: true } : f));
-
-  /** Rule 21 — tenor / start-repayment / profile changes regenerate the Individual schedule. */
-  const regenerate = (next: Partial<SeniorDebtFormState>) => {
-    if (!tranche || !project) return;
-    const m = { ...tranche, ...next };
-    // Only for Individual with all four dropdowns set; otherwise the schedule is left as it is.
-    if (shouldRegenerateRepayments(m)) setRepaymentRows(regenerateRepaymentYears(
-      project.cod, m.startRepaymentYears ?? 0, m.startRepaymentMonths ?? 0,
-      m.tenorYears ?? 0, m.tenorMonths ?? 0, repaymentRows,
-      repaymentsQ.data.filter((r) => r.financingInputId === tranche.trancheId).map((r) => ({ year: r.year, id: r.id })),
-    ));
-    patchTranche(next);
-  };
-
-  /* ─────────────────────────────────────────────────────────────── commands ── */
+  const tranches = trancheInputs.map(toTrancheRow);
+  const trancheBar = seniorDebtCommandBar(tranches, tranches.find((t) => t.id === selectedTrancheId) ?? null, true);
 
   const trancheCommands: Command[] = [
     { key: "AddFinanceInput", label: FIN_LABEL.addTranche, icon: "Add", enabled: !busy && !locked && trancheBar.add.enabled },
@@ -913,13 +793,6 @@ export default function ProjectFinanceScreen() {
       : []),
     { key: "DeleteFinancingInput", label: FIN_LABEL.delete, icon: "Delete", enabled: !busy && !locked && trancheBar.delete.enabled },
   ];
-
-  const onTrancheCommand = (key: string) => {
-    if (key === "AddFinanceInput") openTranche(null);
-    else if (key === "EditFinanceInput") openTranche(selectedTrancheInput);
-    else if (key === "ActivateFinanceInput" || key === "DeactivateFinanceInput") setDialog("trancheActivation");
-    else if (key === "DeleteFinancingInput") setDialog("trancheDeletion");
-  };
 
   const categoryCommands = (order: number, input: FinancingInputRow | null, name: string): Command[] => {
     const bar = categoryCommandBar(order, input?.status ?? -1, input !== null);
@@ -934,49 +807,6 @@ export default function ProjectFinanceScreen() {
         : []),
     ];
   };
-
-  const onCategoryCommand = (order: number, input: FinancingInputRow | null) => (key: string) => {
-    writes.clear();
-    if (key === "EditFinanceInput") {
-      if (order === CATEGORY_ORDER.equity) { const f = openEquityForm(input, lang); setEquity(f); setOpenedForm(f); setPanel("equity"); }
-      else if (order === CATEGORY_ORDER.vatFinancing) { const f = openVatForm(input, country, lang); setVat(f); setOpenedForm(f); setPanel("vat"); }
-      else if (order === CATEGORY_ORDER.decommissioning) { setDecom(openDecommissioningForm(input, lang)); setPanel("decommissioning"); }
-    } else {
-      setToggleTarget(input);
-      setDialog("category");
-    }
-  };
-
-  /* ────────────────────────────────────────────────────────────── writes ── */
-
-  const onFinancingOption = async (option: number) => {
-    // The fold-all runs inside the canvas' VAT branch (`'Is Deactivated By Button' <> Yes`).
-    if (vatInput && vatInput.raw[INPUT_COL.isDeactivatedByButton] !== CHOICE_FINANCE.yesNo.yes) {
-      setFolded(new Set(cards.map((c) => c.order)));
-    }
-    // The radio moves at once (as the canvas control does); the stored value takes over after the refresh.
-    setPendingOption(option);
-    try {
-      await writes.run(withReload(
-        financingOptionJob(optimizeFinancingOptionPlan(planFinancingOption(project, option, inputs))), projectId, "option"));
-    } finally {
-      setPendingOption(null);
-    }
-  };
-
-  const saveTranche = async () => {
-    if (!tranche || !project) return;
-    const form: SeniorDebtFormState = { ...tranche, repaymentRows, stepUpRows, isSaving: true };
-    closePanel();
-    const ids = await writes.run(withReload(trancheSaveJob(async () => optimizeTrancheSavePlan(planTrancheSave({
-      form, project, seniorDebtCategoryId: categoryOf(CATEGORY_ORDER.seniorDebt)?.id ?? null,
-      duplicateIds: await fetchTrancheDuplicates(trancheUniqueKey(form)),
-      storedRepayments: repaymentsQ.data, storedStepUps: stepUpsQ.data, language: lang,
-    }))), projectId, "schedules"));
-    if (ids !== null) setSelectedTrancheId(null);
-  };
-
-  /* ────────────────────────────────────────────────────────── card bodies ── */
 
   const field = (caption: string, value: string, testId: string, standard = false) =>
     <ReadOnlyField key={testId} label={caption} value={value} testId={testId} ariaLabel={testId} standard={standard} />;
@@ -1024,7 +854,7 @@ export default function ProjectFinanceScreen() {
     // A blank option is not Percentage of Debt: currency caption and `"###,###,##0"` (Y:4305, Y:4327; D109).
     const upfront = num(r[INPUT_COL.upfrontFee]);
     const dscr = (v: number | null) => (v === null ? "" : formatDscr(v));
-    const toggleFold = () => setTrancheFolded((m) => new Map(m).set(i.id, !isFolded));
+    const toggleFold = () => onToggleTrancheFold(i.id, !isFolded);
     return (
       <div key={i.id} className={mergeClasses(s.tranche, selected && s.trancheSelected)} aria-selected={selected}>
         <div className={mergeClasses(s.trancheHeader, !isFolded && s.trancheHeaderOpen)}>
@@ -1032,7 +862,7 @@ export default function ProjectFinanceScreen() {
             <Button
               appearance="transparent" className={mergeClasses(s.cardTitle, s.trancheTitle)} aria-label={FIN_LABEL.seniorDebtTooltip} disabled={locked}
               data-testid="btn_FinancingInput_DisplayProject_Body_Form_SeniorDebt_CardHeader_RowTransparent"
-              onClick={() => setSelectedTrancheId(selected ? null : i.id)}
+              onClick={() => onSelectTranche(selected ? null : i.id)}
             >
               {/* `img_…_SeniorDebt_CardHeader_RowSelectionDot`: an 18 x 18 SVG at X 5 — an empty ring, filled
                   for the selected tranche (`ThisItem = locSelectedSeniorDebtTranche`). Decorative
@@ -1042,7 +872,7 @@ export default function ProjectFinanceScreen() {
               <span className={mergeClasses(s.trancheDot, s.trancheDotInButton, locked && s.trancheDotLocked)} aria-hidden>
                 {selected ? <RadioButtonFilled /> : <CircleRegular />}
               </span>
-              {trancheName(i)}
+              {trancheNameOf(i, banks)}
             </Button>
           </Tooltip>
           <StatusChip status={i.status} canvasName="lbl_FinancingInputs_SeniorDebt_Status" />
@@ -1113,7 +943,7 @@ export default function ProjectFinanceScreen() {
             icon={<EditRegular />} aria-label="con_DSRA_DSRF_Data_Edit" data-testid="con_DSRA_DSRF_Data_Edit"
             // `DisplayMode: If(con_DSRA_DSRF_Data_Deactivate.Text = "Activate", Disabled, Edit)`
             disabled={busy || locked || dsraInput === null || toggle.label === DSRA_TOGGLE_LABEL.activate}
-            onClick={() => { writes.clear(); const f = openDsraForm(dsraInput, lang); setDsra(f); setOpenedForm(f); setPanel("dsra"); }}
+            onClick={onEditDsra}
           >
             {FIN_LABEL.edit}
           </Button>
@@ -1122,7 +952,7 @@ export default function ProjectFinanceScreen() {
             aria-label="con_DSRA_DSRF_Data_Deactivate" data-testid="con_DSRA_DSRF_Data_Deactivate"
             icon={dsraInput?.status === CHOICE_FINANCE.status.active ? <DismissCircleRegular /> : <CheckmarkCircleRegular />}
             disabled={busy || locked || !toggle.enabled}
-            onClick={() => { writes.clear(); setToggleTarget(dsraInput); setDialog("dsra"); }}
+            onClick={onToggleDsra}
           >
             {toggle.label}
           </Button>
@@ -1167,7 +997,7 @@ export default function ProjectFinanceScreen() {
     const bar = order === CATEGORY_ORDER.seniorDebt || order === CATEGORY_ORDER.dsraDsrf ? null : (
       <div className={s.commandBar}>
         <CommandBar
-          commands={categoryCommands(order, input, name)} onCommand={onCategoryCommand(order, input)}
+          commands={categoryCommands(order, input, name)} onCommand={(key) => onCategoryCommand(order, input, key)}
           ariaLabel="pcf_ProjectRevenues_Content_ContractCommandBar_2"
         />
       </div>
@@ -1188,6 +1018,303 @@ export default function ProjectFinanceScreen() {
     }
   };
 
+  return (
+    <div className={s.gallery}>{cards.map((category) => {
+      const order = category.order;
+      const input = inputOf(order);
+      return (
+        <CategoryCard
+          key={category.id} order={order} cardId={category.id} name={category.name}
+          status={input?.status ?? null} folded={folded.has(order)} disabled={locked}
+          onToggleFold={() => onToggleCategoryFold(order)}
+        >
+          {body(order, input, category.name)}
+        </CategoryCard>
+      );
+    })}</div>
+  );
+});
+
+/* ═══════════════════════════════════════════════════════════════════ screen ══ */
+
+export default function ProjectFinanceScreen() {
+  const s = useStyles();
+  const { projectId, locale } = useSession();
+  const lang = locale;
+  // Card and box numbers in the user's language (`Text(n, fmt, Language())`): one place, so no call site can forget it.
+  const fmtCard = (v: number | null | undefined, pattern: string) => fmtCardIn(v, pattern, lang);
+
+  const projectQ = useFinanceProject(projectId);
+  const project = projectQ.data;
+  const categoriesQ = useFinancingCategories();
+  const categories = categoriesQ.data;
+  const slicesQ = useDebtAssumptions(project?.countryName ?? null);
+  const inputsQ = useFinancingInputs(projectId, categories);
+  const repaymentsQ = useRepaymentAmounts(projectId);
+  const stepUpsQ = useStepUpMargins(projectId);
+  const banksQ = useBanks();
+  const kfwQ = useKfwTranches();
+  // `capexQ` and `turbinesQ` are called below, after the card and panel state they depend on (`lazyReads`).
+  const writes = useFinanceWrites(projectId);
+
+  // The debt standard is usable only once its rows are in: while they load, or if the Fabric read
+  // fails, the Fabric-built seeds stay withheld and the SQL resets stay disabled (no "standard"
+  // zeros from an empty row set).
+  const assumptionsLoading = slicesQ.isLoading;
+  const assumptionsConnected = Boolean(project?.countryName) && slicesQ.connected
+    && !assumptionsLoading && !slicesQ.error;
+  const loading = projectQ.isLoading || categoriesQ.isLoading || inputsQ.isLoading;
+  const loadError = projectQ.error ?? categoriesQ.error ?? inputsQ.error ?? repaymentsQ.error ?? stepUpsQ.error;
+  const inputs = inputsQ.data;
+  const banks = banksQ.data;
+  const country = project?.countryName ?? null;
+  const unit = currencySuffix(country);
+  const busy = writes.progress !== null;
+
+  const tech = project ? toDebtTech(project.technology) : "other";
+  const standard = useMemo(
+    () => (project ? buildSeniorDebtStandard(slicesQ.data.debt, tech, project, { language: lang }) : null),
+    [project, slicesQ.data.debt, tech, lang],
+  );
+  const dsraStandard = useMemo(
+    () => buildDsraStandard(slicesQ.data.dsra, tech, { language: lang }),
+    [slicesQ.data.dsra, tech, lang],
+  );
+  const decStandard = useMemo(
+    () => (project
+      ? buildDecommissioningStandard(slicesQ.data.decommissioning, tech, project, { language: lang })
+      : null),
+    [project, slicesQ.data.decommissioning, tech, lang],
+  );
+
+  /* ─────────────────────────────────────────────────────────── on visit ── */
+
+  // `OnVisible`: the guarded 'Financing Options' patch, then the missing seeds — once per visit.
+  const visited = useRef<string | null>(null);
+  // `writes` is a new object on every render (`usePlanWrite`), so the effect reads `run` through a stable function and
+  // does not list `writes`: it ran after every commit, every keystroke included, and only `visited` kept it from writing
+  // again (FE-P2-09, UT-FIN-FE-004). The `visited` guard stays.
+  const runWrite = useStableCallback(writes.run);
+  useEffect(() => {
+    probeRender("FinanceSeedEffect");
+    if (!project || !projectId || loading || loadError || categories.length === 0) return;
+    // Wait for the debt assumptions: the Senior Debt, DSRA/DSRF and Decommissioning seeds are built
+    // from them (a failed read still lets Equity / VAT seed, `seedsAllowed`).
+    if (assumptionsLoading) return;
+    // Seed only from this visit's own read of the inputs, never from the cache of an earlier visit.
+    if (!inputsQ.fresh) return;
+    if (visited.current === projectId) return;
+    visited.current = projectId;
+    const optionPlan = planFinancingOptionOnVisit(project);
+    const seeds = seedsAllowed(planSeeds(
+      project, buildCategoryMap(categories), inputs.map((i) => i.categoryId ?? ""),
+      standard ?? buildSeniorDebtStandard([], tech, project), dsraStandard,
+      decStandard ?? buildDecommissioningStandard([], tech, project),
+    ), assumptionsConnected);
+    void (async () => {
+      if (financePerf().concurrentWrites) {
+        // One job: the option patch and every seed together, ONE reload (D137). The canvas `IfError` per
+        // seed is kept: a failing seed stops no other and each failure is named.
+        const job = seedGroupJob({
+          seeds, project, optionPlan, action: FINANCE_WRITE_ACTION, reload: reloadKeys(projectId, optionPlan ? "option" : "inputs"),
+        });
+        if (job) await runWrite(job);
+        return;
+      }
+      if (optionPlan) await runWrite(financingOptionJob(optionPlan));
+      for (const job of seedJobs(seeds, project)) await runWrite(job);
+    })();
+    // The visit writes depend only on the loaded rows of this project.
+  }, [project, projectId, loading, loadError, categories, inputs, inputsQ.fresh, standard, dsraStandard, decStandard, tech, assumptionsConnected, assumptionsLoading, runWrite]);
+
+  /* ─────────────────────────────────────────────────────────── local state ── */
+
+  // B9 — the category cards start FOLDED (`AddColumns(colFinancingCategories, IsFolded, true)`).
+  const [folded, setFolded] = useState<ReadonlySet<number>>(
+    () => new Set(CATEGORY_CARD_ORDERS),
+  );
+  const [trancheFolded, setTrancheFolded] = useState<ReadonlyMap<string, boolean>>(new Map());
+  const [panel, setPanel] = useState<Panel>("none");
+  const [dialog, setDialog] = useState<Dialog>("none");
+
+  /*
+   * `lazyReads`: the CAPEX total feeds only the Equity PANEL (the card's loan line is `100 - value` for a percentage and
+   * is not shown for a fixed value), and the turbine count only the Decommissioning card's Per Turbine total. Neither is
+   * read until that panel or card is open; once wanted, it stays wanted for the visit (a latch), so folding a card again
+   * never reads again. With the switch off both are read at mount, as before.
+   */
+  const lazy = financePerf().lazyReads;
+  const [capexLatched, setCapexLatched] = useState(false);
+  const [turbinesLatched, setTurbinesLatched] = useState(false);
+  const capexWanted = !lazy || capexLatched || panel === "equity";
+  const turbinesWanted = !lazy || turbinesLatched || panel === "decommissioning" || !folded.has(CATEGORY_ORDER.decommissioning);
+  // State adjusted while rendering (the React-documented form of "derive it from a prop"), not in an effect.
+  if (lazy && capexWanted && !capexLatched) setCapexLatched(true);
+  if (lazy && turbinesWanted && !turbinesLatched) setTurbinesLatched(true);
+  const capexQ = useTotalDevexCapex(projectId, capexWanted);
+  const turbinesQ = useActiveTurbineCount(projectId, turbinesWanted);
+  const totalCapex = capexQ.data;
+  const activeTurbines = turbinesQ.data;
+  /** The Equity Save and its messages wait for the total while it is being read (no figure checked against a 0). */
+  const capexLoading = capexQ.isLoading;
+  const [selectedTrancheId, setSelectedTrancheId] = useState<string | null>(null);
+  const [toggleTarget, setToggleTarget] = useState<FinancingInputRow | null>(null);
+  const [equity, setEquity] = useState<EquityForm | null>(null);
+  const [vat, setVat] = useState<VatForm | null>(null);
+  const [dsra, setDsra] = useState<DsraForm | null>(null);
+  // The form the open Equity / VAT-Financing / DSRA panel started with: its Save stays off until the form differs (D111).
+  const [openedForm, setOpenedForm] = useState<unknown>(null);
+  const [decom, setDecom] = useState<DecommissioningForm | null>(null);
+  const [tranche, setTranche] = useState<SeniorDebtFormState | null>(null);
+  const [repaymentRows, setRepaymentRows] = useState<RepaymentRow[]>([]);
+  const [stepUpRows, setStepUpRows] = useState<StepUpRow[]>([]);
+
+  /* ─────────────────────────────────────────────────────────── derived rows ── */
+
+  const categoryOf = (order: number) => categories.find((c) => c.order === order) ?? null;
+  const inputOf = (order: number): FinancingInputRow | null =>
+    inputs.find((i) => i.categoryOrder === order) ?? null;
+  const equityInput = inputOf(CATEGORY_ORDER.equity);
+  const vatInput = inputOf(CATEGORY_ORDER.vatFinancing);
+  const dsraInput = inputOf(CATEGORY_ORDER.dsraDsrf);
+  const decInput = inputOf(CATEGORY_ORDER.decommissioning);
+  // `Sort(Filter(colFinancingInputInProject, Category = SeniorDebt), 'Created On', Ascending)`.
+  // Memoized for the `FinanceCards` props (FE-P2-01): a new array per render would re-render the gallery on every keystroke.
+  const trancheInputs = useMemo(() => inputs.filter((i) => i.categoryOrder === CATEGORY_ORDER.seniorDebt), [inputs]);
+  const cards = useMemo(() => categories.filter((c) => c.order !== CATEGORY_ORDER.cashSweep), [categories]);
+
+  const selectedTrancheInput = trancheInputs.find((t) => t.id === selectedTrancheId) ?? null;
+  const selectedTranche = selectedTrancheInput ? toTrancheRow(selectedTrancheInput) : null;
+
+  const lockBullets = project ? pageLock(project) : LOCK_BULLETS;
+  // `con_Milestones_Page_LockMessage_8.Visible` (with the Draft bullet) — the Financing Options and
+  // gallery `DisplayMode` gate.
+  const locked = !loading && isPageLocked(project);
+  // `gal_…_FinancingInputs.Visible: And(!IsBlank('Cluster State'.Name), 'Cluster State'.Name <> "Draft")`.
+  const galleryVisible = Boolean(project?.clusterStateName) && project?.clusterStateName !== "Draft";
+  const [pendingOption, setPendingOption] = useState<number | null>(null);
+  // `Coalesce('Financing Options', 'Debt Financing')` (Y:2381): a blank column shows Debt Financing (D109),
+  // and so does New Project mode, where `gblRecordSelectedProject` itself is blank (D112). A saved
+  // project waits for its row, so the radio never flashes the default before the stored choice.
+  const financingOption = project || !projectId ? financingOptionShown(pendingOption, project?.financingOptions) : null;
+
+  const tenorTranches = trancheInputs.map((t) => ({
+    tenorYears: num(t.raw[INPUT_COL.tenorDurationYear]),
+    tenorMonths: num(t.raw[INPUT_COL.tenorDurationMonth]),
+    status: t.status,
+  }));
+
+  /* ─────────────────────────────────────────────────────────── panel openers ── */
+
+  const closePanel = () => {
+    setPanel("none");
+    setEquity(null); setVat(null); setDsra(null); setDecom(null); setTranche(null);
+  };
+
+  const openTranche = (existing: FinancingInputRow | null) => {
+    if (!project) return;
+    writes.clear();
+    setRepaymentRows(existing ? repaymentRowsOf(existing.id, repaymentsQ.data, lang) : []);
+    setStepUpRows(existing ? stepUpRowsOf(existing.id, stepUpsQ.data, lang) : []);
+    setTranche(openTrancheForm({ existing, project, standard, banks, tranches: trancheInputs, language: lang }));
+    setPanel("tranche");
+  };
+
+  const patchTranche = (p: Partial<SeniorDebtFormState>) =>
+    setTranche((f) => (f ? { ...f, ...p, formDirty: true } : f));
+
+  // `txt_SeniorDebtData_RepaymentAmount.OnChange` (FE-P2-02): the same edit, applied to the CURRENT rows through a
+  // functional update, so the setter keeps one identity and a memoized `RepaymentAmountRow` is not re-rendered by an edit
+  // of another row. The tranche turns dirty once; a further keystroke builds no new, unchanged tranche object.
+  const setRepaymentValue = useStableCallback((index: number, value: string) => {
+    setRepaymentRows((rows) => {
+      const r = rows[index];
+      if (!r) return rows;
+      const next = [...rows];
+      next[index] = { ...r, value, dirty: true, valid: validateRepaymentAmount(value, country, lang).valid };
+      return next;
+    });
+    setTranche((f) => (f && !f.formDirty ? { ...f, formDirty: true } : f));
+  });
+
+  /** Rule 21 — tenor / start-repayment / profile changes regenerate the Individual schedule. */
+  const regenerate = (next: Partial<SeniorDebtFormState>) => {
+    if (!tranche || !project) return;
+    const m = { ...tranche, ...next };
+    // Only for Individual with all four dropdowns set; otherwise the schedule is left as it is.
+    if (shouldRegenerateRepayments(m)) setRepaymentRows(regenerateRepaymentYears(
+      project.cod, m.startRepaymentYears ?? 0, m.startRepaymentMonths ?? 0,
+      m.tenorYears ?? 0, m.tenorMonths ?? 0, repaymentRows,
+      repaymentsQ.data.filter((r) => r.financingInputId === tranche.trancheId).map((r) => ({ year: r.year, id: r.id })),
+    ));
+    patchTranche(next);
+  };
+
+  /* ─────────────────────────────────────────────────────────────── commands ── */
+
+  // The gallery's handlers keep one identity for the visit (`useStableCallback`), so the memoized `FinanceCards` is not
+  // re-rendered by a panel keystroke; each reads the newest state when it is called (FE-P2-01).
+  const onTrancheCommand = useStableCallback((key: string) => {
+    if (key === "AddFinanceInput") openTranche(null);
+    else if (key === "EditFinanceInput") openTranche(selectedTrancheInput);
+    else if (key === "ActivateFinanceInput" || key === "DeactivateFinanceInput") setDialog("trancheActivation");
+    else if (key === "DeleteFinancingInput") setDialog("trancheDeletion");
+  });
+
+  const onCategoryCommand = useStableCallback((order: number, input: FinancingInputRow | null, key: string) => {
+    writes.clear();
+    if (key === "EditFinanceInput") {
+      if (order === CATEGORY_ORDER.equity) { const f = openEquityForm(input, lang); setEquity(f); setOpenedForm(f); setPanel("equity"); }
+      else if (order === CATEGORY_ORDER.vatFinancing) { const f = openVatForm(input, country, lang); setVat(f); setOpenedForm(f); setPanel("vat"); }
+      else if (order === CATEGORY_ORDER.decommissioning) { setDecom(openDecommissioningForm(input, lang)); setPanel("decommissioning"); }
+    } else {
+      setToggleTarget(input);
+      setDialog("category");
+    }
+  });
+
+  const onToggleCategoryFold = useStableCallback((order: number) => {
+    const next = toggleCategoryFold(folded, order, trancheFolded, inputs);
+    setFolded(next.folded);
+    setTrancheFolded(next.trancheFolded);
+  });
+  const onToggleTrancheFold = useStableCallback((id: string, next: boolean) => {
+    setTrancheFolded((m) => new Map(m).set(id, next));
+  });
+  const onEditDsra = useStableCallback(() => {
+    writes.clear(); const f = openDsraForm(dsraInput, lang); setDsra(f); setOpenedForm(f); setPanel("dsra");
+  });
+  const onToggleDsra = useStableCallback(() => { writes.clear(); setToggleTarget(dsraInput); setDialog("dsra"); });
+
+  /* ────────────────────────────────────────────────────────────── writes ── */
+
+  const onFinancingOption = async (option: number) => {
+    // The fold-all runs inside the canvas' VAT branch (`'Is Deactivated By Button' <> Yes`).
+    if (vatInput && vatInput.raw[INPUT_COL.isDeactivatedByButton] !== CHOICE_FINANCE.yesNo.yes) {
+      setFolded(new Set(cards.map((c) => c.order)));
+    }
+    // The radio moves at once (as the canvas control does); the stored value takes over after the refresh.
+    setPendingOption(option);
+    try {
+      await writes.run(withReload(
+        financingOptionJob(optimizeFinancingOptionPlan(planFinancingOption(project, option, inputs))), projectId, "option"));
+    } finally {
+      setPendingOption(null);
+    }
+  };
+
+  const saveTranche = async () => {
+    if (!tranche || !project) return;
+    const form: SeniorDebtFormState = { ...tranche, repaymentRows, stepUpRows, isSaving: true };
+    closePanel();
+    const ids = await writes.run(withReload(trancheSaveJob(async () => optimizeTrancheSavePlan(planTrancheSave({
+      form, project, seniorDebtCategoryId: categoryOf(CATEGORY_ORDER.seniorDebt)?.id ?? null,
+      duplicateIds: await fetchTrancheDuplicates(trancheUniqueKey(form)),
+      storedRepayments: repaymentsQ.data, storedStepUps: stepUpsQ.data, language: lang,
+    }))), projectId, "schedules"));
+    if (ids !== null) setSelectedTrancheId(null);
+  };
+
   /* ──────────────────────────────────────────────────────────── dialogs ── */
 
   const toggleDialog = toggleTarget
@@ -1196,7 +1323,7 @@ export default function ProjectFinanceScreen() {
     : null;
   const trancheDialog = trancheActionDialog(
     dialog === "trancheDeletion" ? "deletion" : "activation",
-    selectedTranche?.status ?? null, trancheName(selectedTrancheInput),
+    selectedTranche?.status ?? null, trancheNameOf(selectedTrancheInput, banks),
   );
   const dsraDialog = dsraToggleDialog(dsraInput?.status ?? null);
   const closeDialog = () => { setDialog("none"); setToggleTarget(null); };
@@ -1266,23 +1393,16 @@ export default function ProjectFinanceScreen() {
       </div>
 
       {/* `gal_ProjectFinance_DisplayProject_Body_Form_FinancingInputs` */}
-      {galleryVisible ? <div className={s.gallery}>{cards.map((category) => {
-        const order = category.order;
-        const input = inputOf(order);
-        return (
-          <CategoryCard
-            key={category.id} order={order} cardId={category.id} name={category.name}
-            status={input?.status ?? null} folded={folded.has(order)} disabled={locked}
-            onToggleFold={() => {
-              const next = toggleCategoryFold(folded, order, trancheFolded, inputs);
-              setFolded(next.folded);
-              setTrancheFolded(next.trancheFolded);
-            }}
-          >
-            {body(order, input, category.name)}
-          </CategoryCard>
-        );
-      })}</div> : null}
+      {galleryVisible ? (
+        <FinanceCards
+          cards={cards} inputs={inputs} trancheInputs={trancheInputs} folded={folded} trancheFolded={trancheFolded}
+          selectedTrancheId={selectedTrancheId} busy={busy} locked={locked} banks={banks} totalCapex={totalCapex}
+          activeTurbines={activeTurbines} country={country} lang={lang}
+          onToggleCategoryFold={onToggleCategoryFold} onToggleTrancheFold={onToggleTrancheFold}
+          onSelectTranche={setSelectedTrancheId} onTrancheCommand={onTrancheCommand} onCategoryCommand={onCategoryCommand}
+          onEditDsra={onEditDsra} onToggleDsra={onToggleDsra}
+        />
+      ) : null}
 
       {/* ─────────────────────────────────────────────────────── Equity panel ── */}
       <FormPanel
@@ -1585,18 +1705,9 @@ export default function ProjectFinanceScreen() {
             {form.repaymentProfile === CHOICE_FINANCE.repaymentProfile.individual ? (
               <div className={mergeClasses(s.trancheColumn, s.trancheColumnMid)}>
                 {repaymentRows.map((r, i) => (
-                <TextField
-                  key={r.year} label={`${r.year}${FIN_LABEL.repaymentAmountInfix}${unit}`} required
-                  testId="txt_SeniorDebtData_RepaymentAmount" ariaLabel="txt_SeniorDebtData_RepaymentAmount" maxLength={PANEL_MAX_LENGTH.other} counter={false}
-                  value={r.value} disabled={busy}
-                  error={r.valid ? undefined : validateRepaymentAmount(r.value, country, lang).message}
-                  onChange={(v) => {
-                    const next = [...repaymentRows];
-                    next[i] = { ...r, value: v, dirty: true, valid: validateRepaymentAmount(v, country, lang).valid };
-                    setRepaymentRows(next);
-                    patchTranche({});
-                  }}
-                />
+                  <RepaymentAmountRow
+                    key={r.year} row={r} index={i} unit={unit} country={country} lang={lang} disabled={busy} onValue={setRepaymentValue}
+                  />
                 ))}
               </div>
             ) : null}

@@ -14,7 +14,7 @@
  *   right panel: target       `con_Contracts_RightPanel_NewEdit_PaymentTarget`
  *   two delete confirmations  `cmp_OpexCosts_PopUpConfirmation_Delete{Contracts,PaymentTarget}`
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Button, MessageBar, MessageBarBody, MessageBarTitle, Text, makeStyles, mergeClasses,
@@ -41,6 +41,7 @@ import {
   ExpandChevron,
   LoadingOverlay,
   WriteStatus,
+  useStableCallback,
 } from "@/components";
 /*
  * The CANVAS field kit, not the Fluent one.
@@ -64,7 +65,7 @@ import { permissionMessage, serverEnforcedProvider } from "@/platform/privileges
 import {
   CLOSING_DATE_TYPE, CONTRACT_TYPE, COMMENT_MAX_LENGTH, MARGIN_TYPE, MSG,
   NOTE_MAX_LENGTH, TOTAL_COSTS_TYPE,
-  canSaveContractFromErrors, canSavePaymentTarget, cardShowsClosingCosts, cardTotalLabel,
+  canSaveContractFromErrors, cardShowsClosingCosts, cardTotalLabel,
   contractCardTitle, contractCommands, contractErrors, contractSelectionAfterDelete,
   gatedContractCommands, longAbbreviatedDate,
   PAYMENT_TARGET_DESCRIPTION_MAX_LENGTH,
@@ -90,6 +91,7 @@ import {
   usePaymentTargets, useProjectExtras, useSaveContract, useSavePaymentTarget,
 } from "./hooks";
 import { costRowsForAccounts } from "@/data/costRepository";
+import { probeRender } from "@/platform/renderProbe";
 
 /** `StartOfWeek.Monday` — Fluent's `DayOfWeek.Monday` (as `components/DateField.tsx`). */
 const MONDAY = 1;
@@ -203,6 +205,9 @@ const EMPTY_TARGET_FORM: PaymentTargetForm = {
   description: "", paymentDate: "", totalCostsContract: "", note: "",
 };
 
+/** A contract with no payment target: one array for all of them, so a memoised card keeps its props (FE-C2-02). */
+const NO_TARGETS: readonly PaymentTarget[] = [];
+
 /* ──────────────────────────────────────────────────────────────── the screen */
 
 type PanelKind = "none" | "contract" | "rights" | "target";
@@ -219,6 +224,7 @@ export default function ContractsScreen() {
 }
 
 function ContractsScreenBody() {
+  probeRender("ContractsScreenBody");
   const navigate = useNavigate();
   const { project, projectId, projectNotFound, locale } = useSession();
 
@@ -563,6 +569,48 @@ function ContractsScreenBody() {
     setSelectedTargetId(next.targetId);
   };
 
+  /*
+   * FE-C2-02 (D162): the card handlers, by contract id, with an identity that never changes (`useStableCallback`), so the
+   * memoised `ContractCard`s skip every render that does not change their own props (a panel keystroke above all). Each
+   * does exactly what the card's inline handler did.
+   */
+  const onCardHeaderClick = useStableCallback(clickContractHeader);
+  const onCardToggleOpen = useStableCallback((contractId: string) => setExpanded((prev) =>
+    prev.includes(contractId)
+      ? prev.filter((id) => id !== contractId)
+      : [...prev, contractId],
+  ));
+  const onCardSelectTarget = useStableCallback(clickTargetRow);
+  const onCardAddTarget = useStableCallback((contractId: string) => {
+    setSelectedContractId(contractId);
+    setSelectedTargetId(undefined);
+    // `txt_…_PaymentTarget_Description.Value` (`:2380`): the newest period's name, numbered on.
+    setTargetForm({
+      ...EMPTY_TARGET_FORM,
+      description: newPeriodDescription(targets.byContract.get(contractId) ?? NO_TARGETS),
+    });
+    setTouched(NO_FIELDS_TOUCHED);
+    setPanel("target");
+  });
+  const onCardEditTarget = useStableCallback((contractId: string, t: PaymentTarget) => {
+    setSelectedContractId(contractId);
+    setSelectedTargetId(t.id);
+    setTargetForm({
+      description: t.description ?? "",
+      paymentDate: t.paymentDate ?? "",
+      totalCostsContract:
+        inputDecimalText(t.totalCostsContract, locale),
+      note: t.note ?? "",
+    });
+    setTouched(NO_FIELDS_TOUCHED);
+    setPanel("target");
+  });
+  const onCardDeleteTarget = useStableCallback((contractId: string, t: PaymentTarget) => {
+    setSelectedContractId(contractId);
+    setSelectedTargetId(t.id);
+    setConfirm("target");
+  });
+
   /**
    * Leaves the payment-target panel without saving: `pcf_…_PaymentTarget_Buttons_Cancel.OnChange` and
    * the header ✕ clear `locSelectedContractPaymentTarget` (`:3033`, `:2253`).
@@ -901,115 +949,26 @@ function ContractsScreenBody() {
          * chrome to reach that geometry costs more than the `aria-expanded` button below.
          */
         <div className="canvas-contract-list">
-          {contracts.map((contract) => {
-            const open = expanded.includes(contract.id);
-            return (
-              <div
-                key={contract.id}
-                className="canvas-contract-card"
-                data-open={open}
-                data-selected={selectedContractId === contract.id}
-              >
-                <div
-                  className="canvas-contract-head"
-                  style={{ ["--contract-type" as string]: TYPE_COLOUR[contract.contractType] }}
-                >
-                  {/* `img_Contracts_List_CardHeaderRadioSelection` — CircleDotBlue / CircleEmpty. */}
-                  <input
-                    type="radio"
-                    name="contract-selection"
-                    value={contract.id}
-                    checked={selectedContractId === contract.id}
-                    aria-label={`Select ${contract.description ?? ""}`}
-                    data-testid={`img_Contracts_List_CardHeaderRadioSelection-${contract.id}`}
-                    // A click on the radio is the header's click (it toggles); `onChange` alone never
-                    // fires for the radio that is already checked.
-                    onClick={() => clickContractHeader(contract.id)}
-                    onChange={() => undefined}
-                  />
-                  {/*
-                    * `btn_Contracts_List_CardHeader_TransparentButton` covers the band and
-                    * TOGGLES the selection — clicking the selected contract clears it. It
-                    * does not fold anything.
-                    */}
-                  <button
-                    type="button"
-                    className="canvas-contract-title"
-                    aria-label="Select contract"
-                    data-testid={`btn_Contracts_List_CardHeader_TransparentButton-${contract.id}`}
-                    title={contractCardTitle(contract)}
-                    onClick={() => clickContractHeader(contract.id)}
-                  >
-                    {contractCardTitle(contract)}
-                  </button>
-                  {/*
-                    * `ico_…_CardHeader_Down` / `_Up` — one is `Visible: =ThisItem.IsFolded`,
-                    * and folding is ALL they do. A real button, not decoration: it is the
-                    * only way to open a card.
-                    */}
-                  <button
-                    type="button"
-                    className="canvas-contract-chevron"
-                    aria-expanded={open}
-                    aria-controls={`contract-body-${contract.id}`}
-                    aria-label={`${open ? "Collapse" : "Expand"} ${contract.description ?? ""}`}
-                    data-testid={`ico_Contracts_List_CardHeader_${open ? "Up" : "Down"}-${contract.id}`}
-                    onClick={() => setExpanded((prev) =>
-                      prev.includes(contract.id)
-                        ? prev.filter((id) => id !== contract.id)
-                        : [...prev, contract.id],
-                    )}
-                  >
-                    <ExpandChevron open={open} />
-                  </button>
-                </div>
-
-                {open ? (
-                  <div className="canvas-contract-body" id={`contract-body-${contract.id}`}>
-                    <ContractCardBody
-                      contract={contract}
-                      currency={currency}
-                      locale={locale}
-                      targets={targets.byContract.get(contract.id) ?? []}
-                      selectedTargetId={selectedTargetId}
-                      isSelectedContract={selectedContractId === contract.id}
-                      writesDisabled={targetWritesDisabled}
-                      onSelectTarget={(targetId) => clickTargetRow(contract.id, targetId)}
-                      onAddTarget={() => {
-                        setSelectedContractId(contract.id);
-                        setSelectedTargetId(undefined);
-                        // `txt_…_PaymentTarget_Description.Value` (`:2380`): the newest period's name, numbered on.
-                        setTargetForm({
-                          ...EMPTY_TARGET_FORM,
-                          description: newPeriodDescription(targets.byContract.get(contract.id) ?? []),
-                        });
-                        setTouched(NO_FIELDS_TOUCHED);
-                        setPanel("target");
-                      }}
-                      onEditTarget={(t) => {
-                        setSelectedContractId(contract.id);
-                        setSelectedTargetId(t.id);
-                        setTargetForm({
-                          description: t.description ?? "",
-                          paymentDate: t.paymentDate ?? "",
-                          totalCostsContract:
-                            inputDecimalText(t.totalCostsContract, locale),
-                          note: t.note ?? "",
-                        });
-                        setTouched(NO_FIELDS_TOUCHED);
-                        setPanel("target");
-                      }}
-                      onDeleteTarget={(t) => {
-                        setSelectedContractId(contract.id);
-                        setSelectedTargetId(t.id);
-                        setConfirm("target");
-                      }}
-                    />
-                  </div>
-                ) : null}
-              </div>
-            );
-          })}
+          {/* FE-C2-02 (D162): memoised cards with stable handlers, so a panel keystroke renders none of them. */}
+          {contracts.map((contract) => (
+            <ContractCard
+              key={contract.id}
+              contract={contract}
+              open={expanded.includes(contract.id)}
+              isSelected={selectedContractId === contract.id}
+              currency={currency}
+              locale={locale}
+              targets={targets.byContract.get(contract.id) ?? NO_TARGETS}
+              selectedTargetId={selectedTargetId}
+              writesDisabled={targetWritesDisabled}
+              onHeaderClick={onCardHeaderClick}
+              onToggleOpen={onCardToggleOpen}
+              onSelectTarget={onCardSelectTarget}
+              onAddTarget={onCardAddTarget}
+              onEditTarget={onCardEditTarget}
+              onDeleteTarget={onCardDeleteTarget}
+            />
+          ))}
         </div>
       )}
 
@@ -1372,13 +1331,9 @@ function ContractsScreenBody() {
           // `pcf_…_PaymentTarget_Buttons_Save` is a PowerCAT `ActionButton` with `IconColor: If(Disabled, black, white)`
           // (`:3048-3077`): disabled, a transparent "✓ Save", not Fluent's grey filled button.
           subtleWhenDisabled
-          disabled={busy || !ready.targets || !canSavePaymentTarget({
-            form: targetForm,
-            projectStart: project?.startDate,
-            targets: contractTargets,
-            ...(selectedTargetId ? { editingTargetId: selectedTargetId } : {}),
-            locale,
-          })} />}
+          // FE-C2-03 (D162): `canSavePaymentTarget` is `paymentTargetErrors(…).length === 0`, and `targetErrors` above is that
+          // call with the same arguments, so the panel is not validated twice per render.
+          disabled={busy || !ready.targets || targetErrors.length > 0} />}
       >
         <CostField
           label={MSG.description}
@@ -1656,7 +1611,12 @@ function ParentCheckbox({
  */
 const useDevcoStyles = makeStyles({ leaves: { ...canvasScrollbar } });
 
-function DevCoAccountPicker({
+/*
+ * FE-C2-01 (D162): memoised. Every prop is stable across a keystroke in the contract panel (the tree, the cost and
+ * description maps are memoised, the handlers are `useCallback`s or state setters), so typing no longer re-renders every
+ * level-1 row and the open row's leaves.
+ */
+const DevCoAccountPicker = memo(function DevCoAccountPicker({
   tree, locale, leafCosts, contractDescriptionById, expandedId, onExpand, onToggleLeaf, onToggleParent,
 }: {
   tree: readonly AccountNode[];
@@ -1670,6 +1630,7 @@ function DevCoAccountPicker({
   onToggleLeaf: (id: string, checked: boolean) => void;
   onToggleParent: (parentId: string) => void;
 }) {
+  probeRender("DevCoAccountPicker");
   const parents = devCoParents(tree);
   const devco = useDevcoStyles();
   return (
@@ -1759,7 +1720,110 @@ function DevCoAccountPicker({
       })}
     </div>
   );
-}
+});
+
+/**
+ * One `gal_Contracts_List` card: its header band and, while unfolded, its body. Memoised (FE-C2-02, D162): every prop is
+ * a value of this card or a stable handler taking the contract id, so a keystroke in a panel renders no card, and a fold,
+ * a selection or a target change renders only the cards whose own props changed.
+ */
+const ContractCard = memo(function ContractCard({
+  contract, open, isSelected, currency, locale, targets, selectedTargetId, writesDisabled,
+  onHeaderClick, onToggleOpen, onSelectTarget, onAddTarget, onEditTarget, onDeleteTarget,
+}: {
+  contract: BopContract;
+  /** `ThisItem.IsFolded`, inverted. */
+  open: boolean;
+  /** This card is the screen's selected contract (`locSelectedContract`). */
+  isSelected: boolean;
+  currency: string;
+  locale: string | undefined;
+  targets: readonly PaymentTarget[];
+  selectedTargetId: string | undefined;
+  writesDisabled: boolean;
+  onHeaderClick: (contractId: string) => void;
+  onToggleOpen: (contractId: string) => void;
+  onSelectTarget: (contractId: string, targetId: string) => void;
+  onAddTarget: (contractId: string) => void;
+  onEditTarget: (contractId: string, t: PaymentTarget) => void;
+  onDeleteTarget: (contractId: string, t: PaymentTarget) => void;
+}) {
+  return (
+    <div
+      className="canvas-contract-card"
+      data-open={open}
+      data-selected={isSelected}
+    >
+      <div
+        className="canvas-contract-head"
+        style={{ ["--contract-type" as string]: TYPE_COLOUR[contract.contractType] }}
+      >
+        {/* `img_Contracts_List_CardHeaderRadioSelection` — CircleDotBlue / CircleEmpty. */}
+        <input
+          type="radio"
+          name="contract-selection"
+          value={contract.id}
+          checked={isSelected}
+          aria-label={`Select ${contract.description ?? ""}`}
+          data-testid={`img_Contracts_List_CardHeaderRadioSelection-${contract.id}`}
+          // A click on the radio is the header's click (it toggles); `onChange` alone never
+          // fires for the radio that is already checked.
+          onClick={() => onHeaderClick(contract.id)}
+          onChange={() => undefined}
+        />
+        {/*
+          * `btn_Contracts_List_CardHeader_TransparentButton` covers the band and
+          * TOGGLES the selection — clicking the selected contract clears it. It
+          * does not fold anything.
+          */}
+        <button
+          type="button"
+          className="canvas-contract-title"
+          aria-label="Select contract"
+          data-testid={`btn_Contracts_List_CardHeader_TransparentButton-${contract.id}`}
+          title={contractCardTitle(contract)}
+          onClick={() => onHeaderClick(contract.id)}
+        >
+          {contractCardTitle(contract)}
+        </button>
+        {/*
+          * `ico_…_CardHeader_Down` / `_Up` — one is `Visible: =ThisItem.IsFolded`,
+          * and folding is ALL they do. A real button, not decoration: it is the
+          * only way to open a card.
+          */}
+        <button
+          type="button"
+          className="canvas-contract-chevron"
+          aria-expanded={open}
+          aria-controls={`contract-body-${contract.id}`}
+          aria-label={`${open ? "Collapse" : "Expand"} ${contract.description ?? ""}`}
+          data-testid={`ico_Contracts_List_CardHeader_${open ? "Up" : "Down"}-${contract.id}`}
+          onClick={() => onToggleOpen(contract.id)}
+        >
+          <ExpandChevron open={open} />
+        </button>
+      </div>
+
+      {open ? (
+        <div className="canvas-contract-body" id={`contract-body-${contract.id}`}>
+          <ContractCardBody
+            contract={contract}
+            currency={currency}
+            locale={locale}
+            targets={targets}
+            selectedTargetId={selectedTargetId}
+            isSelectedContract={isSelected}
+            writesDisabled={writesDisabled}
+            onSelectTarget={(targetId) => onSelectTarget(contract.id, targetId)}
+            onAddTarget={() => onAddTarget(contract.id)}
+            onEditTarget={(t) => onEditTarget(contract.id, t)}
+            onDeleteTarget={(t) => onDeleteTarget(contract.id, t)}
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+});
 
 /** The body of a contract card: its figures and its payment-target table. */
 function ContractCardBody({
@@ -1780,6 +1844,7 @@ function ContractCardBody({
   onEditTarget: (t: PaymentTarget) => void;
   onDeleteTarget: (t: PaymentTarget) => void;
 }) {
+  probeRender(`ContractCardBody:${contract.id}`);
   // The payment-target bar: no button inset, so its `+` sits on the card body's 20 px edge,
   // over the targets table and under "Payment Targets" (21 Oct 2026).
   const commandRow = useCommandRowStyles();

@@ -21,6 +21,7 @@
  * Edit, Calendar, CalendarReply (`MDL2_PATH`) and the two Orders glyphs (the shared `ActivateOrdersIcon` /
  * `DeactivateOrdersIcon`) are the MDL2 outlines themselves (21 Nov 2026); Delete is still a Fluent v9 lookalike.
  */
+import { memo } from "react";
 import {
   Button, Spinner, Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow, Text, Tooltip,
   makeStyles, mergeClasses, tokens,
@@ -31,6 +32,7 @@ import type { ChecklistTask } from "@/data/adminDefaultChecklists";
 import { palette } from "@/theme/tokens";
 import { useRowActionStyles } from "@/theme/buttonStyles";
 import { HOLDING_CUT, truncateHolding, yesNo } from "./rules";
+import { probeRender } from "@/platform/renderProbe";
 
 /**
  * The canvas row icons that Fluent v9 only approximates, as the MDL2 glyph's own outline on its 2048-unit em, from
@@ -160,10 +162,15 @@ export interface TaskTableProps {
   onDelete: (task: ChecklistTask) => void;
 }
 
-export function TaskTable({
+/**
+ * FE-AD-03 (D162): memoised. The screen passes a stable `lockTip` (rebuilt only when the locks change) and stable handlers, so a
+ * confirmation, the drawer or the overlay renders no table (UT-ADCHK-FE-002).
+ */
+export const TaskTable = memo(function TaskTable({
   clusterId, caption, tasks, lockTip, busy, readOnly = false, pendingTaskId = null,
   onToggleCompletion, onChangeStatus, onEdit, onDelete,
 }: TaskTableProps) {
+  probeRender(`TaskTable:${clusterId}`);
   const styles = useStyles();
   const feedback = useRowActionStyles();
 
@@ -284,4 +291,4 @@ export function TaskTable({
       </Table>
     </div>
   );
-}
+});

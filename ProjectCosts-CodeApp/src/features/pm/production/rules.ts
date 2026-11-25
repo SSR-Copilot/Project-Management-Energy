@@ -935,6 +935,8 @@ export function canSaveYield(args: {
   seasonality: readonly SeasonalityRow[];
   negativePrices: readonly NegativePriceRow[];
   lang?: Lang;
+  /** `yieldErrors(view, form, technology, lang)` when the caller has it already (FE-P2-03): the same result, read once. */
+  errors?: YieldErrors;
 }): boolean {
   const { form: f, view: v, technology } = args;
   const lang = args.lang ?? "en-US";
@@ -942,7 +944,7 @@ export function canSaveYield(args: {
   if (blank(f.description)) return false;
   if (technology === "WTG" && blank(v.windSpeed)) return false;
   if (technology === "PV" && f.allocationInput === "Input Irradiation" && blank(v.irradiation)) return false;
-  if (Object.values(yieldErrors(v, f, technology, lang)).some((e) => e !== null)) return false;
+  if (Object.values(args.errors ?? yieldErrors(v, f, technology, lang)).some((e) => e !== null)) return false;
   if (f.uncertaintyInput === "Input Uncertainty" ? blank(v.uncertainty) : blank(v.netP75) || blank(v.netP90)) return false;
   if (f.lossesInput === "Input losses" ? blank(v.totalLosses) || blank(v.grossYield) : blank(v.netP50)) return false;
   if (f.considerSeasonality && !isSeasonalityValid(args.seasonality, lang)) return false;
@@ -979,13 +981,15 @@ export function seasonalityFromStored(stored: StoredSeasonality | null, lang: La
 
 /**
  * A month cell's `OnChange` (Y:4560-4603): every row loses its standard flag, then the edited row
- * keeps the typed text and — when it is a number — its value.
+ * keeps the typed text and — when it is a number — its value. A row that is not the edited one and has
+ * no standard flag left is returned as it is (the same object, the same values), so a memoized month row
+ * is re-rendered only for its own edit (FE-P2-03, D162; UT-PROD-FE-004).
  */
 export function applyMonthEdit(rows: readonly SeasonalityRow[], id: number, text: string, lang: Lang = "en-US"): SeasonalityRow[] {
   const n = valueOf(text, lang);
   return rows.map((r) => (r.id === id
     ? { ...r, isStandard: false, text, value: n === null ? r.value : n }
-    : { ...r, isStandard: false }));
+    : r.isStandard === false ? r : { ...r, isStandard: false }));
 }
 
 /** `Sum(gal.AllItems, Value(MonthValue.Text))` — a cell that is not a number adds nothing. */

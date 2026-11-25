@@ -74,7 +74,10 @@ export function ReportProblemPanel({
       "Recent trace:",
       ...traces().slice(-15).map((t) => `  ${t.at} [${t.severity}] ${t.message}`),
     ].join("\n");
-  }, [session, project, envVars]);
+    // D162 (FE-SH-08): built when the panel OPENS, so it holds the error that made the user open it. Keyed on the session alone it
+    // was a snapshot from the last session change, usually older than that error. `open` is read only to key the snapshot.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, session, project, envVars]);
 
   const canSubmit = title.trim() !== "" && description.trim() !== "";
 

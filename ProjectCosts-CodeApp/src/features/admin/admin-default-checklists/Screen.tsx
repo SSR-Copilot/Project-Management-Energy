@@ -42,13 +42,13 @@
  * Every panel, dialog, selection and fold state is component state, so it starts closed and
  * collapsed on every visit; only the selected tab lives in the URL (`?tab=`).
  */
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Spinner, makeStyles, mergeClasses, tokens } from "@fluentui/react-components";
 import {
   CommandBar, ConfirmDialog, LoadingOverlay, NoticeBar, QueryStates, ReorderPanel, SettingsAccordion,
   SettingsTabStrip, VisuallyHidden, useNotify, HINTS,
-  useQueryHealth,
+  useQueryHealth, useStableCallback,
 } from "@/components";
 import { useAdminAccess } from "@/app/useCurrentUser";
 import { useBusyRunner } from "@/features/shared/useBusyRunner";
@@ -68,7 +68,7 @@ import {
   REORDER_HELP, REORDER_STALE_MESSAGE, REORDER_TITLE, busyText, clusterCaption, deleteDialog, emptyTaskForm, findGroup,
   formFromTask, groupTasksByCluster, isTaskFormValid, lockState, lockTooltipFor, nextOrder,
   renumberAfterDelete, reorderPatch, reorderSnapshotStale, resolveTabId, snapshotGroup,
-  sortTabs, statusDialog, successText, taskFormChanged, type ReorderSnapshotRow,
+  sortTabs, statusDialog, successText, type ReorderSnapshotRow,
 } from "./rules";
 import { TaskEditorDrawer } from "./TaskEditorDrawer";
 import { TaskTable } from "./TaskTable";
@@ -110,6 +110,12 @@ const CANVAS_POPUP = {
   confirmIcon: "checkmark", cancelIcon: "dismiss",
 } as const;
 
+/** An empty cluster's rows: one array, so its memoised `TaskTable` keeps its props. */
+const NO_TASKS: readonly ChecklistTask[] = [];
+
+/** The drawer's seed while no editor is open (it is re-seeded on every open). */
+const EMPTY_FORM = emptyTaskForm();
+
 type Editor = {
   mode: "create" | "edit";
   clusterId: string;
@@ -117,8 +123,7 @@ type Editor = {
   taskId: string | null;
   /** The tab the task belongs to — the BU source for the edit write. */
   tabId: string | null;
-  form: TaskForm;
-  /** The values the panel opened with; `form` differing from it makes the panel dirty. */
+  /** The values the panel opens with. The form itself is the drawer's own state (FE-AD-02, D162); Save hands it back. */
   seed: TaskForm;
 };
 
@@ -187,8 +192,11 @@ export default function CheckListSettingsScreen() {
   // so a row is only called "in use by a Project Gate" when it actually is.
   const locksUnknown = locksQuery.isError;
   const locksLoading = !locksUnknown && !locksQuery.data;
-  const rowLockTip = (task: ChecklistTask) =>
-    lockTooltipFor(lockState(task.id, { isError: locksQuery.isError, data: locksQuery.data }));
+  // FE-AD-03 (D162): stable until the locks change, so the memoised `TaskTable`s keep their props.
+  const rowLockTip = useCallback(
+    (task: ChecklistTask) => lockTooltipFor(lockState(task.id, { isError: locksQuery.isError, data: locksQuery.data })),
+    [locksQuery.isError, locksQuery.data],
+  );
   const rowLocked = (task: ChecklistTask) => rowLockTip(task) !== null;
 
   /* ───────────────────────────────────────────────────────────── events ── */
@@ -211,16 +219,16 @@ export default function CheckListSettingsScreen() {
   /** `pcf_CommandBar_Cluster_….OnSelect` "addNewChecklistEntity": opens the panel and sets `locSelectedCluster` (L345-358). */
   const openAdd = (clusterId: string) => {
     setSelectedClusterId(clusterId);
-    editor.open({ mode: "create", clusterId, taskId: null, tabId, form: emptyTaskForm(), seed: emptyTaskForm() });
+    editor.open({ mode: "create", clusterId, taskId: null, tabId, seed: emptyTaskForm() });
   };
 
-  const openEdit = (task: ChecklistTask) => {
+  const openEdit = useStableCallback((task: ChecklistTask) => {
     if (rowLocked(task)) return;
     editor.open({
       mode: "edit", clusterId: task.clusterId ?? "", taskId: task.id, tabId: task.tabId ?? tabId,
-      form: formFromTask(task), seed: formFromTask(task),
+      seed: formFromTask(task),
     });
-  };
+  });
 
   /**
    * Save — `pcf_but_Admin_Checklist_Form_Buttons_Save.OnChange` (L1283-1361). A create is the
@@ -232,23 +240,23 @@ export default function CheckListSettingsScreen() {
    * failed save lost the input silently. Here the panel closes only on success; on failure it stays
    * open with the user's input and the error.
    */
-  const saveEditor = async () => {
+  const saveEditor = async (form: TaskForm) => {
     const current = editor.panel;
     if (!current) return;
     if (!canEdit) { editor.setError(OUT_OF_SCOPE_MESSAGE); return; }
     // The blank-name message is already showing (canvas `Visible: IsBlank(Trim(…))`, L1056) and Save is disabled.
-    if (!isTaskFormValid(current.form)) return;
+    if (!isTaskFormValid(form)) return;
     const tab = sortedTabs.find((t) => t.id === (current.tabId ?? tabId));
     // NEW — no canvas equivalent.
     if (!tab) { editor.setError("The selected country/technology no longer exists. Reload the page."); return; }
     try {
-      await runner.run(busyText.save(current.form.name), () =>
+      await runner.run(busyText.save(form.name), () =>
         current.mode === "create" || !current.taskId
           ? saveTask.mutateAsync({
               mode: "create",
-              args: { tab, clusterId: current.clusterId, form: current.form, order: nextOrder(groups.get(current.clusterId) ?? []) },
+              args: { tab, clusterId: current.clusterId, form, order: nextOrder(groups.get(current.clusterId) ?? []) },
             })
-          : saveTask.mutateAsync({ mode: "edit", id: current.taskId, form: current.form, tab }));
+          : saveTask.mutateAsync({ mode: "edit", id: current.taskId, form, tab }));
       // No success toast: the canvas writes "Checklist item was successfully saved." into its
       // loading dialog and blanks it in the same handler (L1351-1361), so nothing is ever shown.
       editor.close();
@@ -329,6 +337,11 @@ export default function CheckListSettingsScreen() {
       }
     }
   }, { closeFirst: true });
+
+  // FE-AD-03: the task tables' row handlers are stable (`useStableCallback`; `openEdit` above too).
+  const toggleCompletionOf = useStableCallback((t: ChecklistTask) => void onToggleCompletion(t));
+  const askStatus = useStableCallback((t: ChecklistTask) => { if (!rowLocked(t)) dialog.ask("status", t); });
+  const askDelete = useStableCallback((t: ChecklistTask) => { if (!rowLocked(t)) dialog.ask("delete", t); });
 
   const liveGroup = (clusterId: string) => findGroup(groups, clusterId)?.tasks ?? [];
 
@@ -492,15 +505,15 @@ export default function CheckListSettingsScreen() {
                       <TaskTable
                         clusterId={cluster.id}
                         caption={caption}
-                        tasks={groups.get(cluster.id) ?? []}
+                        tasks={groups.get(cluster.id) ?? NO_TASKS}
                         lockTip={rowLockTip}
                         busy={busy}
                         readOnly={!canEdit}
                         pendingTaskId={runner.inline ?? null}
-                        onToggleCompletion={(t) => void onToggleCompletion(t)}
-                        onChangeStatus={(t) => { if (!rowLocked(t)) dialog.ask("status", t); }}
+                        onToggleCompletion={toggleCompletionOf}
+                        onChangeStatus={askStatus}
                         onEdit={openEdit}
-                        onDelete={(t) => { if (!rowLocked(t)) dialog.ask("delete", t); }}
+                        onDelete={askDelete}
                       />
                     ) : null}
                   </>
@@ -514,14 +527,13 @@ export default function CheckListSettingsScreen() {
       {/* Add/Edit drawer */}
       <TaskEditorDrawer
         open={editorPanel !== null}
+        seedKey={editor.key}
         mode={editorPanel?.mode ?? "create"}
-        form={editorPanel?.form ?? emptyTaskForm()}
-        dirty={editorPanel ? taskFormChanged(editorPanel.seed, editorPanel.form) : false}
+        seed={editorPanel?.seed ?? EMPTY_FORM}
         error={editor.error ?? null}
         saving={saveTask.isPending}
         readOnly={!canEdit}
-        onChange={(form) => editor.patch({ form })}
-        onSave={() => void saveEditor()}
+        onSave={(form) => void saveEditor(form)}
         onCancel={editor.close}
       />
 

@@ -5,7 +5,8 @@
  * were registered for this screen with `pac code add-data-source`, one at a time (77 → 81):
  * `vsb_financingcategory`, `vsb_financinginput`, `vsb_financinginputsrepaymentamount` and
  * `vsb_financinginputstepupmargins`. The project row is mapped by `toRevenueProject`
- * (`data/revenues.ts`), the generator types by `listGeneratorTypes` (`data/generators.ts`) — reused, not copied (rule 17);
+ * (`data/pmProjectRow.ts`, shared with Revenues), the generator types by `listGeneratorTypes` (`data/generators.ts`, loaded
+ * with `import()` when the turbine count is first read, FE-P2-05) — reused, not copied (rule 17);
  * the active turbine count reads `vsb_generatorinprojects` itself with the server-side `statecode eq 0` filter (OPT-07e).
  *
  * `Assumptions Debt SQL`, `Assumptions Banks SQL` and `AssumptionsKfWTrancheSQL` are Fabric SQL
@@ -29,16 +30,15 @@ import {
   type BankRow, type DebtAssumptionRow, type FinanceProject, type FinancingCategory,
   type FinancingInputRow, type StoredRepaymentRow, type StoredStepUpMarginRow,
 } from "@/features/pm/finance/rules";
-import { PROJECT_COL } from "@/features/pm/revenues/rules";
+import { PROJECT_COL } from "@/features/pm/shared/projectRow";
 import "./financeBulk"; // registers the schedule tables with the bulk backend (a side effect)
 import { financePerf } from "./financeFlags";
 import { mapLimit } from "./concurrency";
 import { fetchAll, fetchPage } from "./client";
 import { ACTIVE, and, chunk, eq, guid, lookupEq, lookupIn } from "./odata";
 import { rowStr as str, rowNum as num } from "./rowValues";
-import { PROJECT_SELECT, toRevenueProject } from "./revenues";
+import { PROJECT_SELECT, toRevenueProject } from "./pmProjectRow";
 import { listProjectStates } from "./generalData";
-import { listGeneratorTypes } from "./generators";
 
 /** Cost-chunk reads in flight at once (`parallelReads`): a read shares the 52-request ceiling with the screen's other reads. */
 const READ_CONCURRENCY = 8;
@@ -214,6 +214,9 @@ async function readInOrder<T, R>(parts: readonly T[], read: (part: T) => Promise
  * their turbines through the polymorphic `vsb_moduletypeinprojectid`.
  */
 export async function countActiveTurbines(projectId: string): Promise<number> {
+  // A dynamic import (FE-P2-05, D162): the Generators data module is fetched only when the Decommissioning card or panel
+  // first needs the count (`lazyReads`), not with the Finance screen's chunk.
+  const { listGeneratorTypes } = await import("./generators");
   const types = await listGeneratorTypes(projectId);
   if (types.length === 0) return 0;
   // OPT-07e: the `statecode eq 0` clause is sent to the server and only the id is selected, so the active rows come back and the

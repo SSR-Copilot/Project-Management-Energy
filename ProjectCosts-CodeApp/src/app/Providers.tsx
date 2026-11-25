@@ -7,6 +7,7 @@ import { vsbTheme } from "@/theme/fluent";
 import { isRetryable } from "@/platform/errors";
 import { installE2EHook } from "@/platform/e2eHook";
 import { attachQueryLog } from "./queryLog";
+import { structuralSharingWithDates } from "./queryStructuralSharing";
 import { SessionProvider } from "./SessionContext";
 
 /**
@@ -24,6 +25,8 @@ export const queryClient = new QueryClient({
       // The Cost app is opened per project from a deep link and left open; refetching on
       // window focus is what keeps a second user's changes from being overwritten blindly.
       refetchOnWindowFocus: true,
+      // D162 (FE-SH-01): an unchanged refetch keeps the cached objects even when they hold `Date`s, so it re-renders nothing.
+      structuralSharing: structuralSharingWithDates,
     },
     mutations: { retry: false },
   },
