@@ -2,7 +2,7 @@
  * Project General Milestones Screen — unit tests.
  * IDs are the spec's (UT-MSTONE-nnn). Pure functions only.
  */
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { ES, CHOICE } from "@/data/dataverseNames";
 import { PROJECT_COL } from "@/features/pm/general-data/rules";
 import {
@@ -25,6 +25,8 @@ import {
   type RevenueAssumptionRow, type ProjectGenerator, type MilestoneKey,
 } from "./rules";
 import { LEAVE_DIALOG as MS_LEAVE_DIALOG } from "./rules";
+import { setMilestonesRepriceTogether } from "./milestonesPerfFlags";
+import { executePlan, type PlanClient } from "@/data/executePlan";
 import { formatCanvasDate } from "@/domain/canvasDate";
 import { Vsb_projectrevenuesvsb_hedgetype, Vsb_projectrevenuesvsb_label } from "@/generated/models/Vsb_projectrevenuesModel";
 import { Vsb_fabricsyncjobsvsb_jobstatuscode } from "@/generated/models/Vsb_fabricsyncjobsModel";
@@ -1058,5 +1060,83 @@ describe("D128 — the date picker box text", () => {
   it("UT-MSTONE-084 the control still decides the box styling: exactly Project Start and Cluster 3 are the modern pickers", () => {
     expect([...MODERN_PICKER_KEYS]).toEqual(["StartDate", "ApplicationSubmitted"]);
     for (const k of MILESTONE_KEYS) expect(isModernPicker(k)).toBe((MODERN as readonly string[]).includes(k));
+  });
+});
+
+/* ═══════════════════════════════════════ PB-12: the re-pricing writes together */
+
+describe("UT-MSTONE-DVOPT PB-12 the generator-type updates go out together", () => {
+  afterEach(() => { setMilestonesRepriceTogether(null); });
+  const gens: ProjectGenerator[] = [1, 2, 3].map((n) => ({
+    id: `g${n}`, count: 1, wtgPrices: [10 * n], additionalFoundationCost: null, foundationCostIncluded: true, generatorsCost: 10 * n,
+  }));
+  const planWith = () => planSaveMilestones({
+    project: project(), form: formOf(), repricedGenerators: gens, revenueDraft: null, language: "en-US",
+  });
+  const strip = (ws: ReturnType<typeof planWith>["writes"]) => ws.map((w) => ({ op: w.op, entitySet: w.entitySet, id: w.id, data: w.data, reason: w.reason }));
+
+  it("UT-MSTONE-DVOPT-001 ON: the type updates are ONE concurrent group, stop-on-failure; the project patches stay sequential, the plant cost last", () => {
+    const { writes } = planWith();
+    expect(writes.map((w) => w.entitySet)).toEqual([
+      ES.projects, ES.generatorTypeInProjects, ES.generatorTypeInProjects, ES.generatorTypeInProjects, ES.projects,
+    ]);
+    const types = writes.slice(1, 4);
+    expect(types.every((w) => w.concurrent === true && w.stopOnFailure === true)).toBe(true);
+    expect(new Set(types.map((w) => w.concurrencyGroup)).size).toBe(1);
+    expect(writes[0]!.concurrent).toBeUndefined();
+    expect(writes[4]!.concurrent).toBeUndefined();
+    expect(writes[4]!.data).toEqual({ [PROJECT_COL.plantWtgCost]: 60 });
+  });
+
+  it("UT-MSTONE-DVOPT-002 differential: ON and OFF plan the same rows, payloads, order, reasons and log; OFF has no concurrent flags", () => {
+    const on = planWith();
+    setMilestonesRepriceTogether(false);
+    const off = planWith();
+    expect(strip(off.writes)).toEqual(strip(on.writes));
+    expect(off.log).toEqual(on.log);
+    expect(off.steps.map((s) => s.kind)).toEqual(on.steps.map((s) => s.kind));
+    expect(off.writes.some((w) => w.concurrent)).toBe(false);
+  });
+
+  it("UT-MSTONE-DVOPT-003 no re-pricing (FID unchanged): the plan has no concurrent write at all", () => {
+    const plan = planSaveMilestones({ project: project(), form: formOf(), repricedGenerators: null, revenueDraft: null, language: "en-US" });
+    expect(plan.writes.some((w) => w.concurrent)).toBe(false);
+  });
+  /** The real planner's plan, run through the REAL executePlan against a stub client; `failId` makes that row's PATCH fail. */
+  async function run(failId?: string) {
+    const sent: string[] = [];
+    const ok = { success: true as const, data: {} };
+    const client = {
+      createRecordAsync: vi.fn(async () => ok),
+      deleteRecordAsync: vi.fn(async () => ({ success: true as const, data: undefined })),
+      updateRecordAsync: vi.fn(async (_t: string, id: string) => {
+        sent.push(id);
+        return id === failId ? { success: false as const, data: undefined, error: { message: "boom", status: 500 } } : ok;
+      }),
+    } as unknown as PlanClient;
+    const out = await executePlan(planWith(), "test", client).then(() => null, (e: unknown) => e);
+    return { sent, error: out };
+  }
+
+  it("UT-MSTONE-DVOPT-004 run ON and OFF: every type is re-priced, then the plant cost is the LAST write; same writes either way", async () => {
+    const on = await run();
+    setMilestonesRepriceTogether(false);
+    const off = await run();
+    for (const r of [on, off]) {
+      expect(r.error).toBeNull();
+      expect(r.sent[0]).toBe("p-1");
+      expect(r.sent.at(-1)).toBe("p-1");
+      expect(r.sent.slice(1, 4).sort()).toEqual(["g1", "g2", "g3"]);
+    }
+    expect(off.sent.slice(1, 4)).toEqual(["g1", "g2", "g3"]);
+  });
+
+  it("UT-MSTONE-DVOPT-005 failure injection: a failing type update stops the save BEFORE the plant-cost PATCH, ON and OFF alike", async () => {
+    for (const on of [true, false]) {
+      setMilestonesRepriceTogether(on);
+      const { sent, error } = await run("g1");
+      expect(error).not.toBeNull();
+      expect(sent.filter((id) => id === "p-1")).toHaveLength(1); // the first project patch only: no plant-cost PATCH
+    }
   });
 });

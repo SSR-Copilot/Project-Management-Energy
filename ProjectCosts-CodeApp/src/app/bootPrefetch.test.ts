@@ -5,6 +5,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient } from "@tanstack/react-query";
 import { startupFlags } from "./startupFlags";
+import { resetBootDvopt, setBootDvoptForTests } from "@/data/bootDvoptFlags";
 
 const calls = vi.hoisted(() => ({
   list: [] as string[], launchParams: {} as Record<string, string>, rejectProjects: false,
@@ -15,6 +16,11 @@ const note = (what: string) => { calls.list.push(what); };
 
 vi.mock("@/data/projects", () => ({
   loadProjectPage: vi.fn(async (req: { page: number }) => { note(`projectPage:${req.page}`); if (calls.rejectProjects) throw new Error("boom"); return { rows: [], totalRows: 0, page: req.page, pageSize: 200, totalPages: 1, hasNext: false }; }),
+  listCountries: vi.fn(async () => { note("countries"); return []; }),
+}));
+// PB-06: the overview's country list is a view of the one `vsb_countries` read (`data/countries.ts`).
+vi.mock("@/data/countries", async (original) => ({
+  ...(await original<typeof import("@/data/countries")>()),
   listCountries: vi.fn(async () => { note("countries"); return []; }),
 }));
 vi.mock("@/data/project", () => ({
@@ -75,6 +81,7 @@ beforeEach(() => {
   calls.rejectSession = false;
   calls.scopes.length = 0;
   startupFlags.bootPrefetch = true;
+  resetBootDvopt();
 });
 
 describe("boot prefetch", () => {
@@ -171,7 +178,9 @@ describe("boot prefetch", () => {
     expect(calls.list).toEqual(expect.arrayContaining(["chunk:cost:capex", "chunk:cost:add-from-table", `sessionProject:${ID}`]));
   });
 
-  it("UT-BOOT-OPT-012 another Project Management screen starts its chunk and the ROW-ONLY (pm) session project, nothing of its own data", async () => {
+  it("UT-BOOT-OPT-012 another Project Management screen starts its chunk and the ROW-ONLY (pm) session project, nothing of its own data (PB-03 switch OFF)", async () => {
+    // PB-03 (`BOOT_PREFETCH_SCREEN_READS`) ON starts the screen's own reads too: `pmScreenPrefetch.test.tsx` (UT-BOOT-SCREENS-*).
+    setBootDvoptForTests({ prefetchScreenReads: false });
     const qc = newClient();
     await boot(qc, `#/project/team?projectId=${ID}`);
     expect([...calls.list].sort()).toEqual(["chunk:pm:team", `sessionProject:${ID}`]);

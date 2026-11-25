@@ -9,8 +9,11 @@
  * No React in this file: it is imported by the entry bundle's prefetch step.
  */
 import { queryOptions } from "@tanstack/react-query";
+import { bootDvopt } from "@/data/bootDvoptFlags";
+import { COUNTRIES_STALE_MS, activeOnly, listCountries as listAllCountries } from "@/data/countries";
+import { qk } from "@/data/keys";
 import {
-  listCountries, loadProjectPage, loadProjectStateOrder,
+  listCountries, loadProjectPage, loadProjectStateOrder, type Lookup,
 } from "@/data/projects";
 import { projectStateLookup } from "@/data/projectStateLookup";
 import { EMPTY_APPLIED_CAPACITY, resolveAppliedCapacity, type ProjectFilter, type SortState } from "./rules";
@@ -64,12 +67,28 @@ export function projectPageOptions(args: ProjectPageArgs) {
   });
 }
 
-/** `cbx_..._Filter_Country.Items = Countries`. */
-export const countriesQueryOptions = () => queryOptions({
-  queryKey: ["countries"] as const,
-  queryFn: listCountries,
-  staleTime: 30 * 60 * 1000,
-});
+/**
+ * `cbx_..._Filter_Country.Items = Countries`.
+ *
+ * PB-06 (`COUNTRIES_ONE_KEY`): a VIEW of the one `vsb_countries` read (`data/countries.ts`, `qk.adminCountries`, all rows, active and
+ * inactive, ordered `vsb_name asc` on the server): the ACTIVE rows in that order, as `{ id, name }`. The same rows, in the same
+ * order, as this screen's own `statecode eq 0` read (which is `listCountries` of `data/projects.ts`, kept for the switch OFF).
+ */
+export const countriesQueryOptions = () => {
+  const own = queryOptions({
+    queryKey: ["countries"] as const,
+    queryFn: listCountries,
+    staleTime: 30 * 60 * 1000,
+  });
+  if (!bootDvopt().countriesOneKey) return own;
+  // The cache entry holds the shared `CountryRecord[]`; an observer sees the `select`ed `{ id, name }` list, the type the screen reads.
+  return queryOptions({
+    queryKey: qk.adminCountries,
+    queryFn: listAllCountries,
+    staleTime: COUNTRIES_STALE_MS,
+    select: (rows): Lookup[] => activeOnly(rows).map((c) => ({ id: c.id, name: c.name })),
+  }) as unknown as typeof own;
+};
 
 /** The Status filter's states: the one shared `Project States` cache entry (D159), read through `overviewStates` by the hook. */
 export { projectStatesQueryOptions } from "@/data/projectStates";

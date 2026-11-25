@@ -13,7 +13,7 @@ import {
   AUTO_SKIPPED_COMMENT, UNKNOWN_CLUSTER_NO, COMPLETION_DATE_MESSAGE,
   COMMENT_REQUIRED_MESSAGE, PAGE_LOCK_TITLE,
   clusterNo, startClusterNo, hasRealGateProgress, expectedApprovalState,
-  expectedApprovalComment, shouldBackfillSkippedClusters, planSkippedClusterBackfill,
+  expectedApprovalComment, shouldBackfillSkippedClusters, planSkippedClusterBackfill, backfillUpdateIds,
   buildOperationalSequence, buildDisplaySequence, previousState, nextState,
   defaultSelectedCluster, planEnsureTracking, shouldMaterialiseChecklist,
   planChecklistMaterialisation, rowApprovalIcon, rowActionLabel, rowActionEnabled,
@@ -1752,5 +1752,59 @@ describe("Only Notifications gates: the screen waits for the gate flow's move", 
     expect(clusterTransitionDone([tracking({ clusterStateId: "s2", approvalClusterState: ACS_T.completed })], "s2")).toBe(true);
     expect(clusterTransitionDone([tracking({ clusterStateId: "s3", approvalClusterState: ACS_T.completed })], "s2")).toBe(false);
     expect(clusterTransitionDone([], "s2")).toBe(false);
+  });
+});
+
+/* ═══════════════════════════════ PB-14: the guarded, grouped back-fill */
+
+describe("UT-CHKLST-DVOPT PB-14 the back-fill writes only trackings that still exist", () => {
+  const ctx = { projectId: "p-1", owningBusinessUnitId: "bu-de" };
+  /** Draft, Cluster 1 and Cluster 2 exist (stale, so each needs an UPDATE); Clusters 3-6 do not (CREATES). */
+  const existing = ALL_STATES.slice(0, 3).map((st, i) => tracking({
+    id: `T-${i}`, clusterStateId: st.id, clusterStateName: st.name, approvalClusterState: ACS.notStarted, approvalComment: "old",
+  }));
+  const strip = (plan: WritePlan) => plan.writes.map((w) => ({ op: w.op, entitySet: w.entitySet, id: w.id, data: w.data, reason: w.reason }));
+
+  it("UT-CHKLST-DVOPT-001 differential: with every id present and no grouping, the plan is exactly the old plan", () => {
+    const old = planSkippedClusterBackfill(ALL_STATES, existing, 3, ctx);
+    const guarded = planSkippedClusterBackfill(ALL_STATES, existing, 3, ctx, { existingTrackingIds: new Set(["t-0", "t-1", "t-2"]) });
+    expect(strip(guarded)).toEqual(strip(old));
+    expect(guarded.log).toEqual(old.log);
+    expect(old.writes.map((w) => w.op)).toEqual(["update", "update", "update", "create", "create", "create", "create"]);
+    expect(backfillUpdateIds(old)).toEqual(["T-0", "T-1", "T-2"]);
+  });
+
+  it("UT-CHKLST-DVOPT-002 a tracking deleted since the list was read gets NO update (not re-created as an orphan); creates stay creates", () => {
+    const plan = planSkippedClusterBackfill(ALL_STATES, existing, 3, ctx, { existingTrackingIds: new Set(["t-0", "t-2"]) });
+    expect(plan.writes.map((w) => `${w.op}:${w.id ?? ""}`)).toEqual(["update:T-0", "update:T-2", "create:", "create:", "create:", "create:"]);
+    expect(plan.writes.some((w) => w.id === "T-1")).toBe(false);
+    // the log lines of the skipped row go with it (one line per write)
+    expect(plan.log).toHaveLength(plan.writes.length);
+    expect(plan.log.some((l) => l.startsWith("Cluster 1:"))).toBe(false);
+    expect(plan.writes.filter((w) => w.op === "create").every((w) => Object.keys(w.data!).filter((k) => k.endsWith("@odata.bind")).length >= 3)).toBe(true);
+  });
+
+  it("UT-CHKLST-DVOPT-003 every tracking gone: no update at all, only the creates", () => {
+    const plan = planSkippedClusterBackfill(ALL_STATES, existing, 3, ctx, { existingTrackingIds: new Set() });
+    expect(plan.writes.every((w) => w.op === "create")).toBe(true);
+    expect(plan.writes).toHaveLength(4);
+  });
+
+  it("UT-CHKLST-DVOPT-004 `together`: the same writes as ONE concurrent group, stop-on-failure; payloads unchanged", () => {
+    const old = planSkippedClusterBackfill(ALL_STATES, existing, 3, ctx);
+    const grouped = planSkippedClusterBackfill(ALL_STATES, existing, 3, ctx, { together: true });
+    expect(strip(grouped)).toEqual(strip(old));
+    expect(grouped.writes.every((w) => w.concurrent === true && w.stopOnFailure === true)).toBe(true);
+    expect(new Set(grouped.writes.map((w) => w.concurrencyGroup)).size).toBe(1);
+    expect(old.writes.some((w) => w.concurrent)).toBe(false);
+  });
+
+  it("UT-CHKLST-DVOPT-005 an up-to-date project plans nothing, grouped or not (idempotent, UT-CHKLST-010)", () => {
+    const done: TrackingRow[] = ALL_STATES.map((st, i) => tracking({
+      id: `t-${i}`, clusterStateId: st.id, clusterStateName: st.name,
+      approvalClusterState: expectedApprovalState(clusterNo(st.name), 3), approvalComment: expectedApprovalComment(clusterNo(st.name), 3),
+    }));
+    const plan = planSkippedClusterBackfill(ALL_STATES, done, 3, ctx, { existingTrackingIds: new Set(), together: true });
+    expect(plan.writes).toEqual([]);
   });
 });

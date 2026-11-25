@@ -37,8 +37,11 @@ describe("Grid Operator reload (OPT-13)", () => {
   });
 
   it("UT-GRIDOP-OPT-203 every query hooks.ts defines is mapped to a table", () => {
-    const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "hooks.ts"), "utf8");
-    const used = [...src.matchAll(/queryKey:\s*qk\.gridOperator\([^,]+,\s*"(\w+)"\)/g)].map((m) => m[1]);
+    // PB-03 / PB-10: the row key lives in `queries.ts`, the project key (Planning's, or its own with the switch off) in `data/planningProjectKey.ts`.
+    const here = dirname(fileURLToPath(import.meta.url));
+    const src = ["queries.ts", join("..", "..", "..", "data", "planningProjectKey.ts")]
+      .map((f) => readFileSync(join(here, f), "utf8")).join("\n");
+    const used = [...src.matchAll(/qk\.gridOperator\([^,]+,\s*"(\w+)"\)/g)].map((m) => m[1]);
     const mapped = Object.values(GRID_OPERATOR_TABLE_READERS).flatMap((f) => f(PID).map((k) => (k as readonly unknown[])[2]));
     expect(used.length).toBe(2);
     for (const u of used) expect(mapped).toContain(u);

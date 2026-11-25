@@ -31,14 +31,15 @@ vi.mock("@/data/generators", async (importOriginal) => ({
   listSubstructureTypes: vi.fn(async () => []), listSimpleTypes: vi.fn(async () => []),
 }));
 vi.mock("@/data/milestones", () => ({ loadPriceInflation: vi.fn() }));
-vi.mock("@/app/SessionContext", () => ({ useSession: () => ({ session: undefined, envVars: {} }) }));
+// PA-12: the stored catalogue is scoped to the environment and the user, so the session must carry both for it to be used.
+vi.mock("@/app/SessionContext", () => ({ useSession: () => ({ session: { environmentId: "env-1", entraObjectId: "user-1" }, envVars: {} }) }));
 vi.mock("@/data/flows", () => ({ requestModulePermission: vi.fn(), cancelModulePermission: vi.fn() }));
 
 const stored = vi.hoisted(() => ({
-  entry: null as null | { data: unknown[] }, reads: 0, writes: [] as unknown[][], throwOnRead: false,
+  entry: null as null | { data: unknown[] }, reads: 0, writes: [] as unknown[][], throwOnRead: false, scopes: [] as unknown[],
 }));
 vi.mock("@/data/generatorCatalogueCache", () => ({
-  generatorCatalogueCache: () => ({
+  generatorCatalogueCache: (scope: unknown) => (stored.scopes.push(scope), {
     read: vi.fn(async () => {
       stored.reads += 1;
       if (stored.throwOnRead) throw new Error("must not escape");
@@ -71,7 +72,7 @@ const turbine = (id: string) => ({ id, name: "WTG_1", typeId: "t1", index: 1 });
 beforeEach(() => {
   calls.list.length = 0; logged.lines.length = 0;
   answers.catalogue = []; answers.catalogueDelay = 0; answers.catalogueFails = false; answers.turbines = []; answers.turbinesByProject = [];
-  stored.entry = null; stored.reads = 0; stored.writes = []; stored.throwOnRead = false;
+  stored.entry = null; stored.reads = 0; stored.writes = []; stored.throwOnRead = false; stored.scopes = [];
 });
 afterEach(() => setGeneratorsPerfFlags(null));
 
@@ -226,6 +227,15 @@ describe("persistCatalogue: the catalogue hook", () => {
     rerender({ on: true });
     await waitFor(() => expect(result.current.data).toEqual([model("fresh")]));
     expect(stored.reads).toBe(1);
+  });
+
+  it("UT-CATSCOPE-010 ON: the hook files the stored copy under the session's environment and user (PA-12)", async () => {
+    setGeneratorsPerfFlags({ persistCatalogue: true });
+    answers.catalogue = [model("fresh")];
+    const { result } = renderHook(() => useGeneratorCatalog(FID), { wrapper: wrap(client()) });
+    await waitFor(() => expect(result.current.hasData).toBe(true));
+    expect(stored.scopes.length).toBeGreaterThan(0);
+    for (const scope of stored.scopes) expect(scope).toEqual({ environmentId: "env-1", userId: "user-1" });
   });
 
   it("UT-GENPERF-286 the switch ships OFF", async () => {

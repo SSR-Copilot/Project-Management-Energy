@@ -46,7 +46,7 @@
  *  `useFinanceWrites`' own `invalidate` list (`financeAll`) is the default for a job that sets none.
  */
 import { useCallback, useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { ES, ES_ADMIN, ES_FINANCE, ES_PLANT } from "@/data/dataverseNames";
 import { financePerf } from "@/data/financeFlags";
 import { qk } from "@/data/keys";
@@ -246,12 +246,26 @@ export function useTotalDevexCapex(projectId: string | undefined, wanted = true)
   return out(q, 0);
 }
 
+/**
+ * PA-10 (dvopt T-22): the ids of the project's WTG types when the Generators warm-up (or the Generators screen) already cached the list
+ * AND it is as fresh as this visit (the same rule as `useVisitStaleTime`: a copy fetched before the visit began counts as stale), else
+ * `null` (the caller reads the ids itself). Reads the cache only; never fetches.
+ */
+export function cachedGeneratorTypeIds(
+  qc: QueryClient, projectId: string, staleTime: (query: { state: { dataUpdatedAt: number } }) => number,
+): string[] | null {
+  const state = qc.getQueryState<readonly { id: string }[]>(qk.generators(projectId, "types"));
+  if (!state || state.data === undefined || state.isInvalidated || state.fetchStatus === "fetching") return null;
+  const age = Date.now() - state.dataUpdatedAt;
+  return age < staleTime({ state: { dataUpdatedAt: state.dataUpdatedAt } }) ? state.data.map((t) => t.id) : null;
+}
+
 /** The active turbines of the project (decommissioning card, Per Turbine). `wanted`: as `useTotalDevexCapex`. */
 export function useActiveTurbineCount(projectId: string | undefined, wanted = true): ScreenData<number> {
   const staleTime = useVisitStaleTime();
   const q = useQuery({
     queryKey: qk.finance(projectId ?? "", "activeTurbines"),
-    queryFn: () => countActiveTurbines(projectId!),
+    queryFn: ({ client }) => countActiveTurbines(projectId!, cachedGeneratorTypeIds(client, projectId!, staleTime)),
     enabled: Boolean(projectId) && wanted,
     staleTime,
     ...EVERY_VISIT,

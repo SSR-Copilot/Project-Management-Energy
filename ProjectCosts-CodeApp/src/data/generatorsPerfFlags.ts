@@ -52,6 +52,23 @@
  *    two sequential reads as before.
  *  - `wideGroups` (default ON): the default in-flight limit of a Generators `together()` group goes from 8 to 16
  *    (`WIDE_GROUP_CONCURRENCY`). The leaf and cascade delete tiers (16 / 4) are NOT changed.
+ *
+ * Network trims of the PM Generators / Production / Finance screens (dvopt programme, plan T-22; findings PA-05, PA-08, PA-09, PA-10,
+ * PA-15). Each is its own rollback and changes WHEN or HOW MUCH is read, never what is written or what the user sees:
+ *  - `flowBesideReads` (default ON; PA-05, "PMA_FLOW_BESIDE_READS"): a delete / replace of a type with an open permission request
+ *    starts the cancellation flow and the Identify reads together; the plan is built only after BOTH have settled, so the flow
+ *    still completes before any delete (D97 order kept). OFF: the flow and the reads one after the other, as before.
+ *  - `productionLeanReload` (default ON; PA-08, "PRODUCTION_LEAN_RELOAD"): the Production save does not re-read the yields the roll-up
+ *    has just read (they seed the cache, and are the rows a re-read would give), and the generation job reloads only the project
+ *    copies (it writes the four CAPEX flags only). OFF: every job reloads `productionAll`.
+ *  - `turbinesRefetchOnce` (default ON; PA-09, "TURBINES_REFETCH_ONCE"): adding, deleting or replacing a type reloads the turbines
+ *    once, after the types have been read, not under the old key and then again under the new one. OFF: both at the same time.
+ *  - `typeReadsLean` (default ON; PA-10, "TYPE_READS_LEAN"): the reads that only need ids select only what they use (Production's
+ *    pre-write reads of the types and the turbines; Finance's active-turbine count), and Finance reuses the types list the warm-up
+ *    cached (as fresh as the visit, D109). OFF: the full lists, as before.
+ *  - `omGuardOneRead` (default ON; PA-15, "OM_GUARD_ONE_READ"): a selected type's O&M guard is ONE read of the project's active O&M
+ *    costs filtered through the cost's device-type lookup, instead of the device-type read and then the O&M read. The two-read
+ *    path runs when the one read is refused by the server. OFF: the two sequential reads, as before.
  */
 export interface GeneratorsPerfFlags {
   targetedReload: boolean;
@@ -77,6 +94,16 @@ export interface GeneratorsPerfFlags {
   deleteReadWaves: boolean;
   /** OPT-07a S4-05 (optimization programme B6). */
   countryFromSharedList: boolean;
+  /** dvopt T-22 (PA-05). */
+  flowBesideReads: boolean;
+  /** dvopt T-22 (PA-08). */
+  productionLeanReload: boolean;
+  /** dvopt T-22 (PA-09). */
+  turbinesRefetchOnce: boolean;
+  /** dvopt T-22 (PA-10). */
+  typeReadsLean: boolean;
+  /** dvopt T-22 (PA-15). */
+  omGuardOneRead: boolean;
 }
 
 /** A partial set of the switches, merged over `GENERATORS_PERF` by whoever accepts overrides. */
@@ -97,6 +124,11 @@ export const GENERATORS_PERF: Readonly<GeneratorsPerfFlags> = {
   wideGroups: true,
   deleteReadWaves: true,
   countryFromSharedList: true,
+  flowBesideReads: false, // integration: off until the owner accepts that the cancellation flow may run before the Identify reads finish (PA-05)
+  productionLeanReload: true,
+  turbinesRefetchOnce: true,
+  typeReadsLean: true,
+  omGuardOneRead: false, // integration: off until a DEV probe shows the navigation-path filter returns the same answer as the two-read guard (QA-03: a safety guard must not fail open)
 };
 
 /** Every switch at its OLD behaviour: today's requests exactly (tests, and the rollback in one line). */
@@ -105,6 +137,7 @@ export const GENERATORS_PERF_ALL_OFF: Readonly<GeneratorsPerfFlags> = {
   readsByProject: false, optimisticToggle: false, persistCatalogue: false,
   relaneWrites: false, replaceLanes: false, trimReload: false, wideGroups: false,
   deleteReadWaves: false, countryFromSharedList: false,
+  flowBesideReads: false, productionLeanReload: false, turbinesRefetchOnce: false, typeReadsLean: false, omGuardOneRead: false,
 };
 
 let override: GeneratorsPerfOverrides | null = null;

@@ -98,7 +98,7 @@ function makeEnv(initial: readonly [string, string, Row][] = []): Env {
     client: undefined as unknown as PlanClient,
   };
   const refuse = (kind: string, es: string, id?: string) =>
-    (env.failWhen?.(kind, es, id) ? { success: false as const, error: new Error(`${kind} ${es} refused`) } : null);
+    (env.failWhen?.(kind, es, id) ? { success: false as const, error: Object.assign(new Error(`${kind} ${es} refused`), { status: 400 }) } : null); // 400: deterministic, so the T-11 policy never retries it (a status-less error is transient by design)
   env.client = {
     createRecordAsync: async (es: string, data: Row) => {
       env.sent.push(`create:${es}`);
@@ -158,10 +158,10 @@ afterEach(() => { setBulkBackend(null); setFinancePerfFlags(null); });
 /* ══════════════════════════════════════════════════════════ switches ══ */
 
 describe("UT-FINPERF switches", () => {
-  it("UT-FINPERF-101 the defaults: every switch on except the bulk one, which waits for the live probe", () => {
+  it("UT-FINPERF-101 the defaults: every switch on except the bulk one (waits for the live probe) and changedRowsOnly (ships OFF at integration until product approves, PA-03)", () => {
     expect(financePerf()).toEqual({
-      parallelReads: true, lazyReads: true, targetedReload: true, concurrentWrites: true, wideGroups: true, bulkSchedules: false,
-    }); // D149: `wideGroups` joined the list (on)
+      parallelReads: true, lazyReads: true, targetedReload: true, concurrentWrites: true, wideGroups: true, changedRowsOnly: false, bulkSchedules: false,
+    }); // D149: `wideGroups` joined the list (on); dvopt PA-03: `changedRowsOnly` joined it, OFF at integration
   });
 
   it("UT-FINPERF-102 a test override replaces switches, and null restores the defaults", () => {
