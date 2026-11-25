@@ -121,6 +121,31 @@ Details: `ProjectDocs/app-docs/frontend-optimization/09`.
 
 ---
 
+### 1.7 Reliability and request volume (Dataverse and network programme, D165, 25 Nov 2026)
+
+Status: implemented behind switches on branch `feature/dataverse-network-performance-optimization`, uncommitted, not run on DEV, not product-approved. Switches that are OFF at integration are marked. Details, finding ids and DEV checks: D165 and `ProjectDocs/app-docs/dataverse-network-performance-optimization/`.
+
+| Improvement over the canvas / the earlier build | Status | Finding / decision |
+|---|---|---|
+| A throttled (429) request is retried with backoff and jitter in every write path; before, a 429 reached the user as a failed save (canvas: no retry at all) | **fixed** (ON) | OR-01, WE-02, CA-01, D165 |
+| A request that the platform marked "not processed" can be retried; a create, a bulk call and a flow call are never retried after an unknown outcome | **fixed** (ON) | doc 21 matrix |
+| A page-cap error in `fetchAll` is no longer retried (it used to burn up to 150 extra page requests) | **fixed** (ON) | WE-01 |
+| Land Lease and OPEX saves refuse to write to a row another user deleted (the canvas PATCH re-created it as an orphan with no project or business unit) | **fixed** (ON); deliberate divergence | CB-01 |
+| The cost book refreshes after a failed or partial Land Lease / OPEX write, so a second click cannot import a duplicate standard contract | **fixed** (ON) | CB-02 |
+| A delete retried after a partial failure no longer fails because rows already went (Land Lease, OPEX, admin) | **fixed** (ON) | CB-03, AD-05 |
+| The CAPEX forecast clean-up survives throttling, continues past a failed row, reports what landed and says a rerun is safe | **fixed** (ON) | AD-01 |
+| Check List back-fill cannot bring a deleted tracking back | **fixed** (ON) | PB-14 |
+| Planning creates its rows once per project (a retry, focus or second tab cannot run it twice) | **fixed** (ON); owner to confirm | PB-05 |
+| Closing the tab while a deferred Add Cost delete is running asks first | **fixed** (ON) | CA-03 |
+| A malformed write plan is refused before the first request | **fixed** (ON) | WE-06 |
+| Finance can register its bulk tables without a half-saved tranche when the bulk switch is turned on | **fixed** (no switch) | PA-02 |
+| Fewer requests: no whole-book reload after a CAPEX paid toggle, panel save or delete; no whole-project Summary refetch after an Add Cost Save; one SPV/DevCo mapping read; comments in the payments wave; Land Lease / OPEX / Contracts duplicated reads removed; Planning, Grid Operator and PM boot reads shared or prefetched; Milestones re-pricing and Check List trackings; one Entra person cache; bounded admin fan-out and narrower Project Gates reloads | **fixed** (ON), counts asserted in tests, not measured on DEV | CA-05, CA-06, CA-08, CA-09, CB-07 to CB-15, PB-03, PB-06, PB-10, PB-12, PB-13, PB-15, PB-16, AD-03, AD-06, AD-08, AD-11 |
+| New test and gate: the census tool for `[VSB]` captures; G-REQ keeps direct request sites from growing | **new** | T-00, WE-03 |
+| Refused-write text found inside a plan error | **proposed (not approved)**, OFF | WE-07 |
+| Finance tranche Save writes only changed schedule rows | **proposed (not approved)**, OFF | PA-03 |
+| Stable client ids for creates (headers, CAPEX panel) | **proposed**, OFF until proven on DEV | CB-14, CA-07 |
+| One-read O&M guard, by-name environment read, concurrent Check List back-fill, lazy Generators warm-up, request deadlines, global request ceiling | **proposed**, OFF until probed or calibrated | PA-15, PB-08, PB-14, PB-09, CA-02, WE-03 |
+
 ## Part 2 — Screen by screen
 
 Status legend: **Connected** = reads and writes live Dataverse. **Reproduced** = canvas defect kept

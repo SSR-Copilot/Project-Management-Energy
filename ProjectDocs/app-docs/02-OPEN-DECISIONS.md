@@ -9070,3 +9070,72 @@ Each finding is an isolated change (`08` lists the files). The configuration ite
 ### 6. Rollback
 
 Revert the `consoleOutput` calls in `requestLog.ts` and `saveLog.ts` to `console[level]` / `console`, and set `loggingLevelConsole: 2` again. The gate file can stay.
+
+## D165 — Dataverse and network performance programme: one retry layer, integrity guards and request savings, all behind switches (25 Nov 2026; number PROVISIONAL, may be renumbered at merge)
+
+**Status:** implemented on branch `feature/dataverse-network-performance-optimization` (worktree `Project-Management-Energy-WorkDev1-DataverseOptimization`, from `origin/RounakDev1` at `30afece`), committed locally (`6952b4d`, `3da4143`, `755fe7a` and a documentation commit), NOT pushed. NOT product-approved. NOT run on DEV, and no runtime request or latency baseline exists yet (every request count below is estimated from code or asserted in a unit test). `npm run verify`: exit 0 on an idle machine (25 Nov 2026): 96 data sources registered, 0 problems; typecheck, lint, control-label and canvas-identity gates, 491 test files and 8,273 tests pass (15 skipped, 3 todo), build OK.
+**E2E parity suite:** offered before the commit and DECLINED by the owner on 25 Nov 2026; it has not been run for any of these changes. DEV smoke tests (`CONVENTIONS.md` "Before pushing to DEV") are still required before any push.
+**Record:** `ProjectDocs/app-docs/dataverse-network-performance-optimization/` (index `00`; audit `01`-`14`; design and plan `15`-`26`; implementation, QA and validation records `27`-`35`). 83 findings, 3 at P0, 15 at P1, 28 at P2, 37 at P3; the register is `12`, the task-to-finding matrix is `22` section 4.
+**Method:** five read-only audits, then ten implementation agents in separate worktrees with disjoint file ownership, merged byte-for-byte; two independent QA reviews (`33`, no blockers; 6 majors in total, all fixed or switched off).
+
+### 1. Finding that no audit reported (OR-01)
+
+The SDK's HTTP error carries no headers (`PowerDataRuntimeHttpError { message, status?, requestId? }`), so `Retry-After` can never be read. Every `Retry-After` branch in `data/retry.ts` was dead code: a 503 was never retried and a 429 waited 1 s then 2 s. The retry layer is now status-based with backoff and jitter. There is also no request deadline anywhere (the SDK has none either).
+
+### 2. What changed (switch, default)
+
+| Area | Change | Switch (default) |
+|---|---|---|
+| Retry core | classify an error by status; exponential backoff with jitter (throttled 429: equal jitter on a 2 s base, 4 tries; transient: full jitter on 1 s, 3 tries); `isRetryable` honours a deterministic marker (`fetchAll` page-cap error no longer retried) | `RETRY_POLICY_V2` (on) |
+| Retry adoption | single-row writes, plan engine writes, bulk transport, per-row fallback, verify reads and admin row writes go through `sendWithPolicy` per the matrix (429 retries all kinds; transient only reads, deletes, absolute PATCHes; creates and bulk calls never after a 5xx; flows never); one retry layer per request | `POLICY_CLIENT_WRITES`, `POLICY_PLAN_WRITES`, `POLICY_BULK_TRANSPORT`, `POLICY_VERIFY_READS`, `POLICY_ADMIN_WRITES`, `COST_WRITES_POLICY` (on) |
+| Deadline, global gate | built and tested, wired to nothing | `REQUEST_DEADLINES` (off), `GLOBAL_GATE` (off) |
+| Guards | Land Lease and OPEX updates refuse the save, writing nothing, if a row was deleted (CB-01); Check List back-fill writes only existing trackings (PB-14) | `LEASE_GUARD`, `OPEX_GUARD`, `CHECKLIST_BACKFILL_GUARD` (on) |
+| Refresh | the cost book refreshes on every outcome; the Land Lease standard-contract import decides "already imported" from a fresh server read (CB-02) | `COST_REFRESH_ON_FAILURE` (on) |
+| Deletes | "already gone" (404 or `0x80040217`) counts as done in Land Lease, OPEX and admin deletes; one shared helper in `data/client.ts` (CB-03, AD-05) | `GONE_AS_DONE_LEASE_OPEX`, `ADMIN_DELETE_ALREADY_GONE_OK` (on) |
+| CAPEX clean-up | deletes and zero-PATCHes retry; a failed row no longer stops the others; failure reports counts and says a rerun is safe (AD-01) | `CLEANUP_RESILIENT` (on) |
+| Plan engine | a malformed plan is refused before the first request (WE-06) | `PLAN_SHAPE_CHECKS` (on) |
+| Add Cost / CAPEX | tab hold while deferred deletes run; the CAPEX book is patched from what was written instead of reloaded; no whole-project Summary refetch after an Add Cost Save; shared SPV/DevCo mapping; comments with payments; overlapping comment deletes; WTG count for standard contracts only; changed contract columns only on an Edit | `HOLD_TAB_FOR_DEFERRED_DELETES`, `CAPEX_PATCH_BOOK`, `ADDCOST_LEAN_REFRESH`, `SPV_MAPPING_SHARED`, `COMMENTS_WITH_PAYMENTS`, `COMMENT_DELETES_OVERLAP`, `WTG_COUNT_STANDARD_ONLY`, `PANEL_CHANGED_CONTRACT_COLUMNS` (on) |
+| Contracts, OPEX, Land Lease | Cost reads retry a transient failure; Land Lease follower updates and period deletes together; OPEX book reuses the catalogue; OPEX writes together; Contracts links read with the PATCH and keys once; one BoP read; lean Land Lease reload | `COST_READS_RETRY`, `LEASE_TIER_WIDER`, `OPEX_BOOK_REUSES_CATALOGUE`, `OPEX_WRITES_TOGETHER`, `CONTRACT_LINKS_WITH_PATCH`, `CONTRACT_KEYS_ONCE`, `BOP_ASSUMPTIONS_ONE_READ`, `LEASE_LEAN_RELOAD` (on) |
+| Generators, Production, Finance | Finance registers the bulk backend (PA-02, no switch); Production reload without re-reads; turbines refetched once; id-only type reads lean; persisted catalogue key scoped by environment and user (cache stays off) | `productionLeanReload`, `turbinesRefetchOnce`, `typeReadsLean` (on) |
+| Boot and PM | PM screens' first reads prefetched; one `vsb_countries` key; Planning and Grid Operator share a key; Planning seeds once per project; Check List trackings read once; General Data cancellation reuses cached gates; one Entra person cache; Milestones re-pricing together | `BOOT_PREFETCH_SCREEN_READS`, `COUNTRIES_ONE_KEY`, `PM_PROJECT_ROW_SHARED`, `PLANNING_CREATE_ONCE`, `CHECKLIST_TRACKINGS_ONCE`, `GD_CANCEL_REUSES_CACHE`, `ONE_PERSON_CACHE`, `MILESTONES_REPRICE_TOGETHER` (on) |
+| Admin | `hasContracts` fan-out bounded (6); Project Gates reload only the changed slice; no existence GET right after a create; plugin-cascade deletes invalidate project caches | `ADMIN_HAS_CONTRACTS_POOL`, `ADMIN_GATES_NARROW_RELOAD`, `ADMIN_NO_REDUNDANT_EXISTS`, `ADMIN_CASCADE_INVALIDATE` (on) |
+| Tool | `scripts/request-census.mjs` summarises the `[VSB]` lines of a capture (requests, duplicates, waves, p95, 429/5xx, retries) | - |
+| Gate | G-REQ (`src/test/requestSites.test.ts`): direct request sites per file may not grow without review (baseline raised for 11 reviewed sites in 8 files) | - |
+
+### 3. Switches shipped OFF, and why (owner decision or DEV check needed)
+
+| Switch | Finding | Why off | To turn on |
+|---|---|---|---|
+| `PLAN_PERMISSION_LOOKUP` | WE-07 | changes the visible text of a refused write | owner approves the text |
+| `changedRowsOnly` (Finance) | PA-03 | skipped rows keep their `modifiedon`/audit history: a divergence from the canvas | product approves |
+| `flowBesideReads` | PA-05 | on a replace the cancellation flow may run before the Identify reads finish | owner accepts |
+| `ADMIN_SCOPE_READS_ONCE` | AD-09, AD-12 | D160 section 10 skipped this merge on purpose (active and hidden OPEX reads would fail together) | owner reverses D160 |
+| `STABLE_CREATE_IDS` | CB-14 | needs proof that the host honours a client primary key on a plain POST | DEV check |
+| `PANEL_STABLE_ID` | CA-07 | same proof, and QA-02: a retry after the user shortened the schedule keeps stale month rows | DEV check and fix QA-02 first |
+| `omGuardOneRead` | PA-15 | an unprobed navigation-path filter must not replace a fail-closed safety guard (QA-03) | DEV probe: identical answers |
+| `ENV_VARS_TOGETHER` | PB-08 | `vsb_EnvironmentName` decides the Production console gate (D164) (QA-09) | DEV check |
+| `CHECKLIST_BACKFILL_TOGETHER` | PB-14 | concurrent writes change the order a server flow sees (QA-07) | DEV run with flows on |
+| `CURRENT_USER_BY_ENTRA` | PB-07 | not provable from the repo; nothing reads it | DEV probe |
+| `GENERATORS_WARMUP_LAZY` | PB-09, PA-11 | trade-off with first paint | measured capture |
+| `REQUEST_DEADLINES`, `GLOBAL_GATE` | CA-02, WE-03 | values not calibrated; a deadline frees a gate slot while the request still runs (QA-13) | calibrate from the capture |
+
+### 4. Behaviour changes with the switches ON (rule 8: DIVERGENCE)
+
+- A save on a Land Lease or OPEX row another user deleted is refused with the existing "deleted by someone else" text and nothing is written (canvas: the PATCH re-created the row as an orphan). In `independentSteps` mode the guard is per step.
+- A delete that answers 404 counts as done in Land Lease, OPEX and the admin screens. A plain `deleteRecord` whose RETRY answers 404 is an error (the safe direction: callers that treat "gone" as done still do).
+- A throttled (429) request now waits at least about 1 s on the first retry, 2 s, then 4 s; before it waited 1 s then 2 s, and a 503 was never retried.
+- The CAPEX clean-up continues past a failed row; its failure toast gains a new string ("N of M ... running the clean-up again is safe ...", marked `NEW (dvopt)`).
+- The Check List Refresh also clears the shared person cache, so Team re-reads Entra.
+- A Check List back-fill skips a vanished tracking (trace warning) instead of re-creating it.
+
+### 5. Risks and DEV checks
+
+Nothing was measured on DEV. Before DEV: run the five read-only probes (P-1 `In` filter, P-2 navigation filters, P-3 `UpdateMultiple` with `statecode`, P-4 throttled burst, P-5 hung request) and the spot checks above. Console lines to look for (outside Production): `[VSB] ACTION ... try N of M failed (throttled, HTTP 429); trying again in X ms`; `delete try N of M failed (HTTP 503)`; the clean-up counts; one `list ... existence` read per table per Land Lease / OPEX plan; the absence of a whole-book reload after a CAPEX paid toggle. Rollback: each switch is one constant; the old code path is kept.
+
+### 6. Not done / held
+
+T-08 (flow outcome message: needs the owner's wording), T-30, T-31, T-33 (need probes P-1, P-2 and a DEV count), T-40 to T-43 (need P-3, the Generators DEV test plan, the D36 section 1 decision and the `SynchroniseProjectState` order check), and DEC-A to DEC-G (Land Lease header-only delete, roll-up skip, new-tab boot, Summary aggregate, Check List order flow, focus-refetch policy, roll-up from server). Details and reasons: `22` sections 2 and 3.
+
+### 7. Tests
+
+Baseline before the programme: 432 files, 7,512 tests. After: 491 files, 8,273 tests (+59 files, +761 tests). New tests carry ids `UT-CLIENTGONE`, `UT-COSTGUARD`, `UT-STABLEID`, `UT-LLDVOPT`, `UT-OPEXDVOPT`, `UT-CONTRDVOPT`, `UT-REFRESHFAIL`, `UT-ADCLEAN`, `UT-CAPEXPATCH`, `UT-CAPEXSTABLE`, `UT-FINROWS`, `UT-GENFLOW`, `UT-BOOTENV`, `UT-CENSUS`, `UT-GREQ`, `UT-COSTPOLICY`, `UT-COSTSTACK`, `UT-CLIENTPOL` and more (full list: `27`). Existing tests that pinned behaviour which changed on purpose (retry waits, plan-shape errors, default values) were adjusted; each is named in the agents' sections of `27`.
