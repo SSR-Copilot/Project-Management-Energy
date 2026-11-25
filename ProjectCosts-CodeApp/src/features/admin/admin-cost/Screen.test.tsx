@@ -270,6 +270,17 @@ describe("CostsSettingsScreen", () => {
     expect(nested.some((t) => t.includes(".fui-Button__icon") && t.includes("font-size: 16px"))).toBe(true);
   });
 
+  it("UT-ADCOST-947 an OPEX section with no standard contracts shows the column header over an empty grid, not a message (canvas gallery header, ACS:1360-1809; user, 25 Nov 2026)", () => {
+    overrides.opex = [];
+    render(<Harness><CostsSettingsScreen /></Harness>);
+    openSection("Land Lease");
+    const grid = screen.getByTestId(`gal_LandLease_Content_Subaccounts_CardBody_Costs_1-${CONTRACT_TYPE.landLease}`);
+    expect(within(grid).getByRole("columnheader", { name: "Description" })).toBeInTheDocument();
+    expect(within(grid).getByRole("columnheader", { name: "Start Date" })).toBeInTheDocument();
+    expect(grid.querySelectorAll("tbody tr")).toHaveLength(0);
+    expect(screen.queryByText(/No standard contracts for this country and technology yet/)).not.toBeInTheDocument();
+  });
+
   it("UT-ADCOST-906 opens Edit Period with the inflation block read-only", async () => {
     render(<Harness><CostsSettingsScreen /></Harness>);
     openSection("Land Lease");
