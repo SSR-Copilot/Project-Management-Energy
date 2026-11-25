@@ -35,7 +35,8 @@ function mount() {
 describe("UseNotify + AppToaster", () => {
   it("UT-NTF-001 consistent durations and politeness per intent; errors stay until dismissed", () => {
     expect(NOTIFY_BEHAVIOUR).toEqual({
-      success: { timeout: 5000, politeness: "polite" },
+      // 2 s: the canvas `Notify(…, NotificationType.Success, 2000)`, one timer with the PM success bars (25 Nov 2026).
+      success: { timeout: 2000, politeness: "polite" },
       info: { timeout: 5000, politeness: "polite" },
       warning: { timeout: 10000, politeness: "assertive" },
       error: { timeout: -1, politeness: "assertive" },

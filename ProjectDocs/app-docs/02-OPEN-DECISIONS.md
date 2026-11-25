@@ -9013,8 +9013,18 @@ Each finding is an isolated change (`08` lists the files). The configuration ite
    - cold-cache network on `/projects`;
    - the CA-31 check: edit the sheet, leave the tab for more than 5 min, return.
 3. Commit approval.
+## D163 — Generators: the turbine grid shows all its rows without a scrollbar, as the canvas (24 Nov 2026; renumbered from D162 at the merge of 25 Nov 2026, D162 being the frontend performance programme; D161 is the Application Insights dependencies record on `master`)
 
-## D163 — No console output in the Production environment (25 Nov 2026; number PROVISIONAL, may be renumbered at merge)
+**Status:** code in the working tree of branch `few-fix`, not on DEV.
+**Report:** "for 6 generator show it without scrollbar like canvas" (canvas / code app screenshot pair of a WTG card with six generators, 24 Nov 2026).
+
+**Canvas:** `pcf_…_GeneratorsList.Height = If(TotalRows < PageSize, TotalRows * 35 + 50, PageSize * 35 + 50)` (Y:2085-2098). In the live canvas the six rows and the header sit inside that 260-px box with no scrollbar (the rows draw about 35 px tall).
+**Code app before:** the same box (`maxHeight` inline per card) with a 42-px header and 42-px rows, so six rows need 294 px: the sixth row was cut and a vertical scrollbar appeared. This followed an 18 Nov 2026 reading that the canvas grid itself overflowed its box; the 24 Nov screenshot shows it does not.
+**Now:** the rows are 35 px (`turbineRow`, `sections/styles.ts`); the header stays 42 px. `42 + 35n ≤ 50 + 35n` for every n, so a page (at most `GENERATORS_PAGE_SIZE` = 30 rows) always fits its box. The reserved scrollbar gutter (`scrollbarGutter: stable`) is dropped; `overflowY: auto` remains as a safety net only. Alternate-row fill, widths and icons are unchanged.
+**Tests:** none added: the row height is a style token with no rule behind it (CONVENTIONS rule 5 covers data-dependent branches). The 37 Generators test files (629 tests), typecheck and lint pass.
+
+
+## D164 — No console output in the Production environment (25 Nov 2026; renumbered from D163 at the merge of 25 Nov 2026, D163 is the Generators grid above; number PROVISIONAL)
 
 **Status:** implemented on `RounakDev1`, uncommitted. NOT product-approved, not run on DEV. Supersedes the "no switch" line of D72 (29 Oct 2026) for Production only.
 **Request (25 Nov 2026):** the `[VSB]` console logs must keep working in every environment except Production, where `vsb_EnvironmentName` = `Prod`: there nothing may be generated, on any screen, for any operation.

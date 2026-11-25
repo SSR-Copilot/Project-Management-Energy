@@ -93,7 +93,7 @@ not `localhost:3000`.
 
 7. **Every new or changed call, load and save is traced in the console** (`[VSB] HTTP / DATA / ACTION`
    lines, `CONVENTIONS.md` rule 23, D72). Use `platform/requestLog.ts`; never a bare `console.info`. In Production
-   (`vsb_EnvironmentName` = `Prod`) nothing may reach the console (D163): every line goes through `platform/consoleGate.ts`.
+   (`vsb_EnvironmentName` = `Prod`) nothing may reach the console (D164): every line goes through `platform/consoleGate.ts`.
 
 Details: `CONVENTIONS.md`, "Before every build".
 

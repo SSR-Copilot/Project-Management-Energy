@@ -20,7 +20,7 @@ vi.mock("./executePlan", async (importOriginal) => {
 
 import { PlanError } from "./executePlan";
 import { BulkRowsGoneError } from "./bulkBackend";
-import { PARTLY_SAVED_NOTE, PartlySavedJobError, usePlanWrite, writeErrorMessage } from "./usePlanWrite";
+import { PARTLY_SAVED_NOTE, PartlySavedJobError, SUCCESS_TIMEOUT_MS, usePlanWrite, writeErrorMessage } from "./usePlanWrite";
 
 const wrapper = ({ children }: { children: ReactNode }) =>
   <QueryClientProvider client={new QueryClient({ defaultOptions: { mutations: { retry: false } } })}>{children}</QueryClientProvider>;
@@ -84,5 +84,26 @@ describe("a failed second step after the first plan landed", () => {
     expect(hook.current.lastLanded()).toEqual([L("t"), L("x")]);
     expect(hook.current.lastMaybeLanded()).toEqual([L("y")]);
     expect(hook.current.lastDeleted()).toEqual([L("d")]);
+  });
+
+  it("UT-PLANWRITE-032 a success text goes away after the canvas Notify's 2 s; an error text stays (user, 25 Nov 2026)", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      behaviour.queue = [done([L("t")]), () => { throw new PlanError(0, 1, "second", new Error("HTTP 400"), [], []); }];
+      const { result: hook } = renderHook(() => usePlanWrite({ invalidate: [], action: "test" }), { wrapper });
+      await act(async () => { await hook.current.run({ progress: "go", plan: plan("first"), success: "Saved!" }); });
+      expect(hook.current.success).toBe("Saved!");
+      act(() => { vi.advanceTimersByTime(SUCCESS_TIMEOUT_MS - 1); });
+      expect(hook.current.success).toBe("Saved!");
+      act(() => { vi.advanceTimersByTime(1); });
+      expect(hook.current.success).toBeNull();
+      // A failure's text has no timer.
+      await act(async () => { await hook.current.run({ progress: "go", plan: plan("second") }); });
+      expect(hook.current.error).toContain("HTTP 400");
+      act(() => { vi.advanceTimersByTime(SUCCESS_TIMEOUT_MS * 5); });
+      expect(hook.current.error).toContain("HTTP 400");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

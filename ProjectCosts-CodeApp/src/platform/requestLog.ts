@@ -2,7 +2,7 @@
  * The request log: what the app asked Dataverse for, how long it took and how many rows came back.
  *
  * Everything goes to the browser console (DevTools → Console, filter `[VSB]`), in every build and every
- * environment EXCEPT Production, where `vsb_EnvironmentName` = `Prod` prints nothing at all (D163,
+ * environment EXCEPT Production, where `vsb_EnvironmentName` = `Prod` prints nothing at all (D164,
  * `consoleGate.ts`; before 25 Nov 2026 there was no switch, D72). Three kinds of line share one prefix:
  *
  *   [VSB] HTTP   GET vsb_projects?$select=… → 200 · 312 ms · 14.2 kB     every request the SDK sends, from any screen
@@ -97,7 +97,7 @@ export function shortUrl(url: string, max = 180): string {
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 
-// D163: every line goes through the console gate, which prints it, holds it until the environment is known, or (Prod) drops it.
+// D164: every line goes through the console gate, which prints it, holds it until the environment is known, or (Prod) drops it.
 const emit = (level: "info" | "warn" | "error", line: string): void => {
   try {
     consoleOutput(level, line);

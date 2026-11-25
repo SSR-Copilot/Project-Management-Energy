@@ -258,7 +258,7 @@ export function rawErrorSection(error: unknown): SaveLogSection {
 type ConsoleLike = Partial<Pick<Console, "info" | "error" | "groupCollapsed" | "groupEnd" | "table">>;
 
 /**
- * D163: the console as a report may use it, every method going through the console gate (`platform/consoleGate.ts`), so
+ * D164: the console as a report may use it, every method going through the console gate (`platform/consoleGate.ts`), so
  * a Production environment prints nothing and an unknown one holds the report in order. A method the real console
  * lacks stays missing, so the plain-line fallbacks below still apply.
  */

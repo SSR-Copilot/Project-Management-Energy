@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 /**
- * D163: the app prints to the console ONLY through `platform/consoleGate.ts`, so Production (`vsb_EnvironmentName` = `Prod`) can
+ * D164: the app prints to the console ONLY through `platform/consoleGate.ts`, so Production (`vsb_EnvironmentName` = `Prod`) can
  * stay silent. This test reads every source file and fails on a direct `console.…` / `console[…]` call, so a new logger cannot
  * add a way round the gate.
  */
@@ -27,7 +27,7 @@ function codeOnly(text: string): string {
     .join("\n");
 }
 
-describe("console gate: no way round it (D163)", () => {
+describe("console gate: no way round it (D164)", () => {
   it("UT-CONGATE-030 no source file calls console.* directly except the gate itself", () => {
     const offenders: string[] = [];
     for (const file of sourceFiles(SRC)) {

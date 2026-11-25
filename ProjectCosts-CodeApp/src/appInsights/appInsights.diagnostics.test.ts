@@ -154,7 +154,7 @@ describe("App Insights console lines", () => {
     expect(instances()[0]!.config).toMatchObject({ connectionString: CS, loggingLevelConsole: 2 });
   });
 
-  it("UT-AIDIAG-021 PROD (vsb_EnvironmentName = Prod): the SDK is started with its console output OFF and no line is printed (D163)", async () => {
+  it("UT-AIDIAG-021 PROD (vsb_EnvironmentName = Prod): the SDK is started with its console output OFF and no line is printed (D164)", async () => {
     applyEnvironmentName("Prod");
     startAppInsights(CS);
     await appInsightsStarted();

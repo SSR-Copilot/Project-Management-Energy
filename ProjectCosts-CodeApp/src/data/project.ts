@@ -99,7 +99,7 @@ export async function loadEnvironmentVariables(): Promise<EnvVars> {
     // A value row wins over the definition's default, which is the Dataverse precedence.
     if (name && v.value !== undefined && v.value !== null) out[name] = v.value;
   }
-  // D163: `vsb_EnvironmentName` = `Prod` silences every console line of the app from here on; any other answer
+  // D164: `vsb_EnvironmentName` = `Prod` silences every console line of the app from here on; any other answer
   // (a missing variable included) releases the lines held while it was unknown. A failed read above never reaches
   // this line, so the console stays quiet until a read succeeds.
   applyEnvironmentName(out.vsb_EnvironmentName);

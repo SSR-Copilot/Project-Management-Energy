@@ -3139,6 +3139,13 @@ export function newContractForm(project: RevenueProject, subaccountId: string | 
  * re-lookup when the standard turns the country toggle on (L7006-7051, no Area term), the p90
  * tariff from the bidding price, and the per-field standardness the Save writes as flags.
  */
+/**
+ * Whether a NEW contract's Inflation Start Year is seeded from the `inflationstartyear` standard assumption (the
+ * 1.21.709 extract, Y:6711-6760) or left empty with the "YYYY" hint (the live canvas, user screenshots 25 Nov 2026).
+ * `false` = the live canvas; `true` restores the extract's seed (the canvas-parity twin of the extract).
+ */
+export const SEED_INFLATION_START_YEAR = false;
+
 export function applyRevenueEngine(input: {
   project: RevenueProject;
   rows: readonly AssumptionRow[];
@@ -3216,7 +3223,12 @@ export function applyRevenueEngine(input: {
     // Audit 20 Oct 2026 (FIXED): `txt_…_InflationProfile_1.Value` is `Text(rec, "0.00")` and the
     // engine's custom value is `If(exists, …, 0)` — so a contract with no standard shows "0.00".
     inflationProfile: fmtTwoDecimals(inflationValue),
-    inflationStartYear: infl.startYear.value ? String(infl.startYear.value) : "",
+    // The LIVE canvas opens Add Revenue Contract with an EMPTY Inflation Start Year showing its "YYYY" hint (user
+    // screenshot pair, 25 Nov 2026); the extracted 1.21.709 seed (Y:6711-6760) maps the `inflationstartyear` assumption
+    // to a milestone year, which the code had followed (it showed the COD year). The live app wins, as for the tab sort
+    // (D154) and the "Months" hint; the extract's seed stays behind `SEED_INFLATION_START_YEAR`. A start date the user
+    // picks still fills the year (`withTerm`), as the canvas picker's OnChange does.
+    inflationStartYear: SEED_INFLATION_START_YEAR && infl.startYear.value ? String(infl.startYear.value) : "",
     considerNegativePrices: neg.toggleState,
     negativePriceManualOverride: neg.manualOverride,
     isStandardContract: exists,
@@ -3235,7 +3247,8 @@ export function applyRevenueEngine(input: {
       useInflation: infl.useInflation.isStandard,
       useCountryInflation: infl.useCountryProfile.isStandard,
       useCountryInflationStandardValue: countryOn,
-      inflationStartYear: infl.startYear.isStandard,
+      // An empty box is not a standard value (no blue italic on the hint); see `SEED_INFLATION_START_YEAR`.
+      inflationStartYear: SEED_INFLATION_START_YEAR ? infl.startYear.isStandard : false,
       inflationValue: countryOn ? false : infl.customValue.isStandard,
       hedgedVolume: hedge.isStandard,
     },

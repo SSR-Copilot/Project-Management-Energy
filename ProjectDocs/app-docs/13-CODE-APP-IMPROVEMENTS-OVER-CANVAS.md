@@ -353,7 +353,7 @@ Found while porting about 6,100 canvas lines against the newer `.pa.yaml`: 13 de
 
 - **Cross-cutting:** every request, data call, page load and save now prints a `[VSB]` line in the browser console (requests, rows, milliseconds), in every build. The canvas has no such trace. The Add Cost from Table lines use the same format.
 - **Fixed (3 Nov 2026, D79, CA-28):** a load named by its raw query key printed the project GUID; `keyText` now prints `<id>` (UT-REQLOG-023).
-- **New (25 Nov 2026, D163, proposed, not approved):** in the Production environment (`vsb_EnvironmentName` = `Prod`) the app prints nothing to the browser console, on any screen, for any operation: the `[VSB]` request log, the save reports, the Application Insights start-up lines and the Application Insights SDK's own console output are all behind one gate (`platform/consoleGate.ts`). Every other environment prints exactly what it printed before. Lines produced before the variable has been read are held and then printed (not Prod) or discarded (Prod); if the variable cannot be read, nothing is printed. The canvas app has no console trace at all (UT-CONGATE-001…025, UT-AIDIAG-021…023).
+- **New (25 Nov 2026, D164, proposed, not approved):** in the Production environment (`vsb_EnvironmentName` = `Prod`) the app prints nothing to the browser console, on any screen, for any operation: the `[VSB]` request log, the save reports, the Application Insights start-up lines and the Application Insights SDK's own console output are all behind one gate (`platform/consoleGate.ts`). Every other environment prints exactly what it printed before. Lines produced before the variable has been read are held and then printed (not Prod) or discarded (Prod); if the variable cannot be read, nothing is printed. The canvas app has no console trace at all (UT-CONGATE-001…025, UT-AIDIAG-021…023).
 
 ## Add Cost from Table, year view (29 Oct 2026, D73) — removed 19 Nov 2026 (D139)
 
@@ -1034,3 +1034,22 @@ The user: "scan whole application settings … not same as canvas". Each screen 
 | Generators (code) | `rules.ts` was one 5,700-line file of unrelated jobs; it is now seven files (rules, captions, display, write plans, rollback and delete handling, panel plans, replace plans) behind the same imports. No behaviour change; the 723 Generators tests pass untouched | fixed (internal) |
 | Cost screens | The standard-assumption catalogue is no longer re-read every time the browser tab is entered again (master data from the Settings screens). The project's own rows still refetch on focus | fixed |
 | Cost screens, Planning, Production, Team | One month-clamping `addMonths` and one `dateOnlyOf` instead of four and three copies | fixed (internal) |
+
+## Write feedback: success texts go away after two seconds, as the canvas Notify (25 Nov 2026) — reproduced
+
+| Screen | Change | Status |
+|---|---|---|
+| Every Project Management screen (shared `usePlanWrite` / `WriteFeedback`) | A save or delete success text ("Storage type was successfully saved for current project!", "Permit deleted." …) disappears after 2 s, as the canvas `Notify(…, NotificationType.Success, 2000)` does (21 of the PM app's 24 success notifications; three use 1000 ms). The code app's green bar had stayed until the next action (user, 25 Nov 2026). Error texts still stay until the next action: a failure must not be missed (the canvas kept its errors 10 s). The next run or leaving the screen cancels the timer. UT-PLANWRITE-032 | **reproduced** |
+| Application Settings and Cost screens (shared `useNotify` success toasts) | The success toasts ("New order was successfully saved.", "The period was deleted." …) stay 2 s instead of 5 s, the same timer as the Project Management success texts (user, 25 Nov 2026). The Settings and Cost canvas apps have no success `Notify` at all (the Settings canvas wrote its success text into a loading dialog it blanked in the same step, a SOURCE DEFECT), so the 2 s is the PM canvas's figure. Info toasts keep 5 s, warnings 10 s, errors stay until dismissed. UT-NOTIFY-* | **the user's request** |
+
+## Revenues: Add Revenue Contract opens with an empty Inflation Start Year, as the live canvas (25 Nov 2026) — reproduced (live canvas)
+
+| Screen | Change | Status |
+|---|---|---|
+| Revenues, Add Revenue Contract | The Inflation Start Year box opens empty with its "YYYY" hint, as the live canvas does (user screenshot pair, 25 Nov 2026); the code had seeded the COD (or FID / cluster) year from the `inflationstartyear` standard assumption, which is what the extracted 1.21.709 seed does (Y:6711-6760). The live app wins, as for the tab sort (D154) and the "Months" hint. Picking a Contract Start Date still fills the year, as the canvas picker's OnChange does; the field stays required, so Save waits for a year while inflation is on. The extract's seed is kept behind `SEED_INFLATION_START_YEAR` (`rules.ts`, `true` = the extract). UT-REV-919 | **reproduced** (live canvas) |
+
+## Add Costs from Table: the save text is this screen's own "Saving costs..." (25 Nov 2026) — reproduced
+
+| Screen | Change | Status |
+|---|---|---|
+| Cost, Add Costs from Table | The footer status while the sheet saves reads "Saving costs...", the screen's own `locSpinnerInformationText` (`Add Costs from Table.pa.yaml` line 30); the code had borrowed the single-cost panel's "Please wait, saving costs..." (user, 25 Nov 2026). The canvas's first text, "Checking subaccounts validations...", covered its 1 s timer before the save branch ran; the code app validates as the sheet is edited and the Save's own check takes under a millisecond before the first request leaves (WS-E), so there is no checking phase to label and none is shown. The non-blocking footer line itself stays as decided (D58). UT-ADDCOST-NOSPIN-002, UT-ADDCOST-BUSY-001/002 | **reproduced** |

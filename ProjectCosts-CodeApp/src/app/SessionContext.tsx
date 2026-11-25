@@ -86,7 +86,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   // App Insights starts from `vsb_ApplicationInsightsConnectionString`; a failed load turns it off.
   useEffect(() => {
     if (envQuery.isSuccess) {
-      // D163: the console gate learns the environment before Application Insights starts (its SDK prints through the same gate).
+      // D164: the console gate learns the environment before Application Insights starts (its SDK prints through the same gate).
       // `loadEnvironmentVariables` has already told it; this covers data that arrived another way and costs nothing twice.
       applyEnvironmentName(envQuery.data.vsb_EnvironmentName);
       startAppInsights(envQuery.data.vsb_ApplicationInsightsConnectionString);

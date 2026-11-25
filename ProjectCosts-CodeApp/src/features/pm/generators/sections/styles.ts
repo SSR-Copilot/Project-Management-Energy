@@ -212,12 +212,14 @@ export const useStyles = makeStyles({
   turbineHead: { fontWeight: tokens.fontWeightSemibold },
   turbineTable: { tableLayout: "fixed", width: "850px", maxWidth: "100%" },
   /*
-   * `…_GeneratorsList.Height: If(TotalRows < PageSize, TotalRows * 35 + 50, PageSize * 35 + 50)` (Y:2085-2098),
-   * while the PowerCAT DetailsList inside draws a 42-px header and 42-px rows, so the canvas grid overflows its
-   * box and scrolls (last row cut, vertical scrollbar; user screenshot pair, 18 Nov 2026). The box is the
-   * `maxHeight` set inline per card; the table keeps the 42-px rows.
+   * `…_GeneratorsList.Height: If(TotalRows < PageSize, TotalRows * 35 + 50, PageSize * 35 + 50)` (Y:2085-2098):
+   * the box is the `maxHeight` set inline per card. The live canvas draws the rows about 35 px tall inside it
+   * (user screenshot pair, 24 Nov 2026: six generators, no scrollbar), so the table uses 35-px rows under a
+   * 42-px header and always fits its box (42 + 35n ≤ 50 + 35n). The 18 Nov 2026 reading of 42-px rows, which
+   * made the last row spill and a scrollbar appear, is withdrawn (D163). `overflowY: auto` stays as a safety net
+   * only; no gutter is reserved because a page never exceeds its box.
    */
-  turbineScroll: { overflowY: "auto", overflowX: "hidden", maxWidth: "100%", scrollbarGutter: "stable" },
+  turbineScroll: { overflowY: "auto", overflowX: "hidden", maxWidth: "100%" },
   turbineHeadRow: { height: "42px" },
   /**
    * The over-height-limit icon, 16 px (Y:2382-2391). The column sets `TagColor: "rgb(255, 140, 0)"` and a per-row
@@ -232,8 +234,8 @@ export const useStyles = makeStyles({
   turbineColHeight: { width: "171px" },
   turbineColCapacity: { width: "279px" },
   turbineColIcon: { width: "34px" },
-  /** `AlternateRowColor: gblAppTheme.palette.Grayscale30` — every other row, starting with the first. 42-px rows (see `turbineScroll`). */
-  turbineRow: { height: "42px", "&:nth-child(odd)": { backgroundColor: palette.Grayscale30 } },
+  /** `AlternateRowColor: gblAppTheme.palette.Grayscale30` — every other row, starting with the first. 35-px rows (see `turbineScroll`). */
+  turbineRow: { height: "35px", "&:nth-child(odd)": { backgroundColor: palette.Grayscale30 } },
   /** Numbers are right-aligned in the canvas card boxes (`Align.Right`). */
   detailValueNumeric: { justifyContent: "flex-end" },
   // 10 px between the tags: `con_Generator_GeneratorHeightLimitationTag.X = con_Generator_GeneratorStatus.X - Self.Width - 10`.

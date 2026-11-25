@@ -51,7 +51,7 @@ function printEverything(): void {
   });
 }
 
-describe("console gate (D163)", () => {
+describe("console gate (D164)", () => {
   it("UT-CONGATE-001 only vsb_EnvironmentName Prod counts as production, in any letter case, spaces ignored", () => {
     for (const name of ["Prod", "prod", "PROD", " Prod ", "\tprod\n"]) expect(isProductionEnvironment(name), name).toBe(true);
     for (const name of ["Production", "Prod2", "Pre-Prod", "NonProd", "Dev", "QA", "Test", "", "   ", undefined, null]) {
@@ -138,7 +138,7 @@ describe("console gate (D163)", () => {
   });
 });
 
-describe("every logger of the app obeys the gate (D163)", () => {
+describe("every logger of the app obeys the gate (D164)", () => {
   it("UT-CONGATE-010 PROD: no HTTP, DATA, ACTION, ERROR line, no trace error and no save report reaches the console", () => {
     applyEnvironmentName("Prod");
     printEverything();

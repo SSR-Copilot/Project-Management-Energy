@@ -224,7 +224,7 @@ export function startAppInsights(connectionString: string | undefined, loadError
             disableAjaxTracking: true,
             disableFetchTracking: true,
             // The SDK's own warnings and errors (e.g. "Failed to send telemetry.") reach the console too, except in
-            // Production (or while the environment is unknown), where the SDK prints nothing (D163, `consoleGate.ts`).
+            // Production (or while the environment is unknown), where the SDK prints nothing (D164, `consoleGate.ts`).
             loggingLevelConsole: consoleIsOpen() ? 2 : 0,
             ...SDK_CSP_FRIENDLY,
           },
