@@ -160,7 +160,7 @@ function WtgSectionView({
           ) : null}
           <div
             className={s.turbineScroll}
-            // The canvas box: `min(rows, PageSize) * 35 + 50`. The 42-px header and 35-px rows always fit in it (D162).
+            // The canvas box: `min(rows, PageSize) * 35 + 50`. The 42-px header and 35-px rows always fit in it (D163).
             style={{ maxHeight: `${Math.min(pageRows.length, GENERATORS_PAGE_SIZE) * 35 + 50}px` }}
             data-testid={`generators-turbine-scroll-${type.id}`}
           >

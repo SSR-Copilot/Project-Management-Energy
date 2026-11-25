@@ -25,11 +25,13 @@
  * Hard-coded colours with no theme token: `#0078D4` (the canvas rule and chevron, not
  * `palette.themePrimary` #006eb9) and `#323130` (the canvas label colour).
  */
+import { memo } from "react";
 import {
   Badge, Body1, Button, Subtitle2, Tag, TagGroup, Text, makeStyles, mergeClasses, tokens,
 } from "@fluentui/react-components";
 import { DeleteRegular, EditRegular } from "@fluentui/react-icons";
 import { CollapsibleCard } from "@/components";
+import { probeRender } from "@/platform/renderProbe";
 import { useBrandButtonStyles } from "@/theme/buttonStyles";
 import { palette } from "@/theme/tokens";
 import {
@@ -93,14 +95,17 @@ export interface ContractCardProps {
   tagGroups: TagGroupData[] | undefined | "error";
   canEdit: boolean;
   canDelete: boolean;
-  onToggle: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
+  /** Stable handlers (FE-AD-05, D162): each names its card, so one function serves every card. */
+  onToggle: (contractId: string) => void;
+  onEdit: (contract: StandardContract) => void;
+  onDelete: (contract: StandardContract) => void;
 }
 
-export function ContractCard({
+/** FE-AD-05 (D162): memoised, so a keystroke in the open panel renders no card (UT-ADCONTR-FE-003). */
+export const ContractCard = memo(function ContractCard({
   contract, expanded, currency, tagGroups, canEdit, canDelete, onToggle, onEdit, onDelete,
 }: ContractCardProps) {
+  probeRender(`ContractCard:${contract.id}`);
   const styles = useStyles();
   const brand = useBrandButtonStyles();
   const buttonClass = mergeClasses(styles.cardButton, brand.brandOutline);
@@ -126,7 +131,7 @@ export function ContractCard({
         </Badge>
       ) : null}
       expanded={expanded}
-      onToggle={onToggle}
+      onToggle={() => onToggle(contract.id)}
       // The canvas chevron is an icon with no caption and no AccessibleLabel; the port's name
       // ("Expand <contract>") is kept so each card's toggle stays distinguishable.
       toggleLabel={`${expanded ? "Collapse" : "Expand"} ${contract.name}`}
@@ -135,13 +140,13 @@ export function ContractCard({
       <div className={styles.actions} data-testid={`con_Action_Bar-${contract.id}`}>
         <Button
           appearance="secondary" className={buttonClass} icon={<EditRegular />}
-          aria-label={CARD_TEXT.edit} data-testid={`btn_Edit_AdminContracts-${contract.id}`} disabled={!canEdit} onClick={onEdit}
+          aria-label={CARD_TEXT.edit} data-testid={`btn_Edit_AdminContracts-${contract.id}`} disabled={!canEdit} onClick={() => onEdit(contract)}
         >
           {CARD_TEXT.edit}
         </Button>
         <Button
           appearance="secondary" className={buttonClass} icon={<DeleteRegular />}
-          aria-label={CARD_TEXT.delete} data-testid={`btn_Delete_AdminContracts-${contract.id}`} disabled={!canDelete} onClick={onDelete}
+          aria-label={CARD_TEXT.delete} data-testid={`btn_Delete_AdminContracts-${contract.id}`} disabled={!canDelete} onClick={() => onDelete(contract)}
         >
           {CARD_TEXT.delete}
         </Button>
@@ -212,4 +217,4 @@ export function ContractCard({
       </div>
     </CollapsibleCard>
   );
-}
+});

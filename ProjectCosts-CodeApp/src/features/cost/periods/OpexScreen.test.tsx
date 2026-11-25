@@ -13,7 +13,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render as rtlRender, screen, within } from "@testing-library/react";
 import { FluentProvider } from "@fluentui/react-components";
-import type { ReactNode } from "react";
+import { Profiler, type ReactNode } from "react";
 import { vsbTheme } from "@/theme/fluent";
 import type { CostBook, CostPeriod } from "@/features/cost/costing/model";
 import { DELETE_DIALOG, OPEX_MSG, deleteDialogSingleText } from "./opexRules";
@@ -1516,5 +1516,45 @@ describe("OpexScreen", () => {
       project.countryName = before.country;
       (project as Record<string, unknown>).areaStateProvince = before.area;
     }
+  });
+
+  /* ── FE-C2-05 (D162): the fold reset happens in the render, not in an effect after it ── */
+
+  /** Counts the commits of the screen's subtree: one per render React shows. */
+  const commits = { count: 0 };
+  const Counted = ({ mode }: { mode: "om" | "other" }) => (
+    <Harness>
+      <Profiler id="opex" onRender={() => { commits.count += 1; }}><OpexScreen mode={mode} /></Profiler>
+    </Harness>
+  );
+
+  it("UT-OPEX-FE-001 entering O&M commits once, already folded (no second render from a fold-reset effect)", () => {
+    commits.count = 0;
+    rtlRender(<Counted mode="om" />);
+    expect(commits.count).toBe(1);
+    expect(screen.queryByText("Initialized O&M Contract")).not.toBeInTheDocument();
+  });
+
+  it("UT-OPEX-FE-002 a rail switch on the same instance commits once: Other restores its folds, O&M refolds", () => {
+    const view = rtlRender(<Counted mode="other" />);
+    open("Insurance");
+    expect(screen.getByText("All-Risk Insurance")).toBeInTheDocument();
+
+    commits.count = 0;
+    view.rerender(<Counted mode="om" />);
+    expect(commits.count).toBe(1);
+    expect(screen.queryByText("All-Risk Insurance")).not.toBeInTheDocument();
+    open("PV Module A");
+    expect(screen.getByText("PV Service")).toBeInTheDocument();
+
+    commits.count = 0;
+    view.rerender(<Counted mode="other" />);
+    expect(commits.count).toBe(1);
+    expect(screen.getByText("All-Risk Insurance")).toBeInTheDocument();
+
+    commits.count = 0;
+    view.rerender(<Counted mode="om" />);
+    expect(commits.count).toBe(1);
+    expect(screen.queryByText("PV Service")).not.toBeInTheDocument();
   });
 });

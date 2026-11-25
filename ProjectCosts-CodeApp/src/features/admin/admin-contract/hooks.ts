@@ -10,7 +10,8 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { qk } from "@/data/keys";
-import { listCapexAccounts } from "@/data/contracts";
+// FE-AD-07 (D162): the active-only chart read on its own, not through `@/data/contracts` (the Cost Contracts data module).
+import { listActiveCapexAccounts } from "@/data/capexAccounts";
 import {
   DevCoTableUnavailableError, deleteStandardContract, getStandardContract,
   listContractDevCoRows, listStandardContracts, saveStandardContract,
@@ -49,7 +50,7 @@ export function useCapexAccounts() {
   return useQuery({
     queryKey: qk.capexAccounts,
     // Active only (CONTR-057 holds for this screen); the project Contracts picker reads every state under its own key.
-    queryFn: () => listCapexAccounts(),
+    queryFn: () => listActiveCapexAccounts(),
     staleTime: 5 * 60 * 1000,
     retry,
   });

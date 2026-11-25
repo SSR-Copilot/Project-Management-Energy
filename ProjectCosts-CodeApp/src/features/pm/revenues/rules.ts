@@ -61,7 +61,7 @@
  */
 import {
   parseNumber, isNumeric, isInteger, inRange, isDecimalWithPlaces, isValidCurrency,
-  isBlank, langRoot, decimalSeparator, pfxRound, type Lang,
+  isBlank, decimalSeparator, pfxRound, type Lang,
 } from "@/domain/powerFxNumeric";
 import { addDays, addMonths, addYears } from "@/domain/dates";
 import { startsWithStandard } from "@/domain/costStandards";
@@ -74,11 +74,14 @@ import { LEAF_DELETE_CONCURRENCY, WIDE_GROUP_CONCURRENCY } from "@/data/concurre
 import { REVENUE_PERF, REVENUE_PRICE, type PriceLookupMode, type RevenuePerfOverrides } from "@/data/revenuesFlags";
 import { priceForYearOnCurve, type PricePoint } from "@/domain/priceCurve";
 import type { PlanJob } from "@/data/usePlanWrite";
+// The project row the PM screens share: moved to `features/pm/shared/projectRow.ts` (FE-P2-05, D162), so Finance reads it
+// without this module. Re-exported, so every importer of these names from here is unchanged.
+import {
+  PROJECT_COL, assumptionNumber, isPageLocked, pageLock, type RevenueProject, type Technology,
+} from "@/features/pm/shared/projectRow";
+export { PROJECT_COL, assumptionNumber, isPageLocked, pageLock, type RevenueProject, type Technology };
 
 /* ═════════════════════════════════════════════════════════════════════ types ════ */
-
-/** `Switch(recTechnologyType, Technology.Wind, …, Technology.PV, …, Blank())`. */
-export type Technology = "Wind" | "PV" | "Other";
 
 /** One row of `Assumptions Revenues SQL`. `wind` / `pv` are SQL *strings*. */
 export interface AssumptionRow {
@@ -108,38 +111,6 @@ export const field = <T,>(value: T, isStandard = true, standardValue: T = value)
  */
 export const overrideField = <T,>(f: FieldWithStandard<T>, value: T): FieldWithStandard<T> =>
   ({ ...f, value, isStandard: false });
-
-/** The project columns this screen reads off `gblRecordSelectedProject`. */
-export interface RevenueProject {
-  id: string;
-  /** `'Project ID'` — a text column, part of the page-lock test. */
-  projectIdText: string | null;
-  projectName: string | null;
-  countryName: string | null;
-  /**
-   * `Country.Country` — in Power Fx a record's table-named field is its PRIMARY KEY, so this is the
-   * country's GUID (`_vsb_country_value`), the key `Country Inflation Profiles` are filtered on.
-   * (The earlier note called it a country "code"; corrected D33.)
-   */
-  countryCode: string | null;
-  technology: Technology;
-  /** `'Area/State/Province'.Name` */
-  areaName: string | null;
-  cod: Date | null;
-  fid: Date | null;
-  construction: Date | null;
-  legallyBindingPermits: Date | null;
-  applicationSubmitted: Date | null;
-  projectDevelopmentStarted: Date | null;
-  feasibilityStudies: Date | null;
-  netYieldP50: number | null;
-  totalCapacity: number | null;
-  endDate: Date | null;
-  clusterStateName: string | null;
-  owningBusinessUnitId: string | null;
-  /** `'Cluster State'.Order` — the balancing-price gate (`Order >= 4`). Optional so Finance's fixtures stay valid. */
-  clusterStateOrder?: number | null;
-}
 
 export type RevenueTab = "Contracted Revenue" | "Balancing Price";
 
@@ -251,33 +222,6 @@ export const derivedFieldPlaceholder = (value: string | null): string => value ?
 
 export const PAGE_LOCK_TITLE =
   "This page is locked. To unlock it, please complete the following sections:";
-
-/**
- * Validation — `con_Milestones_Page_LockMessage_7.Visible`. Five prerequisites:
- * `IsBlank('Project ID')`, `IsBlank('End Date')`, `'Total Capacity' = 0 or blank`,
- * `'Net Yield p50' = 0 or blank`, `IsBlank('Cluster State'.Name) or = "Draft"`. The bullets are
- * `lbl_…_Balancing_Price_VisibilityMessage_34`…`_38.Text`, verbatim. The fifth read "• Cluster State"
- * here before; the canvas (and Finance's own banner) says "• Change the project status from Draft"
- * (D15 f, corrected D33).
- *
- * The Finance screen carries the identical formula (`con_Milestones_Page_LockMessage_8`)
- * and imports this function rather than repeating it.
- */
-export function pageLock(project: RevenueProject | null): string[] {
-  if (!project) return [];
-  const bullets: string[] = [];
-  if (isBlank(project.projectIdText)) bullets.push("• General");
-  if (!project.endDate) bullets.push("• Milestones");
-  if (!project.totalCapacity) bullets.push("• Generator");
-  if (!project.netYieldP50) bullets.push("• Production");
-  if (isBlank(project.clusterStateName) || project.clusterStateName === "Draft") {
-    bullets.push("• Change the project status from Draft");
-  }
-  return bullets;
-}
-
-export const isPageLocked = (p: RevenueProject | null): boolean =>
-  p === null || pageLock(p).length > 0;
 
 /* ══════════════════════════════════════════════════════════ italy price region ══ */
 
@@ -397,23 +341,6 @@ export function techColumn(row: AssumptionRow | undefined, tech: Technology): st
   if (tech === "Wind") return row.wind;
   if (tech === "PV") return row.pv;
   return null;
-}
-
-/**
- * Rule 12 — locale-sensitive number parsing.
- *
- * `With({varLang: Lower(First(Split(Language(),"-")).Value)},
- *   Switch(varLang, "en", Value(x), Value(Substitute(x, ".", ","))))`
- *
- * The SQL columns are invariant strings with a `.` decimal point. On a non-English client
- * `Value()` would read `.` as a thousands separator, so the canvas re-points the
- * separator first. Reproduced exactly rather than "fixed", because the fix belongs
- * server-side (parse to `number` in the repository) not here.
- */
-export function assumptionNumber(raw: string | null | undefined, language: Lang = "en-US"): number {
-  if (raw === null || raw === undefined || raw === "") return NaN;
-  if (langRoot(language) === "en") return parseNumber(raw, language);
-  return parseNumber(String(raw).replace(/\./g, ","), language);
 }
 
 /** `LookUp(locCountryRelatedAssumptions, valuetype = v && category = c)`. */
@@ -2838,28 +2765,6 @@ export const REVENUE_SCREEN_TEXT = {
 } as const;
 
 /* ═══════════════════════════════════════════════════════════════ columns ═══════ */
-
-/** `Projects` columns this screen reads (verified against `Vsb_projectsModel`). */
-export const PROJECT_COL = {
-  id: "vsb_projectid",
-  projectIdText: "vsb_name",
-  projectName: "vsb_projectname",
-  country: "_vsb_country_value",
-  countryArea: "_vsb_countryarea_value",
-  technology: "vsb_technology",
-  totalCapacity: "vsb_totalcapacity",
-  netYieldP50: "vsb_netyieldp50",
-  endDate: "vsb_enddate",
-  cod: "vsb_operationsstartdatecod",
-  fid: "vsb_finalinvestmentdecision",
-  construction: "vsb_construction",
-  legallyBindingPermits: "vsb_legallybindingpermits",
-  applicationSubmitted: "vsb_applicationsubmitted",
-  projectDevelopmentStarted: "vsb_projectdevelopmentstarted",
-  feasibilityStudies: "vsb_feasibilitystudies",
-  clusterState: "_vsb_clusterstate_value",
-  owningBusinessUnit: "_owningbusinessunit_value",
-} as const;
 
 /** `Project Revenues` columns (verified against `Vsb_projectrevenuesModel`, D33). */
 export const REVENUE_COL = {

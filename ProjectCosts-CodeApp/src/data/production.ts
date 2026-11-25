@@ -6,7 +6,7 @@
  * `vsb_energyyield`, `vsb_pvseasonalityvalues` and `vsb_pvnegativeprices`.
  *
  * Reused, not repeated: the project's generator types, PV types, turbines / PV units and device
- * types come from `data/generators.ts`; the country inflation rows from `data/landLease.ts`.
+ * types come from `data/generators.ts`; the country inflation rows from `data/countryInflation.ts` (D162: not the whole Land Lease module).
  * `Assumptions Revenues SQL` is a Fabric SQL source (`[dbo].[AssumptionsRevenue]`, registered as
  * `AssumptionsRevenueService`, D54). It is read only, for the standard seasonality and negative
  * prices (`listStandardRevenueAssumptions`, connected 28 Oct 2026).
@@ -32,7 +32,7 @@ import { CHOICE_PRODUCTION, OANDM_SUBACCOUNT_NAME } from "./dataverseNames";
 import { fetchAll, fetchPage } from "./client";
 import { listGeneratorTypes, listProjectTurbines, listPvTypes } from "./generators";
 import { mapLimit } from "./concurrency";
-import { loadCountryInflation } from "./landLease";
+import { loadCountryInflation } from "./countryInflation";
 import { and, chunk, dateOnlyOf as ymd, eq, guid, inList, lookupEq, lookupIn } from "./odata";
 import { rowStr as str, rowNum as num, rowBool as bool } from "./rowValues";
 

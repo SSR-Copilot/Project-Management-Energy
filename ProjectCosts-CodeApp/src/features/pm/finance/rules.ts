@@ -14,8 +14,8 @@
  * WHAT WAS DELETED AS A WORKAROUND
  *  - The `With({varLang: …}, Switch(varLang, "en", Value(x), Value(Substitute(x,".",","))))`
  *    wrapper, repeated around every one of the 27 senior-debt fields and again for
- *    DSRA/DSRF and Decommissioning. One `assumptionNumber`, imported from the Revenues
- *    feature so the two screens cannot drift apart.
+ *    DSRA/DSRF and Decommissioning. One `assumptionNumber`, shared with the Revenues
+ *    feature (`features/pm/shared/projectRow.ts`) so the two screens cannot drift apart.
  *  - Five copies of `If(CountIf('Financing Inputs', …) = 0, IfError(Patch(…), Notify(…)))`
  *    in `OnVisible` — a write-on-read that races when two users open the screen at once.
  *    `planSeeds` returns the rows that are MISSING; `hooks.ts` issues them as one batch
@@ -66,7 +66,7 @@
  */
 import {
   parseNumber, isNumeric, isInteger, inRange, inRangeAbs, isDecimalWithPlaces, isBlank,
-  decimalSeparator, pfxRound, type Lang,
+  decimalSeparator, pfxRound, forLanguage, textFormat, type Lang,
 } from "@/domain/powerFxNumeric";
 import { addDays, addMonths, addYears, toMMYY, fromMMYY, localDayOf } from "@/domain/dates";
 import { DATE_PICKER_FORMAT, formatCanvasDate } from "@/domain/canvasDate";
@@ -75,11 +75,13 @@ import { CHOICE_FINANCE, ES, ES_FINANCE } from "@/data/dataverseNames";
 import { bind, dateOnly, owningBusinessUnitBind as ownerBind } from "@/data/odata";
 import { createdRowRef, refusePlan, type PlannedWrite, type WritePlan } from "@/data/writePlan";
 import type { PlanJob } from "@/data/usePlanWrite";
+// The project row, the page lock and `assumptionNumber` are shared with Revenues through `features/pm/shared/projectRow.ts`
+// (FE-P2-05, D162); `forLanguage` / `textFormat` are the `domain/powerFxNumeric` ones the Generators barrel re-exported.
+// Neither the Revenues nor the Generators rules module is imported, so neither is in the Finance chunk.
 import {
   assumptionNumber, pageLock as revenuePageLock, isPageLocked as revenueIsPageLocked,
   type RevenueProject,
-} from "@/features/pm/revenues/rules";
-import { forLanguage, textFormat } from "@/features/pm/generators/rules";
+} from "@/features/pm/shared/projectRow";
 
 /* ═════════════════════════════════════════════════════════════════════ types ════ */
 

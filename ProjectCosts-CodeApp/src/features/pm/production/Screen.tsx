@@ -15,7 +15,7 @@
  *                  `con_Main_PopUp_Common_Generators_PreventTotalCapacity_Information_1`,
  *                  `cmp_PopUp_LoadingSpinner_Production` (`WriteFeedback`)
  */
-import { useState } from "react";
+import { memo, useMemo, useState } from "react";
 import {
   Button,
   Input, MessageBar, MessageBarBody, Switch, Text, Tooltip,
@@ -28,10 +28,11 @@ import {
 import {
   Choices, type Command, CommandBar, ConfirmDialog, EmptyState, FormPanel, InformationPopUp, LoadingOverlay,
   FIELD_APPEARANCE, NumericField, PanelButtons, ReadOnlyField, TextField, UnsavedChangesGuard, WriteFeedback,
-  useFieldControlClass, useStandardValueClass,
+  useFieldControlClass, useStandardValueClass, useStableCallback,
   ExpandChevron,
 } from "@/components";
 import { useSession } from "@/app/SessionContext";
+import { probeRender } from "@/platform/renderProbe";
 import { CHOICE_PRODUCTION } from "@/data/dataverseNames";
 import { media, palette, space } from "@/theme/tokens";
 import {
@@ -313,12 +314,80 @@ const PM_PANEL = "pm-canvas-panel";
 type PanelState = { technology: Technology; editing: EnergyYieldRow | null };
 type Confirm = { kind: "delete"; row: EnergyYieldRow } | { kind: "status"; row: EnergyYieldRow } | { kind: "prevent" };
 
+/**
+ * One month row of the seasonality column (`gal_ProductionSeasonalityYield{WTG|PV}`). Memoized (FE-P2-03, D162): the
+ * Screen holds the panel form, so a keystroke in any panel field re-rendered all 12 rows, and a cell edit all 12 again.
+ * `row` is the row's own object (`applyMonthEdit` keeps the rows it does not change) and `onEdit` the Screen's stable
+ * setter. Markup, captions, `aria-label`s and test ids are those the Screen rendered inline.
+ */
+const SeasonalityRowView = memo(function SeasonalityRowView({ row, technology, lang, onEdit }: {
+  row: SeasonalityRow; technology: Technology; lang: string; onEdit: (id: number, text: string) => void;
+}) {
+  probeRender(`ProductionSeasonRow:${row.id}`);
+  const s = useStyles();
+  const standardClass = useStandardValueClass();
+  const controlClass = useFieldControlClass();
+  const error = validateCellPercent(row.text, lang);
+  return (
+    <div className={s.cellRow}>
+      <Text className={s.cellCaption}>{UI.distribution}</Text>
+      {/* `txt_…_Month`: a `DisplayMode.View` input — the grey box, dark text. */}
+      <Input readOnly value={row.month} appearance={FIELD_APPEARANCE}
+        className={mergeClasses(s.cellMonth, controlClass("view"))} aria-label={row.month}
+        data-testid={`txt_ProductionSeasonalityYield${technology}_Month-${row.id}`} />
+      <Input value={row.text}
+        appearance={FIELD_APPEARANCE}
+        className={mergeClasses(s.cellValue, controlClass("edit", standardClass(row.isStandard)))}
+        aria-label={`${row.month} ${UI.distribution}`} aria-invalid={error ? true : undefined}
+        data-testid={`txt_ProductionSeasonalityYield${technology}_MonthValue-${row.id}`}
+        onChange={(_, d) => onEdit(row.id, d.value)} />
+      {error ? <Text className={s.cellError} role="alert">{error}</Text> : null}
+    </div>
+  );
+});
+
+/**
+ * One year row of the negative-price column (`gal_ProductionNegativePrice{WTG|PV}`), memoized as `SeasonalityRowView`
+ * (FE-P2-03): `applyReductionEdit` / `resetNegativePriceRow` keep the other years' objects, so an edit or a reset renders
+ * one row of 15.
+ */
+const NegativePriceRowView = memo(function NegativePriceRowView({ row, technology, lang, onEdit, onReset }: {
+  row: NegativePriceRow; technology: Technology; lang: string;
+  onEdit: (year: number, text: string) => void; onReset: (year: number) => void;
+}) {
+  probeRender(`ProductionNegativeRow:${row.year}`);
+  const s = useStyles();
+  const standardClass = useStandardValueClass();
+  const controlClass = useFieldControlClass();
+  const error = validateCellPercent(row.text, lang);
+  return (
+    <div className={s.cellRow}>
+      <Text className={s.cellCaption}>{UI.reduction}</Text>
+      <Input readOnly value={String(row.year)} appearance={FIELD_APPEARANCE}
+        className={mergeClasses(s.cellMonth, controlClass("view"))} aria-label={String(row.year)}
+        data-testid={`txt_ProductionNegativePrice${technology}_Year-${row.year}`} />
+      <Input value={row.text}
+        appearance={FIELD_APPEARANCE}
+        className={mergeClasses(s.cellValue, controlClass("edit", standardClass(row.standardAssumption)))}
+        aria-label={`${row.year} ${UI.reduction}`} aria-invalid={error ? true : undefined}
+        data-testid={`txt_ProductionNegativePrice${technology}_YearValue-${row.year}`}
+        onChange={(_, d) => onEdit(row.year, d.value)} />
+      <Tooltip content={UI.resetToStandard} relationship="label" withArrow>
+        <Button appearance="transparent" icon={<ArrowClockwiseRegular />} className={s.cellReset}
+          aria-label={`${UI.resetToStandard} ${row.year}`}
+          data-testid={`ico_ProductionNegativePrice${technology}_YearValueReset-${row.year}`}
+          onClick={() => onReset(row.year)} />
+      </Tooltip>
+      {error ? <Text className={s.cellError} role="alert">{error}</Text> : null}
+    </div>
+  );
+});
+
 /* ────────────────────────────────────────────────────────────────── screen */
 
 export default function ProductionScreen() {
   const s = useStyles();
-  /* The italic "calculated default" treatment of a standard-assumption cell (rule 20). */
-  const standardClass = useStandardValueClass();
+  // The italic "calculated default" treatment of a standard-assumption cell (rule 20) is in the row views above.
   const controlClass = useFieldControlClass();
   const { projectId, locale } = useSession();
   const lang = locale;
@@ -387,16 +456,32 @@ export default function ProductionScreen() {
   const modes = fieldModes(form, technology, panel?.editing != null);
   const errors = yieldErrors(view, form, technology, lang);
 
-  const seasonRows: SeasonalityRow[] = seasonEdits
-    ?? (panel?.editing ? seasonalityFromStored(storedSeason.data, lang) : buildSeasonalityRows(standard.seasonality, technology, lang));
-  const negativeRows: NegativePriceRow[] = negativeEdits
-    ?? (panel?.editing?.considerNegativePrices
-      ? negativeRowsForEdit({ stored: storedNegative.data, standard: standard.negativePrices, technology, cod: project?.cod ?? null, lang })
-      : []);
+  // The rows before any edit, memoized so the memoized row views keep their props across panel keystrokes (FE-P2-03).
+  const editing = panel?.editing ?? null;
+  const cod = project?.cod ?? null;
+  const seasonBase = useMemo(
+    () => (editing ? seasonalityFromStored(storedSeason.data, lang) : buildSeasonalityRows(standard.seasonality, technology, lang)),
+    [editing, storedSeason.data, standard.seasonality, technology, lang],
+  );
+  const negativeBase = useMemo(
+    () => (editing?.considerNegativePrices
+      ? negativeRowsForEdit({ stored: storedNegative.data, standard: standard.negativePrices, technology, cod, lang })
+      : []),
+    [editing, storedNegative.data, standard.negativePrices, technology, cod, lang],
+  );
+  const seasonRows: SeasonalityRow[] = seasonEdits ?? seasonBase;
+  const negativeRows: NegativePriceRow[] = negativeEdits ?? negativeBase;
+  // The cell `OnChange`s and the per-year reset, applied to the CURRENT rows: one identity for the visit (FE-P2-03).
+  const editMonth = useStableCallback((id: number, text: string) =>
+    setSeasonEdits((cur) => applyMonthEdit(cur ?? seasonBase, id, text, lang)));
+  const editReduction = useStableCallback((year: number, text: string) =>
+    setNegativeEdits((cur) => applyReductionEdit(cur ?? negativeBase, year, text, lang)));
+  const resetReduction = useStableCallback((year: number) =>
+    setNegativeEdits((cur) => resetNegativePriceRow(cur ?? negativeBase, year, lang)));
   const storedLoading = panel?.editing != null && (storedSeason.isLoading || storedNegative.isLoading);
 
   const saveable = panel !== null && project !== null && !storedLoading && !busy
-    && canSaveYield({ form, view, technology, seasonality: seasonRows, negativePrices: negativeRows, lang });
+    && canSaveYield({ form, view, technology, seasonality: seasonRows, negativePrices: negativeRows, lang, errors });
 
   const toggleSeasonality = (on: boolean) => {
     set("considerSeasonality", on);
@@ -688,25 +773,9 @@ export default function ProductionScreen() {
               </div>
               <div className={s.columnRule} aria-hidden="true" />
               <div className={s.gallery}>
-                {seasonRows.map((row) => {
-                  const error = validateCellPercent(row.text, lang);
-                  return (
-                    <div key={row.id} className={s.cellRow}>
-                      <Text className={s.cellCaption}>{UI.distribution}</Text>
-                      {/* `txt_…_Month`: a `DisplayMode.View` input — the grey box, dark text. */}
-                      <Input readOnly value={row.month} appearance={FIELD_APPEARANCE}
-                        className={mergeClasses(s.cellMonth, controlClass("view"))} aria-label={row.month}
-                        data-testid={`txt_ProductionSeasonalityYield${technology}_Month-${row.id}`} />
-                      <Input value={row.text}
-                        appearance={FIELD_APPEARANCE}
-                        className={mergeClasses(s.cellValue, controlClass("edit", standardClass(row.isStandard)))}
-                        aria-label={`${row.month} ${UI.distribution}`} aria-invalid={error ? true : undefined}
-                        data-testid={`txt_ProductionSeasonalityYield${technology}_MonthValue-${row.id}`}
-                        onChange={(_, d) => setSeasonEdits(applyMonthEdit(seasonRows, row.id, d.value, lang))} />
-                      {error ? <Text className={s.cellError} role="alert">{error}</Text> : null}
-                    </div>
-                  );
-                })}
+                {seasonRows.map((row) => (
+                  <SeasonalityRowView key={row.id} row={row} technology={technology} lang={lang} onEdit={editMonth} />
+                ))}
               </div>
               <div className={mergeClasses(s.cellRow, s.totalRow)}>
                 <Text className={s.cellCaption}>{UI.totalSum}</Text>
@@ -727,30 +796,11 @@ export default function ProductionScreen() {
               </div>
               <div className={s.columnRule} aria-hidden="true" />
               <div className={s.gallery}>
-                {negativeRows.map((row) => {
-                  const error = validateCellPercent(row.text, lang);
-                  return (
-                    <div key={row.year} className={s.cellRow}>
-                      <Text className={s.cellCaption}>{UI.reduction}</Text>
-                      <Input readOnly value={String(row.year)} appearance={FIELD_APPEARANCE}
-                        className={mergeClasses(s.cellMonth, controlClass("view"))} aria-label={String(row.year)}
-                        data-testid={`txt_ProductionNegativePrice${technology}_Year-${row.year}`} />
-                      <Input value={row.text}
-                        appearance={FIELD_APPEARANCE}
-                        className={mergeClasses(s.cellValue, controlClass("edit", standardClass(row.standardAssumption)))}
-                        aria-label={`${row.year} ${UI.reduction}`} aria-invalid={error ? true : undefined}
-                        data-testid={`txt_ProductionNegativePrice${technology}_YearValue-${row.year}`}
-                        onChange={(_, d) => setNegativeEdits(applyReductionEdit(negativeRows, row.year, d.value, lang))} />
-                      <Tooltip content={UI.resetToStandard} relationship="label" withArrow>
-                        <Button appearance="transparent" icon={<ArrowClockwiseRegular />} className={s.cellReset}
-                          aria-label={`${UI.resetToStandard} ${row.year}`}
-                          data-testid={`ico_ProductionNegativePrice${technology}_YearValueReset-${row.year}`}
-                          onClick={() => setNegativeEdits(resetNegativePriceRow(negativeRows, row.year, lang))} />
-                      </Tooltip>
-                      {error ? <Text className={s.cellError} role="alert">{error}</Text> : null}
-                    </div>
-                  );
-                })}
+                {negativeRows.map((row) => (
+                  <NegativePriceRowView
+                    key={row.year} row={row} technology={technology} lang={lang} onEdit={editReduction} onReset={resetReduction}
+                  />
+                ))}
               </div>
             </div>
           ) : null}

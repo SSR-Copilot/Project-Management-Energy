@@ -18,6 +18,7 @@
     "check:canvas": "node scripts/check-canvas-identities.mjs",
     "check:canvas:drift": "node scripts/check-canvas-drift.mjs",
     "check:power": "node scripts/check-power-sources.mjs",
+    "bundle:report": "node scripts/bundle-report.mjs",
     "orphans:generators": "node scripts/generators-orphans.mjs",
     "e2e:auth:codeapp": "node e2e/auth.mjs codeapp",
     "e2e:auth:canvas": "node e2e/auth.mjs canvas",

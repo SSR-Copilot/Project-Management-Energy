@@ -35,7 +35,7 @@ import { AddFilled } from "@fluentui/react-icons";
 import {
   ConfirmDialog, CountryTechnologyPicker, DisabledReason, EmptyState, LoadingOverlay, NoticeBar, QueryStates,
   ScopeHeaderBand, useNotify,
-  useQueryHealth, type CloseReason,
+  useQueryHealth, useStableCallback, type CloseReason,
 } from "@/components";
 import { useConfirmDialog } from "@/features/shared/useConfirmDialog";
 import { useCountryTechnologyUrlSelection } from "@/features/shared/useCountryTechnologySelection";
@@ -270,6 +270,17 @@ export default function ContractsSettingsScreen() {
       });
   }
 
+  // FE-AD-05 (D162): stable handlers and a memoised selected set for the memoised cards and DevCo tree, so a keystroke in the
+  // panel renders neither (UT-ADCONTR-FE-003). `expanded.toggle` is already stable.
+  const editCard = useStableCallback((contract: StandardContract) => openEdit(contract));
+  const askDeleteCard = useStableCallback((contract: StandardContract) => deleteDialog.ask("delete", contract));
+  const selectedAccounts = panel?.form.selectedAccountIds;
+  const selectedAccountSet = useMemo(() => new Set(selectedAccounts ?? []), [selectedAccounts]);
+  const retryDevCo = useStableCallback(() => { void devCoQuery.refetch(); void capexQuery.refetch(); });
+  const changeDevCoSelection = useStableCallback((next: Set<string>) => panelState.patch((prev) => ({
+    ...prev, form: { ...prev.form, selectedAccountIds: [...next].sort() },
+  })));
+
   function closePanel(warnIncomplete: boolean) {
     panelState.close();
     if (warnIncomplete) notify.warning(INCOMPLETE_CLOSED_WARNING);
@@ -446,9 +457,9 @@ export default function ContractsSettingsScreen() {
                   tagGroups={tagGroups}
                   canEdit={privileges.canWrite}
                   canDelete={privileges.canDelete}
-                  onToggle={() => expanded.toggle(contract.id)}
-                  onEdit={() => openEdit(contract)}
-                  onDelete={() => deleteDialog.ask("delete", contract)}
+                  onToggle={expanded.toggle}
+                  onEdit={editCard}
+                  onDelete={askDeleteCard}
                 />
               );
             })}
@@ -517,15 +528,13 @@ export default function ContractsSettingsScreen() {
           devCoForm={(
             <DevCoCostForm
               roots={tree.roots}
-              selected={new Set(panel.form.selectedAccountIds)}
+              selected={selectedAccountSet}
               classes={classes}
               loading={devCoQuery.isLoading || capexQuery.isLoading}
               errorText={devCoError ?? capexError}
-              onRetry={() => { void devCoQuery.refetch(); void capexQuery.refetch(); }}
+              onRetry={retryDevCo}
               disabled={saveMutation.isPending || scopeChanged}
-              onChange={(next) => panelState.patch((prev) => ({
-                ...prev, form: { ...prev.form, selectedAccountIds: [...next].sort() },
-              }))}
+              onChange={changeDevCoSelection}
             />
           )}
         />

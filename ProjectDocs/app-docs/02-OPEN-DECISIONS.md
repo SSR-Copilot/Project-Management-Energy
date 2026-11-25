@@ -8939,7 +8939,81 @@ After a deploy, open the app, use a few screens, wait about five minutes, then i
 - `browserTimings` (page load time) depends on the SDK's `PageViewPerformance`, which is unchanged here; whether it arrives from inside the Power Apps player was not checked.
 - The `networkRequest` custom event is gone; if a saved query or workbook reads it, re-add one `trackEvent` next to the `trackDependencyData` call.
 
-## D162 — Generators: the turbine grid shows all its rows without a scrollbar, as the canvas (24 Nov 2026; number PROVISIONAL, may be renumbered at merge; D161 is the Application Insights dependencies record on `master`)
+## D162 — Frontend performance programme: rendering, state, hooks, components, memory and bundle (25 Nov 2026; number PROVISIONAL, may be renumbered at merge)
+
+**Status: implemented on branch `feature/frontend-performance-optimization` (from `origin/RounakDev1` at `ed4354e`). Uncommitted, NOT product-approved, not run on DEV.** Full record: `ProjectDocs/app-docs/frontend-optimization/01`–`11`.
+
+### 1. Scope and approval
+
+D160 covered round trips and computation; this programme covers what D160 did not:
+- React rendering and state;
+- hooks and component structure;
+- memory;
+- the bundle.
+
+The audit found 50 findings (`06` §3). The owner approved #1–#36 and decisions D-1 to D-5 on 25 Nov 2026. Outcome:
+- **Implemented:** 34.
+- **FE-SH-03 withdrawn:** CAPEX does not in fact remount under Add Cost from Table. React unwraps the unkeyed Fragment; this is now pinned by UT-CAPEXROUTE-FE-001…003.
+- **FE-P1-04 skipped:** the Overview URL debounce would not be behaviour-identical. UT-OVUI-047 and UT-OVFIX-060 read the URL straight after typing.
+- **Deferred:** 14 findings, with reasons in `06`.
+
+### 2. Bug fixed: CA-31
+
+Add Cost from Table dropped unsaved edits whenever the session project refetched: on a tab return after 5 min, or after any `qk.project` invalidation. Save then sent no changed rows. See `01-BUGS-FOUND.md` CA-31.
+
+### 3. Decisions
+
+| Gate | Decision | Where |
+|---|---|---|
+| D-1 | The `QueryClient` default `structuralSharing` keeps equal `Date`s. It is TanStack's `replaceEqualDeep` plus one rule. An unchanged refetch therefore keeps every cached object, even objects holding dates. It is safe because no code mutates a cached `Date` in place (checked 25 Nov 2026) | `app/queryStructuralSharing.ts` |
+| D-2 | **DIVERGENCE.** `fast-formula-parser` is aliased to a stub (`platform/formulaParserStub.ts`). A sheet cell typed as `=x` now shows `=x`, which is also what is saved. Before, it showed the evaluated value (e.g. `#NAME?`) while `=x` was saved | `vite.config.ts` |
+| D-3 | Moot: there is no remount to remove (§1) | — |
+| D-4 | The header error icon subscribes to the trace store (`useSyncExternalStore`, notified in a microtask so a trace during another component's render does not update `App` mid-render). The "Report a problem" detail is built when the panel opens | `app/useHasTracedError.ts`, `ReportProblemPanel.tsx` |
+| D-5 | Approved, not built (§1) | — |
+
+### 4. Changes the owner should know
+
+- **Bundle** (`09`):
+  - Startup JavaScript is 1,319.9 → 1,018.3 KiB minified and 373.9 → 297.9 KiB gzip.
+  - Every screen's first visit is 6–27 % smaller (gzip); Add Cost from Table is −27 %, Finance −20 %.
+  - The mechanisms:
+    - `treeshake.moduleSideEffects: false` for `src/components` and `src/domain`. A module there that ever needs an import-time side effect must be imported for a value.
+    - The `fluent` manual chunk is limited to the packages the start-up files need (`STARTUP_FLUENT`).
+    - The formula engine stub.
+    - Three moved modules, each re-exported from its old home:
+      - `data/countryInflation.ts`;
+      - `data/pmProjectRow.ts` with `features/pm/shared/projectRow.ts`;
+      - `data/capexAccounts.ts`.
+- **Tests now run the grid users run.** Under Vitest, react-spreadsheet had resolved to its CommonJS build, whose `require()`s no alias reaches. So since D140 the Add Cost grid tests ran on the original `use-context-selector`. `vite.config.ts` now points Vitest at the ES build the browser uses, inlined so both aliases apply.
+- **`[VSB]` log format** (D74): a load that TanStack cancels or removes now closes its ACTION with `, cancelled`. Before, its scope stayed open and tagged every later line with its id.
+- **Azure Maps token:** the proactive refresh runs only while a map is mounted. A later map open fetches on demand.
+- **Small visible differences:**
+  - The Check List Settings task drawer keeps its last values while it slides closed; before, it blanked.
+  - The Grid Operator success flash timer is cleared on unmount.
+- **Test seam:** `platform/renderProbe.ts` generalises the Generators D143 probe. In production it costs one property read per render of a probed component.
+- **Review:** an independent review found no blockers and two should-fix items, both fixed with tests (`10` §2):
+  - a trace during render could update `App` mid-render;
+  - an edit's pending read-back timer could outlive a sheet reload.
+- **Unused export:** `canSavePaymentTarget` (`cost/contracts/rules.ts`) has no caller now. Contracts disables Save on `targetErrors.length > 0`, which is identical by definition. It is kept, with its tests, as the canvas rule's port.
+
+### 5. Rollback
+
+Each finding is an isolated change (`08` lists the files). The configuration items revert as follows:
+- **FE-C1-01:** remove the `fast-formula-parser` alias (one line).
+- **FE-SH-04:** remove the `treeshake` block.
+- **FE-SH-05:** restore the all-Fluent `manualChunks`.
+- **D-1:** remove the `structuralSharing` default line (`app/Providers.tsx`).
+
+### 6. Owed before merge or push
+
+1. The E2E parity question (AGENT-GUIDE item 6): asked on 25 Nov 2026, **skipped by the owner**; the DEV smoke test below stands in for it.
+2. The owner's DEV routine (`07` §4):
+   - React Profiler milliseconds;
+   - heap after 20 General Data round trips;
+   - cold-cache network on `/projects`;
+   - the CA-31 check: edit the sheet, leave the tab for more than 5 min, return.
+3. Commit approval.
+## D163 — Generators: the turbine grid shows all its rows without a scrollbar, as the canvas (24 Nov 2026; renumbered from D162 at the merge of 25 Nov 2026, D162 being the frontend performance programme; D161 is the Application Insights dependencies record on `master`)
 
 **Status:** code in the working tree of branch `few-fix`, not on DEV.
 **Report:** "for 6 generator show it without scrollbar like canvas" (canvas / code app screenshot pair of a WTG card with six generators, 24 Nov 2026).

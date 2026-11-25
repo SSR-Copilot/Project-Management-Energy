@@ -22,6 +22,7 @@ import {
   loadOpexCostsScreen, loadPlanningScreen, loadProductionScreen, loadProjectOverviewScreen, loadRevenuesScreen, loadTeamScreen,
 } from "./screenLoaders";
 import { useGeneratorsWarmup } from "./generatorsWarmup";
+import { probeRender } from "@/platform/renderProbe";
 
 // Every screen loads through `screenLoaders.ts`, so `bootPrefetch.ts` can start its chunk early (D119, OPT-03).
 const ProjectOverviewScreen = lazy(loadProjectOverviewScreen);
@@ -154,6 +155,7 @@ function LegacyGeneralDataRedirect() {
 }
 
 export function AppRoutes() {
+  probeRender("AppRoutes");
   return (
     <Suspense fallback={<LoadingOverlay mode="inline" label="Loading screen…" />}>
       <Routes>

@@ -12,9 +12,7 @@
  * renders is what produces "cannot update a component while rendering a different component".
  * A portal keeps ownership and render order where they belong.
  */
-import {
-  createContext, useContext, useEffect, useState, type ReactNode,
-} from "react";
+import { createContext, useContext, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 const SlotCtx = createContext<HTMLElement | null>(null);
@@ -35,11 +33,12 @@ export function CommandSlotProvider({
  */
 export function CommandSlot({ children }: { children: ReactNode }) {
   const element = useContext(SlotCtx);
-  // The slot element is set by the shell's ref callback, which runs after the first paint,
-  // so the first render has nothing to portal into.
-  const [ready, setReady] = useState(false);
-  useEffect(() => setReady(Boolean(element)), [element]);
-
-  if (!element || !ready) return <>{children}</>;
+  /*
+   * The slot element is set by the shell's ref callback, so on the shell's own first render there is nothing to portal into
+   * and the bar renders in place. Once the context holds an element, that node is already committed, so it is portalled at once.
+   * D162 (FE-SH-06): a `ready` flag set in an effect used to delay the portal by one commit even then, so every Project Overview
+   * visit painted the bar in the page body for one frame and then unmounted and remounted it in the header.
+   */
+  if (!element) return <>{children}</>;
   return createPortal(children, element);
 }

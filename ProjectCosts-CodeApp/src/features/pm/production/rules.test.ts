@@ -906,3 +906,49 @@ describe("D117 the seasonality Total Sum in the user's language", () => {
     expect(fmtPercentTotal(99.5, "en-US")).toBe("99.5");
   });
 });
+
+/* ═══════════════════════════════════════════════ D162 B4 (FE-P2-03) ════ */
+
+describe("UT-PROD-FE month edits and the Save gate (D162 B4, FE-P2-03)", () => {
+  /** The rule as it was before FE-P2-03: every row a new object. The values must stay equal to it. */
+  const applyMonthEditOracle = (rows: ReturnType<typeof buildSeasonalityRows>, id: number, text: string, lang = "en-US") =>
+    rows.map((r) => (r.id === id
+      ? { ...r, isStandard: false, text, value: applyMonthEdit([r], id, text, lang)[0]!.value }
+      : { ...r, isStandard: false }));
+
+  it("UT-PROD-FE-004 applyMonthEdit keeps the rows that already lost their standard flag, with values equal to the old rule", () => {
+    const standard = buildSeasonalityRows(twelveStandard(8), "WTG");
+    const first = applyMonthEdit(standard, 3, "9");
+    // The first edit clears every flag: every row is new.
+    expect(first.every((r, i) => r !== standard[i])).toBe(true);
+    expect(first).toEqual(applyMonthEditOracle(standard, 3, "9"));
+    for (const [id, text, lang] of [[3, "9.5", "en-US"], [5, "abc", "en-US"], [12, "7,5", "de-DE"], [3, "", "en-US"]] as const) {
+      const next = applyMonthEdit(first, id, text, lang);
+      expect(next).toEqual(applyMonthEditOracle(first, id, text, lang));
+      next.forEach((r, i) => { if (r.id !== id) expect(r).toBe(first[i]); });
+      expect(next.find((r) => r.id === id)).not.toBe(first.find((r) => r.id === id));
+    }
+    // A row with a standard flag still left (an Edit's stored flags) gets a new object with the flag cleared.
+    const mixed = first.map((r) => (r.id === 7 ? { ...r, isStandard: true } : r));
+    const after = applyMonthEdit(mixed, 1, "8");
+    expect(after[6]).not.toBe(mixed[6]);
+    expect(after[6]!.isStandard).toBe(false);
+    expect(after).toEqual(applyMonthEditOracle(mixed, 1, "8"));
+  });
+
+  it("UT-PROD-FE-005 canSaveYield with the caller's `errors` answers what it answers when it computes them", () => {
+    const cases: [YieldFormState, "WTG" | "PV"][] = [
+      [form(), "WTG"], [form({ windSpeed: "99" }), "WTG"], [form({ uncertainty: "90" }), "WTG"],
+      [form({ uncertaintyInput: "Input Net Yield p75/p90", uncertainty: "", netP75: "9000", netP90: "9500" }), "WTG"],
+      [form({ lossesInput: "Input Net Yield p50", grossYield: "12000.5", netP50: "10000" }), "PV"],
+      [form({ windSpeed: "", allocationInput: "Input Irradiation", irradiation: "1000" }), "PV"],
+    ];
+    for (const [f, tech] of cases) {
+      const view = viewOf(f, tech);
+      const base = { form: f, view, technology: tech, seasonality: [], negativePrices: [] };
+      expect(canSaveYield({ ...base, errors: yieldErrors(view, f, tech) })).toBe(canSaveYield(base));
+    }
+    expect(cases.some(([f, t]) => canSaveYield({ form: f, view: viewOf(f, t), technology: t, seasonality: [], negativePrices: [] }))).toBe(true);
+    expect(cases.some(([f, t]) => !canSaveYield({ form: f, view: viewOf(f, t), technology: t, seasonality: [], negativePrices: [] }))).toBe(true);
+  });
+});

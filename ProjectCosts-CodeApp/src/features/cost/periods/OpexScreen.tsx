@@ -31,7 +31,7 @@
  *   `Cost App - Other opex -  Tab selected.png`
  *   `Cost App - Add & Edit ContractPeriod Panel - Almost same for Landlease and other Opex also.png`
  */
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import {
   Button, Dropdown, Input, Option, Switch, Text, Tooltip,
   makeStyles, mergeClasses, tokens,
@@ -800,9 +800,14 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
     () => (mode === "other" ? otherFoldState.get(projectId ?? "") ?? {} : {}),
   );
   // Switching rail item without unmounting re-enters the screen: O&M refolds, Other restores.
-  useEffect(() => {
+  // FE-C2-05 (D162): adjusted during the render (React's "adjust state when a prop changes"), not in an effect after the
+  // commit, so neither an O&M entry nor a switch renders twice, the first time with the other mode's folds.
+  const foldKey = `${mode}|${projectId ?? ""}`;
+  const [foldedFor, setFoldedFor] = useState(foldKey);
+  if (foldedFor !== foldKey) {
+    setFoldedFor(foldKey);
     setOpenCardsState(mode === "other" ? otherFoldState.get(projectId ?? "") ?? {} : {});
-  }, [mode, projectId]);
+  }
   const setOpenCards = (update: (prev: Record<string, boolean>) => Record<string, boolean>) =>
     setOpenCardsState((prev) => {
       const next = update(prev);

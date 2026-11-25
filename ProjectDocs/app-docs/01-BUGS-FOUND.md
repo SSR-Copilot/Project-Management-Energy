@@ -1424,6 +1424,29 @@ controls of EVERY state, not only the rest state that E2E-LANDLEASE-003 checked.
   the icon without a button, is unchanged. The component is shared, so every date field in the app gains the id. Pinned
   by UT-DATEFIELD-005. Confirmed live in parity run 16 (4 Nov 2026): no unlabelled control in any of the 11 Land Lease states.
 
+### CA-31 · Add Cost from Table drops unsaved edits when the session project refetches (found and fixed 25 Nov 2026, D162, uncommitted)
+
+**A code-app defect (silent data loss)**, found by the D162 frontend audit (FE-C1-02).
+
+**Cause.**
+- The sheet's `loaded` memo (`add-costs-from-table/Screen.tsx`) depended on the identity of the session `project`.
+- `ProjectContext` holds `Date`s. TanStack Query's structural sharing never keeps a `Date`, so every refetch of an
+  unchanged project handed the screen a new object. That happened on returning to the browser tab once the project was
+  5 minutes stale, and after any `qk.project` invalidation.
+- The memo then rebuilt the sheet from the server snapshot. The grid re-seeded itself (`SpreadSheet.tsx`, `seededFrom`)
+  and `currentRows` was reset.
+- The user's unsaved edits were gone. A following Save sent `changedRows: []`, so it reported success and saved nothing.
+
+The sheet query's own `NO_FOCUS_REFETCH` had been added to prevent exactly this, but the project query bypassed it.
+
+**Fixed (25 Nov 2026), in two layers:**
+1. The memo keys on `Boolean(project)`. The only project facts the sheet uses, its first and last year, were already keys.
+2. App-wide, the `QueryClient`'s structural sharing now keeps equal `Date`s (`app/queryStructuralSharing.ts`, D162 FE-SH-01),
+   so an unchanged refetch no longer produces a new object at all.
+
+Pinned by UT-ACIDENT-001…003 (reproduced first: before the fix the grid re-seeded and Save sent no changed rows) and
+UT-QSHARE-001…007.
+
 ---
 
 ## Verification notes

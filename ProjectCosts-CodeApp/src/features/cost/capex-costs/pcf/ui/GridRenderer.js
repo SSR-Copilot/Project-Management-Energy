@@ -1459,6 +1459,9 @@ export class GridRenderer {
     destroy() {
         this.closeAddDropdown();
         this.closeMonthDropdown();
+        // FE-C1-09 (this app's port, not vendor): the name-dot tooltip floats on document.body too, and a
+        // dot that still has keyboard focus when the grid goes gets no blur, so it would stay over the next screen.
+        this.hideCommentTooltip();
         if (this._resizeObserver) {
             this._resizeObserver.disconnect();
             this._resizeObserver = null;

@@ -216,7 +216,7 @@ export const useStyles = makeStyles({
    * the box is the `maxHeight` set inline per card. The live canvas draws the rows about 35 px tall inside it
    * (user screenshot pair, 24 Nov 2026: six generators, no scrollbar), so the table uses 35-px rows under a
    * 42-px header and always fits its box (42 + 35n ≤ 50 + 35n). The 18 Nov 2026 reading of 42-px rows, which
-   * made the last row spill and a scrollbar appear, is withdrawn (D162). `overflowY: auto` stays as a safety net
+   * made the last row spill and a scrollbar appear, is withdrawn (D163). `overflowY: auto` stays as a safety net
    * only; no gutter is reserved because a page never exceeds its box.
    */
   turbineScroll: { overflowY: "auto", overflowX: "hidden", maxWidth: "100%" },
