@@ -51,13 +51,18 @@ import { Vsb_generatorinprojectsService } from "@/generated/services/Vsb_generat
 import { Vsb_generatortypeinprojectsService } from "@/generated/services/Vsb_generatortypeinprojectsService";
 import { Vsb_pvmoduletypeinprojectsService } from "@/generated/services/Vsb_pvmoduletypeinprojectsService";
 import { Vsb_opexlandleasestandardassumptionsesService } from "@/generated/services/Vsb_opexlandleasestandardassumptionsesService";
-import { unwrap } from "@/platform/errors";
+import { RECORD_GONE_TEXT, isRecordGone, unwrap } from "@/platform/errors";
 import {
   bindParent, generatorOptions, LEASE_ENTITY_SET, LeaseStepsError, leaseHttpResponse, leaseStepOf, leaseWriteTiers,
   TYPE_OF_CONTRACT, type LeaseStepFailure, type GeneratorOption, type LeaseAllocationRow, type LeaseAssumptionRow, type LeaseCostRow,
   type LeasePeriodRow, type LeaseSubaccountRow, type LeaseWrite,
 } from "@/features/cost/periods/landLeaseRules";
-import { deleteRecord, fetchAll } from "./client";
+import { deleteIfExists, deleteRecord, fetchAll } from "./client";
+import { assertRowsExist } from "./costUpdateGuard";
+import { GONE_AS_DONE_LEASE_OPEX, LEASE_GUARD, LEASE_LEAN_RELOAD, LEASE_TIER_WIDER } from "./leaseOpexFlags";
+import { costWrite } from "./costWritePolicy";
+import { sharedRead } from "./sharedRead";
+import { createWithStableId } from "./stableCreateId";
 import { CASCADE_DELETE_CONCURRENCY, LEAF_DELETE_CONCURRENCY, mapLimitFirstFailure, WRITE_CONCURRENCY } from "./concurrency";
 import { loadAllCurrencies, loadCurrencyNameMap, type CurrencyRow } from "./currencies";
 import { ACTIVE, and, chunk, eq, lookupEq, lookupIn } from "./odata";
@@ -116,19 +121,32 @@ export const LEASE_PERIOD_SELECT = [
  * delegation workaround. Here the period query is scoped server-side by the header ids the
  * first query returned, chunked because Dataverse has no `in` for GUIDs.
  */
+/** The nine `vsb_landleasesubaccounts` rows, read as before. DIVERGENCE (FT-BR-LEASE-005): ACTIVE only (the canvas reads the whole table, LL:14). */
+const readLeaseSubaccounts = () => fetchAll(
+  "list Land Lease subaccounts",
+  (o) => Vsb_landleasesubaccountsService.getAll(o),
+  {
+    select: ["vsb_landleasesubaccountid", "vsb_name", "vsb_order"],
+    // DIVERGENCE (product decision, FT-BR-LEASE-005): the canvas reads the whole table, no state
+    // filter (LL:14 `ClearCollect(colLandLeaseSubaccounts, Sort(AddColumns('Land Lease
+    // Subaccounts', …)))`); this app lists active rows only. Kept (cf. D45 G2).
+    filter: ACTIVE,
+  },
+);
+
+/**
+ * dvopt CB-15 (`LEASE_LEAN_RELOAD`): the sub-accounts are shared reference data (nine rows, the same for every project, no admin screen
+ * edits them), so a reload after a Land Lease write, a focus refetch and a revisit within `LEASE_SUBACCOUNTS_MEMO_MS` reuse one read
+ * instead of reading the table with every book. The first load of a session still reads it; a failed read is not remembered.
+ */
+const LEASE_SUBACCOUNTS_MEMO_MS = 5 * 60 * 1000;
+const leaseSubaccounts = sharedRead(readLeaseSubaccounts, LEASE_SUBACCOUNTS_MEMO_MS);
+/** Forgets the remembered sub-accounts (tests; nothing in the app writes them). */
+export function resetLeaseSubaccountsMemo(): void { leaseSubaccounts.invalidate(); }
+
 export async function loadLeaseBook(projectId: string): Promise<LeaseBook> {
   const [subaccountRows, costRows] = await Promise.all([
-    fetchAll(
-      "list Land Lease subaccounts",
-      (o) => Vsb_landleasesubaccountsService.getAll(o),
-      {
-        select: ["vsb_landleasesubaccountid", "vsb_name", "vsb_order"],
-        // DIVERGENCE (product decision, FT-BR-LEASE-005): the canvas reads the whole table, no state
-        // filter (LL:14 `ClearCollect(colLandLeaseSubaccounts, Sort(AddColumns('Land Lease
-        // Subaccounts', …)))`); this app lists active rows only. Kept (cf. D45 G2).
-        filter: ACTIVE,
-      },
-    ),
+    LEASE_LEAN_RELOAD ? leaseSubaccounts.get() : readLeaseSubaccounts(),
     fetchAll(
       "list Land Lease project costs",
       (o) => Vsb_landleaseprojectcostsService.getAll(o),
@@ -398,6 +416,33 @@ export async function loadLeaseAssumptions(
   }));
 }
 
+/**
+ * dvopt CB-02 — the standard contracts a sub-account already has, read FRESH from the server for the "Add Standard Contract" check
+ * (the canvas checks its loaded collection; a cached book that missed a half-finished earlier import let a second click create a second
+ * standard header). One small read, key columns only, the same shape as OPEX's `addOpexStandardContract` check. The rows are passed to
+ * the pure `planStandardImport` rule as its `existingCostsInSubaccount` argument.
+ */
+export type StandardLeaseCostRow = Pick<LeaseCostRow, "id" | "subaccountId" | "isStandardContract">;
+
+export async function loadStandardLeaseContracts(projectId: string, subaccountId: string): Promise<StandardLeaseCostRow[]> {
+  const rows = await fetchAll(
+    "check for an existing Land Lease standard contract",
+    (o) => Vsb_landleaseprojectcostsService.getAll(o),
+    {
+      select: ["vsb_landleaseprojectcostid", "_vsb_subaccount_value", "vsb_isstandardcontract"],
+      filter: and(
+        lookupEq("vsb_project", projectId), lookupEq("vsb_subaccount", subaccountId),
+        eq("vsb_isstandardcontract", true), ACTIVE,
+      ),
+    },
+  );
+  return rows.map((r) => ({
+    id: r.vsb_landleaseprojectcostid,
+    subaccountId: r._vsb_subaccount_value ?? null,
+    isStandardContract: r.vsb_isstandardcontract === true,
+  }));
+}
+
 /* ═════════════════════════════════════════════════════════════ write executor ══ */
 
 /** `entitySet` -> the three calls and the primary key a create returns. */
@@ -416,36 +461,43 @@ interface LeaseWriter {
 /**
  * Deletes go through `deleteRecord` (CONVENTIONS rule 14, CA-27): the generated `delete()` returns nothing,
  * so a refused delete (403, a cascade restriction) resolved as success and the row came back on reload.
+ * dvopt CB-03: with `GONE_AS_DONE_LEASE_OPEX` a 404 / `0x80040217` counts as done (`deleteIfExists`), so a retry after a
+ * partial delete is not blocked at its first request by a row that is already gone.
  *
  * The three generated services are structurally different types, so each is adapted to one
  * signature here. The `as never` on the payload is the same cast `src/data/periodWrites.ts`
  * uses: the generated `…Base` types demand columns (`ownerid`, `statecode`) that Dataverse
  * fills itself and that no canvas `Patch` sends either.
  */
+const deleteLeaseRow = (operation: string, entitySet: string, id: string): Promise<void> =>
+  // QB-01 / QB-02: ONE request per attempt. `costWrite` around this call is the only retry layer (and with `COST_WRITES_POLICY`
+  // off nothing retries, as before the policy existed), so the inner helper never runs its own policy.
+  GONE_AS_DONE_LEASE_OPEX ? deleteIfExists(operation, entitySet, id, { policy: false }) : deleteRecord(operation, entitySet, id, { policy: false });
+
 const WRITERS: Record<string, LeaseWriter> = {
   [LEASE_ENTITY_SET.cost]: {
     idField: "vsb_landleaseprojectcostid",
-    create: (p) => Vsb_landleaseprojectcostsService.create(p as never) as unknown as Promise<IOperationResult<Row>>,
-    update: (id, p) =>
-      Vsb_landleaseprojectcostsService.update(id, p as never) as unknown as Promise<IOperationResult<Row>>,
-    remove: (id) => deleteRecord("delete Land Lease contract", LEASE_ENTITY_SET.cost, id),
+    create: (p) => costWrite("create", LEASE_ENTITY_SET.cost, () => Vsb_landleaseprojectcostsService.create(p as never) as unknown as Promise<IOperationResult<Row>>),
+    update: (id, p) => costWrite("patchAbsolute", LEASE_ENTITY_SET.cost, () =>
+      Vsb_landleaseprojectcostsService.update(id, p as never) as unknown as Promise<IOperationResult<Row>>),
+    remove: (id) => costWrite("delete", LEASE_ENTITY_SET.cost, () => deleteLeaseRow("delete Land Lease contract", LEASE_ENTITY_SET.cost, id)),
     label: "Land Lease contract",
   },
   [LEASE_ENTITY_SET.period]: {
     idField: "vsb_landleaseperiodid",
-    create: (p) => Vsb_landleaseperiodsService.create(p as never) as unknown as Promise<IOperationResult<Row>>,
-    update: (id, p) =>
-      Vsb_landleaseperiodsService.update(id, p as never) as unknown as Promise<IOperationResult<Row>>,
-    remove: (id) => deleteRecord("delete Land Lease period", LEASE_ENTITY_SET.period, id),
+    create: (p) => costWrite("create", LEASE_ENTITY_SET.period, () => Vsb_landleaseperiodsService.create(p as never) as unknown as Promise<IOperationResult<Row>>),
+    update: (id, p) => costWrite("patchAbsolute", LEASE_ENTITY_SET.period, () =>
+      Vsb_landleaseperiodsService.update(id, p as never) as unknown as Promise<IOperationResult<Row>>),
+    remove: (id) => costWrite("delete", LEASE_ENTITY_SET.period, () => deleteLeaseRow("delete Land Lease period", LEASE_ENTITY_SET.period, id)),
     label: "Land Lease period",
   },
   [LEASE_ENTITY_SET.allocation]: {
     idField: "vsb_landleaseallocationwtgid",
-    create: (p) =>
-      Vsb_landleaseallocationwtgsService.create(p as never) as unknown as Promise<IOperationResult<Row>>,
-    update: (id, p) =>
-      Vsb_landleaseallocationwtgsService.update(id, p as never) as unknown as Promise<IOperationResult<Row>>,
-    remove: (id) => deleteRecord("delete Land Lease WTG allocation", LEASE_ENTITY_SET.allocation, id),
+    create: (p) => costWrite("create", LEASE_ENTITY_SET.allocation, () =>
+      Vsb_landleaseallocationwtgsService.create(p as never) as unknown as Promise<IOperationResult<Row>>),
+    update: (id, p) => costWrite("patchAbsolute", LEASE_ENTITY_SET.allocation, () =>
+      Vsb_landleaseallocationwtgsService.update(id, p as never) as unknown as Promise<IOperationResult<Row>>),
+    remove: (id) => costWrite("delete", LEASE_ENTITY_SET.allocation, () => deleteLeaseRow("delete Land Lease WTG allocation", LEASE_ENTITY_SET.allocation, id)),
     label: "Land Lease WTG allocation",
   },
 };
@@ -483,12 +535,39 @@ export function applyLeaseWritesSequentially(
 
 type LeaseRunner = (writes: readonly LeaseWrite[], createdIds: Record<string, string>) => Promise<void>;
 
+/**
+ * dvopt CB-01 — the upsert guard of a plan. The generated `update` is a PATCH with no `If-Match` (an upsert), so updating a header,
+ * period or allocation another user deleted would RE-CREATE it (silently undoing their delete, or as an orphan without its project). One
+ * existence read per table (key only, ids chunked, `assertRowsExist`) runs BEFORE the first write; a missing row refuses the plan
+ * with `RecordGoneError` and nothing is sent. Rows the plan creates itself are not checked (an update never names one). `LEASE_GUARD =
+ * false` sends the updates unguarded, as before.
+ *
+ * QA-08: `applyPlan` calls this on the WHOLE plan, except in `independentSteps` mode (the panel Save, FT-BR-LEASE-089), where it is
+ * called on each step's own writes, so a row gone from one step fails that step only and the others still save.
+ */
+export async function guardLeaseUpdates(writes: readonly LeaseWrite[], enabled: boolean = LEASE_GUARD): Promise<void> {
+  if (!enabled) return;
+  const idsByTable = new Map<string, string[]>();
+  for (const w of writes) {
+    if (w.op !== "update") continue;
+    const ids = idsByTable.get(w.entitySet) ?? [];
+    ids.push(w.id);
+    idsByTable.set(w.entitySet, ids);
+  }
+  await Promise.all([...idsByTable].map(([entitySet, ids]) =>
+    assertRowsExist(`update ${WRITERS[entitySet]?.label ?? entitySet}`, entitySet, ids)));
+}
+
 async function applyPlan(
   writes: readonly LeaseWrite[],
   options: { independentSteps?: boolean } | undefined,
   runLeaseWrites: LeaseRunner,
 ): Promise<LeaseWriteResult> {
   const createdIds: Record<string, string> = {};
+
+  // QA-08: a plan whose steps are NOT independent is refused as a whole before anything is sent, as before. With `independentSteps`
+  // the canvas lets the steps fail one by one, so the guard runs per step below instead.
+  if (!options?.independentSteps) await guardLeaseUpdates(writes);
 
   if (options?.independentSteps) {
     /*
@@ -501,11 +580,14 @@ async function applyPlan(
     for (const step of ["contract", "allocation", "period"] as const) {
       const inStep = writes.filter((w) => leaseStepOf(w.entitySet) === step);
       try {
+        // QA-08 (`LEASE_GUARD`): this step's updates are checked now; a row another user deleted refuses THIS step (nothing of it is
+        // sent, the upsert never re-creates the row) and the other steps still run.
+        await guardLeaseUpdates(inStep);
         await runLeaseWrites(inStep, createdIds);
       } catch (e) {
         failures.push({
           step,
-          message: e instanceof Error ? e.message : String(e),
+          message: isRecordGone(e) ? RECORD_GONE_TEXT : e instanceof Error ? e.message : String(e),
           httpResponse: leaseHttpResponse(e),
         });
       }
@@ -551,6 +633,15 @@ async function sendLeaseWrite(write: LeaseWrite, createdIds: Record<string, stri
     unwrap(await writer.update(bound.id, bound.payload), `update ${writer.label}`);
     return;
   }
+  if (bound.entitySet === LEASE_ENTITY_SET.cost) {
+    // dvopt CB-14: the header keeps a client id across a retry, so a create that landed but looked failed cannot duplicate.
+    const header = await createWithStableId({
+      operation: `create ${writer.label}`, entitySet: bound.entitySet, idField: writer.idField,
+      payload: bound.payload, create: writer.create,
+    });
+    if (bound.ref && header.id) createdIds[bound.ref] = header.id;
+    return;
+  }
   const created = unwrap(await writer.create(bound.payload), `create ${writer.label}`);
   const id = created[writer.idField];
   if (bound.ref && typeof id === "string") createdIds[bound.ref] = id;
@@ -572,7 +663,7 @@ async function runLeaseWritesInTiers(
   writes: readonly LeaseWrite[],
   createdIds: Record<string, string>,
 ): Promise<void> {
-  for (const indexes of leaseWriteTiers(writes)) {
+  for (const indexes of leaseWriteTiers(writes, { wider: LEASE_TIER_WIDER })) {
     const tier = indexes.map((i) => writes[i] as LeaseWrite);
     await mapLimitFirstFailure(tier, (write) => sendLeaseWrite(write, createdIds), leaseTierWidth(tier));
   }

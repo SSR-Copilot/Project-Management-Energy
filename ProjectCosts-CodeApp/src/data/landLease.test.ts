@@ -36,7 +36,14 @@ vi.mock("./client", () => ({
     if (refusedDeletes.has(id)) throw new Error(`${operation} failed: refused`);
     writes.push({ op: "delete", table: DELETE_TABLE[entitySet] ?? entitySet, id });
   },
+  // dvopt CB-03: the app's deletes go through `deleteIfExists`; with no 404 in this double it is `deleteRecord`.
+  deleteIfExists: async (operation: string, entitySet: string, id: string) => {
+    if (refusedDeletes.has(id)) throw new Error(`${operation} failed: refused`);
+    writes.push({ op: "delete", table: DELETE_TABLE[entitySet] ?? entitySet, id });
+  },
 }));
+// dvopt CB-01 / CB-14: the existence guard and the stable-id read-back are tested in landLease.dvopt.test.ts.
+vi.mock("./costUpdateGuard", () => ({ assertRowsExist: async () => undefined, rowExists: async () => false }));
 
 /** Tables whose create / update answers `{ success: false }` (UT-LLDATA-015…). */
 let failingTables = new Set<string>();

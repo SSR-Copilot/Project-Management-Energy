@@ -59,6 +59,11 @@ export function standardAssumptionAmount(
   }
 }
 
+/** CA-16: whether this unit multiplies by the active generator count (the only unit that needs the WTG count). */
+export function isPerWtgUnit(unit: number): boolean {
+  return unit === COST_UNIT.eurPerWtg || unit === COST_UNIT.plnPerWtg;
+}
+
 /** Active generator + PV-module rows, summed by count — `activeWtgCount` in the skeleton. */
 export function activeWtgCount(rows: readonly { count: number; active: boolean }[]): number {
   return rows.filter((r) => r.active).reduce((a, r) => a + r.count, 0);

@@ -29,6 +29,8 @@ import { DataError, unwrap } from "@/platform/errors";
 import { trace } from "@/platform/telemetry";
 import { deleteRecord, fetchAll, guardedCall, guardedResult, updateRecordIfExists } from "@/data/client";
 import { DELETE_CONCURRENCY, WRITE_CONCURRENCY, forEachLimit, mapLimit } from "@/data/concurrency";
+import { deleteRowIfPresent } from "@/data/adminRowWrites";
+import { ADMIN_OPT } from "@/data/adminFlags";
 import { and, eq, guid, lookupEq } from "@/data/odata";
 import {
   buildParentPayload, findOwnershipConflicts, planDevCoDiff,
@@ -271,7 +273,9 @@ export function createDevCoRepository(deps: {
     async remove(id) {
       const op = "unlink a DevCo account from the standard contract";
       ensure(op);
-      await deleteRecord(op, ENTITY.devCo, id);
+      // AD-05 (`ADMIN_DELETE_ALREADY_GONE_OK`): an unlink another admin already did (404 / `0x80040217`) is done, not a failure.
+      if (ADMIN_OPT.ADMIN_DELETE_ALREADY_GONE_OK) await deleteRowIfPresent(op, ENTITY.devCo, id);
+      else await deleteRecord(op, ENTITY.devCo, id);
     },
   };
 }

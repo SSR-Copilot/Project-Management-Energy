@@ -15,6 +15,7 @@ import { CONTRACT_TYPE } from "./rules";
 
 const repo = {
   saveContract: vi.fn(),
+  listDevCoLinks: vi.fn(), // dvopt CB-11: an edit reads the stored links beside the contract save
   replaceDevCoLinks: vi.fn(),
   deleteContract: vi.fn(),
   savePaymentTarget: vi.fn(),
@@ -74,6 +75,7 @@ describe("useSaveContract", () => {
   it("UT-CONTR-172 a Project Rights contract writes no links (canvas :3744-3801), a Development one passes the id and mode", async () => {
     repo.saveContract.mockResolvedValue({ id: "c-1" });
     repo.replaceDevCoLinks.mockResolvedValue(undefined);
+    repo.listDevCoLinks.mockResolvedValue([]);
     const { wrapper } = setup();
     const { result } = renderHook(() => useSaveContract(PROJECT), { wrapper });
     await act(async () => {
@@ -85,6 +87,8 @@ describe("useSaveContract", () => {
     });
     expect(repo.replaceDevCoLinks).toHaveBeenCalledWith(PROJECT, {
       contractId: "c-1", isNewContract: false, owningBusinessUnitId: undefined, accounts: [{ id: "a1", name: "n" }],
+      // dvopt CB-11 (`CONTRACT_LINKS_WITH_PATCH`): the stored links are already being read when the links are replaced.
+      existingLinks: expect.any(Promise),
     });
   });
 });

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, type QueryKey } from "@tanstack/react-query";
 import { qk } from "@/data/keys";
+import { ADMIN_OPT } from "./adminFlags";
 import {
   capexAccountsWriteKeys, checklistsWriteKeys, contractsWriteKeys, costsWriteKeys, gatesWriteKeys,
   invalidateAfterCapexAccountsWrite, invalidateAfterChecklistsWrite, invalidateAfterContractsWrite,
@@ -147,5 +148,55 @@ describe("Settings invalidation helpers — the cross-screen consumers' real key
     await invalidateAfterMilestonesWrite(client);
     expect(stale(de)).toBe(true);
     expect(stale(fr)).toBe(true);
+  });
+});
+
+/* ═════════ dvopt AD-11: the two plug-in cascading deletes also mark the project caches stale ═════════ */
+
+describe("AD-11 cascading deletes", () => {
+  afterEach(() => { ADMIN_OPT.ADMIN_CASCADE_INVALIDATE = true; });
+
+  it("UT-INV-D1 deleting a standard DEVEX cost also marks the project cost book, totals, Add-Costs sheet and DevCo CAPEX caches stale", async () => {
+    const book = ["cost-book", "project-1", 3];
+    const totals = ["capex-totals", "project-1"];
+    const sheet = ["add-cost-sheet", "project-1"];
+    const costs = [...qk.devCoCapexCosts("project-1")];
+    const contracts = [...qk.devCoCapexContracts("project-1")];
+    const unrelated = ["adminCostCurrencies"];
+    const stale = seeded([book, totals, sheet, costs, contracts, unrelated]);
+    await invalidateAfterCostsWrite(client, "devex", scope, { cascade: true });
+    for (const key of [book, totals, sheet, costs, contracts]) expect(stale(key)).toBe(true);
+    expect(stale(unrelated)).toBe(false);
+  });
+
+  it("UT-INV-D2 a DEVEX save (no cascade) and every OPEX write keep their key lists exactly", () => {
+    expect(costsWriteKeys("devex", scope)).toEqual([["adminCostDevex", DE, WIND], ["capex-standard-assumptions"]]);
+    expect(costsWriteKeys("devex", scope, { cascade: false })).toEqual(costsWriteKeys("devex", scope));
+    expect(costsWriteKeys("opex", scope, { cascade: true })).toEqual(costsWriteKeys("opex", scope));
+  });
+
+  it("UT-INV-D3 deleting a standard BoP contract also marks the project contracts, payment targets and DevCo links stale", async () => {
+    const contracts = [...qk.contracts("project-1")];
+    const targets = [...qk.paymentTargets("project-1")];
+    const links = [...qk.devCoLinks("project-1")];
+    const unrelated = ["adminCostCurrencies"];
+    const stale = seeded([contracts, targets, links, unrelated]);
+    await invalidateAfterContractsWrite(client, scope, { cascade: true });
+    for (const key of [contracts, targets, links]) expect(stale(key)).toBe(true);
+    expect(stale(unrelated)).toBe(false);
+  });
+
+  it("UT-INV-D4 a contract save keeps its four keys; the all-scopes delete adds the same three prefixes", () => {
+    expect(contractsWriteKeys(scope)).toHaveLength(4);
+    expect(contractsWriteKeys(undefined, { cascade: true })).toEqual([
+      ["adminContractList"], ["adminContractDevCo"], ["adminContractRecord"], ["bopStandardAssumptions"],
+      ["contracts"], ["paymentTargets"], ["devCoLinks"],
+    ]);
+  });
+
+  it("UT-INV-D5 with ADMIN_CASCADE_INVALIDATE off the delete invalidates only what it did before", () => {
+    ADMIN_OPT.ADMIN_CASCADE_INVALIDATE = false;
+    expect(costsWriteKeys("devex", scope, { cascade: true })).toEqual(costsWriteKeys("devex", scope));
+    expect(contractsWriteKeys(scope, { cascade: true })).toEqual(contractsWriteKeys(scope));
   });
 });

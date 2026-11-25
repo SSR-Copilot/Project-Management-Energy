@@ -54,6 +54,10 @@ import { costWriteStatusLabel, writeCommandsDisabled } from "@/domain/writeGuard
 import { useProjectExtras } from "@/features/cost/contracts/hooks";
 import { useCostWriteInFlight, useWriteFailureReport } from "@/features/cost/costing/useCostWriteFlight";
 import { serverEnforcedProvider } from "@/platform/privileges";
+import { RECORD_GONE_TEXT, isRecordGone } from "@/platform/errors";
+// dvopt CB-02: the "already has a standard contract" check reads the server, not the cached book (see `importStandard`).
+import { loadStandardLeaseContracts } from "@/data/landLease";
+import { COST_REFRESH_ON_FAILURE } from "@/data/leaseOpexFlags";
 /*
  * `gblAreaWithRegion` is a property of the PROJECT, not of either period screen: `App.OnStart`
  * derives it once and both screens read it. `opexRules` holds the single transcription of that
@@ -908,27 +912,38 @@ export default function LandLeaseScreen() {
   const importStandard = async (card: LeaseSubaccountCard) => {
     const query = leaseAssumptionQuery(ctx, card.id);
     const scoped = (assumptions.data ?? []).filter((a) => a.subaccountId === query.subaccountId);
-    const plan = planStandardImport({
-      ctx,
-      subaccountId: card.id,
-      subaccountName: card.name,
-      assumptions: scoped,
-      existingCostsInSubaccount: costs.filter((c) => c.subaccountId === card.id),
-      generators,
-      countryInflationProfile: standardCountryProfile(countryInflation.data, ctx.codDate),
-    });
-    // `refused` is the canvas' `If(CountRows(recFilteredStandardContractsForProject) = 0, …)`
-    // with no else arm: the command simply does nothing and says nothing.
-    if (plan.refused || plan.writes.length === 0) return;
     const selectionAtStart = selection;
-    setBusy(LEASE_MSG.loadingStandardContract);
     setError(null);
     try {
+      // dvopt CB-02 (`COST_REFRESH_ON_FAILURE`): "already has a standard contract" is decided from a FRESH small server read, not the
+      // cached book. A half-finished earlier import (header landed, a later row failed) left the cached book without its standard
+      // header, so a second click created a second one. The pure rule is unchanged and takes the fresh rows as its argument; the
+      // read is the one request this check costs. A failed read refuses the import (it cannot prove the sub-account is free).
+      let existing: readonly { id: string; subaccountId: string | null; isStandardContract: boolean }[];
+      if (COST_REFRESH_ON_FAILURE && projectId) {
+        setBusy(LEASE_MSG.loadingStandardContract);
+        existing = await loadStandardLeaseContracts(projectId, card.id);
+      } else {
+        existing = costs.filter((c) => c.subaccountId === card.id);
+      }
+      const plan = planStandardImport({
+        ctx,
+        subaccountId: card.id,
+        subaccountName: card.name,
+        assumptions: scoped,
+        existingCostsInSubaccount: existing,
+        generators,
+        countryInflationProfile: standardCountryProfile(countryInflation.data, ctx.codDate),
+      });
+      // `refused` is the canvas' `If(CountRows(recFilteredStandardContractsForProject) = 0, …)`
+      // with no else arm: the command simply does nothing and says nothing.
+      if (plan.refused || plan.writes.length === 0) return;
+      setBusy(LEASE_MSG.loadingStandardContract);
       await writes.mutateAsync(plan.writes);
       // CA-17: a row selected while the import ran is kept (`leaseSelectionAfterWrite`).
       setSelection((current) => leaseSelectionAfterWrite({ atStart: selectionAtStart, current }));
     } catch (e) {
-      reportFailure(leaseSaveError.contract("Add Standard Contract", messageOf(e)), setError);
+      reportFailure(isRecordGone(e) ? RECORD_GONE_TEXT : leaseSaveError.contract("Add Standard Contract", messageOf(e)), setError);
     } finally {
       setBusy(null);
     }
@@ -1027,7 +1042,8 @@ export default function LandLeaseScreen() {
         reportFailure(e.failures.map(leaseStepFailureText).join("\n"), setError);
       } else {
         const failure = { message: messageOf(e), httpResponse: leaseHttpResponse(e) };
-        reportFailure(plan.writesHeader
+        // dvopt CB-01: a row another user deleted refuses the save with nothing written; say so in the one plain sentence.
+        reportFailure(isRecordGone(e) ? RECORD_GONE_TEXT : plan.writesHeader
           ? leaseStepFailureText({ step: "contract", ...failure })
           : leaseStepFailureText({ step: "period", ...failure }), setError);
       }
@@ -1055,7 +1071,7 @@ export default function LandLeaseScreen() {
         deleted: { periodIds: plan.periodIds, costIds: plan.costIds },
       }));
     } catch (e) {
-      reportFailure(plan.kind === "contract"
+      reportFailure(isRecordGone(e) ? RECORD_GONE_TEXT : plan.kind === "contract"
         ? leaseSaveError.contract("Delete Land Lease", messageOf(e))
         : leaseSaveError.period("Delete Period", messageOf(e)), setError);
     } finally {

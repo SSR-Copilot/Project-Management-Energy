@@ -11,11 +11,12 @@ import { trace } from "@/platform/telemetry";
 import { qk } from "@/data/keys";
 import { useActiveCountries } from "@/data/countries";
 import { invalidateAfterCostsWrite } from "@/data/adminInvalidation";
+import { ADMIN_OPT } from "@/data/adminFlags";
 import {
   deleteOpexContract, deleteOpexPeriod, listCostCurrencies,
   listDevexCosts, listInactiveOpexRows, listInflationAreas, listLandLeaseSubaccounts, listOpexPeriods, listOpexSubaccounts,
-  loadCapexHierarchy, loadCostPayerDefaults, saveOpexPeriod,
-  type ContractScope, type CostScope, type DevexWrite, type OpexWrite,
+  listOpexScopeRows, loadCapexHierarchy, loadCostPayerDefaults, saveOpexPeriod,
+  type ContractScope, type OpexScopeRows, type CostScope, type DevexWrite, type OpexWrite,
 } from "@/data/adminCost";
 import { CreatedIdMissingError, PlanRefusedError } from "@/data/executePlan";
 import { runPlan } from "@/data/runPlan";
@@ -63,10 +64,18 @@ export function useDevexCosts(scope: CostScope | undefined) {
     enabled: Boolean(scope),
   });
 }
+/**
+ * AD-09 (`ADMIN_SCOPE_READS_ONCE`): the active and the hidden OPEX rows of a scope are ONE query (`qk.adminCostOpex(scope)`, one read of
+ * the table, `listOpexScopeRows`) that both hooks view through `select`. OFF: two queries on two reads, as before.
+ */
 export function useOpexPeriods(scope: CostScope | undefined) {
+  const once = ADMIN_OPT.ADMIN_SCOPE_READS_ONCE;
   return useQuery({
     queryKey: qk.adminCostOpex(scope),
-    queryFn: () => listOpexPeriods(scope as CostScope),
+    queryFn: async (): Promise<OpexScopeRows> => (once
+      ? listOpexScopeRows(scope as CostScope)
+      : { active: await listOpexPeriods(scope as CostScope), inactive: [] }),
+    select: (rows) => rows.active,
     enabled: Boolean(scope),
   });
 }
@@ -76,9 +85,13 @@ export function useOpexPeriods(scope: CostScope | undefined) {
  * every Costs / OPEX write's invalidation of that key (prefix match) refreshes it too.
  */
 export function useInactiveOpexRows(scope: CostScope | undefined) {
+  const once = ADMIN_OPT.ADMIN_SCOPE_READS_ONCE;
   return useQuery({
-    queryKey: [...qk.adminCostOpex(scope), "inactive"] as const,
-    queryFn: () => listInactiveOpexRows(scope as CostScope),
+    queryKey: once ? qk.adminCostOpex(scope) : ([...qk.adminCostOpex(scope), "inactive"] as const),
+    queryFn: async (): Promise<OpexScopeRows> => (once
+      ? listOpexScopeRows(scope as CostScope)
+      : { active: [], inactive: await listInactiveOpexRows(scope as CostScope) }),
+    select: (rows) => rows.inactive,
     enabled: Boolean(scope),
   });
 }
@@ -136,7 +149,8 @@ export function useDeleteDevexCost(scope: CostScope | undefined, canEdit: boolea
   return useMutation({
     mutationFn: async (id: string) => { await runDevexPlan(planDeleteDevexCost(id, { canEdit }), "delete standard cost"); },
     onError: report("delete standard cost"),
-    onSettled: () => (scope ? invalidateAfterCostsWrite(client, "devex", scope) : undefined),
+    // AD-11: the standard cost's delete plug-in removes the project contracts and costs built from it, so their caches are marked stale too.
+    onSettled: () => (scope ? invalidateAfterCostsWrite(client, "devex", scope, { cascade: true }) : undefined),
   });
 }
 

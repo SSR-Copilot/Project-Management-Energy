@@ -1806,6 +1806,23 @@ describe("Land Lease — the standard-assumption import", () => {
     expect(plan.writes).toEqual([]);
   });
 
+  it("UT-LAND-121A the import decides from the key-only rows of a fresh server read (dvopt CB-02), not only from full cached rows", () => {
+    // After a half-finished earlier import the cached book had no standard header, so a second click created a second one. The screen
+    // now passes the server's rows (id, sub-account, flag only); the rule stays pure and reads only `isStandardContract`.
+    const fresh = [{ id: "c-fresh", subaccountId: "sub-1", isStandardContract: true }];
+    const refused = planStandardImport({
+      ctx: ctx(), subaccountId: "sub-1", subaccountName: "Leaseholders",
+      assumptions: [assumption()], existingCostsInSubaccount: fresh, generators: [], countryInflationProfile: null,
+    });
+    expect(refused.refused).toBe(true);
+    expect(refused.writes).toEqual([]);
+    const free = planStandardImport({
+      ctx: ctx(), subaccountId: "sub-1", subaccountName: "Leaseholders",
+      assumptions: [assumption()], existingCostsInSubaccount: [], generators: [], countryInflationProfile: null,
+    });
+    expect(free.refused).toBe(false);
+  });
+
   it("UT-LAND-122 the import creates one header per Period-1 assumption and one period per row", () => {
     const plan = planStandardImport({
       ctx: ctx(), subaccountId: "sub-1", subaccountName: "Leaseholders",

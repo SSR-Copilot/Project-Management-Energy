@@ -93,7 +93,8 @@ import {
   type ChecklistTab, type TaskForm,
 } from "./adminDefaultChecklists";
 import { RowWriteError } from "./adminRowWrites";
-import { DataError } from "@/platform/errors";
+import { ADMIN_OPT } from "./adminFlags";
+import { DataError, RecordGoneError } from "@/platform/errors";
 
 const { tasks: ES_TASKS, headers: ES_TABS, approvals: ES_LOCKS } = CHECKLIST_ENTITY_SETS;
 
@@ -116,7 +117,9 @@ beforeEach(() => {
   rowsByTable = {};
   failUpdateAt = [];
   throwOnRead = null;
-  failStatus = undefined;
+  // A refused write: 403 (not retried). With no status the dvopt retry policy reads it as a network failure and sends the PATCH again,
+  // and the second try would succeed, so these plumbing tests need a deterministic refusal.
+  failStatus = 403;
   updateCount = 0;
   pagesByTable = {};
   createReturnsNoId = false;
@@ -279,6 +282,37 @@ describe("Create / edit payloads", () => {
     expect(calls.map((c) => c.op)).toEqual(["create", "update"]);
     expect(calls[0]?.table).toBe(ES_TASKS);
     expect(calls[1]).toMatchObject({ table: ES_TASKS, id, body: { statecode: 1, statuscode: 2 } });
+  });
+
+  it("UT-ADCHK-015b AD-08: the status follow-up of a create reads no existence of the row the POST just created (ADMIN_NO_REDUNDANT_EXISTS on)", async () => {
+    const id = await createTask({ tab: TAB, clusterId: CLUSTER, form: FORM, order: 3 });
+    expect(existenceChecks).toEqual([]);
+    expect(calls.map((c) => c.op)).toEqual(["create", "update"]);
+    expect(calls[1]).toMatchObject({ id, body: { statecode: 1, statuscode: 2 } });
+  });
+
+  it("UT-ADCHK-015c AD-08 off: the follow-up is the guarded update with its existence read, as before", async () => {
+    ADMIN_OPT.ADMIN_NO_REDUNDANT_EXISTS = false;
+    try {
+      const id = await createTask({ tab: TAB, clusterId: CLUSTER, form: FORM, order: 3 });
+      expect(existenceChecks).toEqual([{ table: ES_TASKS, id }]);
+      expect(calls.map((c) => c.op)).toEqual(["create", "update"]);
+    } finally {
+      ADMIN_OPT.ADMIN_NO_REDUNDANT_EXISTS = true;
+    }
+  });
+
+  it("UT-ADCHK-015d AD-08: a 404 on the follow-up PATCH still reports the status step as not set (TaskStatusNotSetError, cause RecordGoneError)", async () => {
+    failUpdateAt = [1];
+    failStatus = 404;
+    const error = await createTask({ tab: TAB, clusterId: CLUSTER, form: FORM, order: 1 }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(TaskStatusNotSetError);
+    expect((error as TaskStatusNotSetError).cause).toBeInstanceOf(RecordGoneError);
+  });
+
+  it("UT-ADCHK-015e AD-08: the order and delete writes keep their existence guard", async () => {
+    await writeOrders([{ id: "11111111-1111-1111-1111-111111111111", order: 2 }]);
+    expect(existenceChecks).toHaveLength(1);
   });
 
   it("UT-ADCHK-016 A failed status step reports the created id so the retry updates instead of duplicating", async () => {

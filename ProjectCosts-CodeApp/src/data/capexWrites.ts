@@ -29,19 +29,20 @@ import { unwrap } from "@/platform/errors";
 import { capexWriteSet, type CostRowInput } from "@/features/cost/capex-costs/writeSet";
 import { byClusterJson, planDeleteContract, startEndJson } from "@/features/cost/capex-costs/rules";
 import {
-  paidIdsToReset, planPanelCostWrites,
+  paidIdsToReset, planPanelCostWrites, type PanelCostPlan,
 } from "@/features/cost/capex-costs/savePlan";
 import { deleteComment, loadComments } from "./comments";
 import { deleteRecord } from "./client";
+import { CAPEX_OPT } from "./capexOptFlags";
 import { equalDistributionAmounts } from "@/features/cost/capex-costs/distribution";
 import type { CostLine, Payment } from "@/features/cost/costing/model";
 import { bind } from "./odata";
 import { CHOICE_COST } from "./dataverseNames";
 import { deleteMany } from "./bulkWrites";
 import type { BulkTableInfo, UpsertTarget } from "./bulkTypes";
-import { CAPEX_COSTS } from "./addCostSheetBulk";
+import { CAPEX_CONTRACTS, CAPEX_COSTS } from "./addCostSheetBulk";
 import {
-  createRequestMeter, formatMs, gatedWrite, upsertRowsByAction,
+  createRequestMeter, existingIds, formatMs, gatedWrite, upsertRowsByAction,
   type RequestMeter, type UpsertGroupReport,
 } from "./bulkSend";
 import { createGate } from "./concurrency";
@@ -134,6 +135,30 @@ export interface SaveCostLineArgs extends CapexWriteContext {
    * bulk path's unchanged-month skip (`SKIP_UNCHANGED_COSTS`); without it every month is written.
    */
   storedPayments?: readonly Payment[];
+  /**
+   * CA-12 (`PANEL_CHANGED_CONTRACT_COLUMNS`): the contract as the panel opened it (`storedLine`). An EDIT then sends the contract
+   * columns that changed (`changedContractColumns`); without it, or with the switch off, the whole bag goes as before.
+   */
+  storedLine?: CostLine;
+  /**
+   * CA-05 (`CAPEX_PATCH_BOOK`): called once after a bulk save succeeded, with what it wrote, so the caller can patch its cached book
+   * instead of reloading it. Never called on a failure or by the per-row path (the caller then reloads). A throwing callback is ignored.
+   */
+  onWritten?: (written: PanelSaveWritten) => void;
+}
+
+/**
+ * What a successful panel save wrote (CA-05): the contract, and the month rows by what happened to them. Ids are the rows' real ids
+ * (the client-minted ones of `planPanelCostWrites`, which the bulk path sends as the primary keys).
+ */
+export interface PanelSaveWritten {
+  contractId: string;
+  /** This save created the contract. */
+  contractCreated: boolean;
+  created: { id: string; year: number; month: number; cost: number }[];
+  /** `cost` is absent for a paid month the relink reset cleared without re-costing it. */
+  updated: { id: string; cost?: number; resetPaid: boolean }[];
+  deletedIds: string[];
 }
 
 /* ═══════════════════════════════════════════════════════════ switches ══ */
@@ -482,21 +507,68 @@ function owningBu(owningBusinessUnitId: string | undefined): Record<string, stri
     : {};
 }
 
-async function updateContract(args: SaveCostLineArgs): Promise<void> {
+const LINKED_CLUSTER_BIND = "vsb_LinkedCluster@odata.bind";
+
+/**
+ * Contract columns an EDIT may leave out when the stored line already holds the same value (CA-12). Deliberately NOT here, always
+ * sent: `vsb_name` and `vsb_description` (the canvas writes both and the stored description is usually empty), the two JSON columns
+ * and `vsb_averagepayment` (the line cannot vouch for the stored text), and the Linked Cluster bind when the contract is unlinked
+ * (`null` also clears a stale link to a deactivated state, which the line shows as "not linked").
+ */
+const OMITTABLE_WHEN_UNCHANGED = [
+  "vsb_applyvat", "vsb_depreciation", "vsb_distribution", "vsb_distributionscheme", "vsb_distributionfrequency",
+  "vsb_totalcost", "vsb_isstandardcontract",
+] as const;
+
+/**
+ * The body of a contract UPDATE (CA-12, `PANEL_CHANGED_CONTRACT_COLUMNS`): the columns whose value differs from what the contract
+ * had when the panel opened, plus the ones above that are always sent. The "before" payload is built by the same `contractPayload`
+ * from the stored line, so both sides are normalised identically. `vsb_costtype` is left out only when the stored Cost Type was
+ * explicit (`costTypePayer`) and is unchanged: a blank one is filled in by the first save, as before.
+ *
+ * No flow, plug-in or business rule of this solution reads these columns on a contract update
+ * (`ProjectDocs/migration-plans/04-flow-inventory.md`: the only contract-related server steps are the DELETE plug-in of a standard
+ * assumption and the `vsb_project`-triggered flows), so leaving an unchanged one out changes no server behaviour.
+ */
+export function contractUpdateBody(args: SaveCostLineArgs): Record<string, unknown> {
   const { fields, linkedCluster } = contractPayload(args);
+  const body: Record<string, unknown> = { ...fields, ...linkedCluster };
+  const stored = args.storedLine;
+  if (!CAPEX_OPT.PANEL_CHANGED_CONTRACT_COLUMNS || !stored || stored.id !== args.line.id) return body;
+  const before = contractPayload({
+    ...args, line: stored, isNew: false,
+    payments: (args.storedPayments ?? []).map((p) => ({ id: p.id, year: p.year, month: p.month, amount: p.amount })),
+  }).fields;
+  for (const key of OMITTABLE_WHEN_UNCHANGED) {
+    if (key in body && key in before && Object.is(body[key], before[key])) delete body[key];
+  }
+  if (stored.costTypePayer && stored.costTypePayer === args.line.payer) delete body.vsb_costtype;
+  if (args.line.linkedClusterId && stored.linkedClusterId === args.line.linkedClusterId) delete body[LINKED_CLUSTER_BIND];
+  return body;
+}
+
+async function updateContract(args: SaveCostLineArgs): Promise<void> {
   // UPDATE keeps the null. It is the whole point — see `linkedCluster` above.
   unwrap(
-    await Vsb_capexprojectcontractsService.update(
-      args.line.id, { ...fields, ...linkedCluster } as never,
-    ),
+    await Vsb_capexprojectcontractsService.update(args.line.id, contractUpdateBody(args) as never),
     "update CAPEX contract",
   );
 }
 
+const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** CA-07: the id a NEW contract is created under (`PANEL_STABLE_ID`), or undefined when the server chooses it. */
+function clientContractId(args: SaveCostLineArgs): string | undefined {
+  return CAPEX_OPT.PANEL_STABLE_ID && GUID.test(args.line.id) ? args.line.id : undefined;
+}
+
 async function createContract(args: SaveCostLineArgs): Promise<string> {
   const { fields, linkedCluster } = contractPayload(args);
+  const clientId = clientContractId(args);
   const created = unwrap(
     await Vsb_capexprojectcontractsService.create({
+      // CA-07: the panel's client-minted id is the contract's primary key, so a retry of the same Add addresses the same row.
+      ...(clientId ? { vsb_capexprojectcontractid: clientId } : {}),
       ...fields,
       // CREATE drops it when there is nothing to bind: a brand-new row has no link to clear,
       // and a null `@odata.bind` in a POST body is a null where OData expects an entity
@@ -693,13 +765,18 @@ const gatedCommentDelete = (_tableName: string, id: string) =>
 export async function saveCostLineBulk(args: SaveCostLineArgs, skipUnchanged: boolean): Promise<string> {
   const { line, owningBusinessUnitId, isNew } = args;
   const reset = Boolean(args.resetPaidAndPaymentDateComments) && !isNew;
-  const plan = planPanelCostWrites({
+  const planned = planPanelCostWrites({
     payments: args.payments,
     stored: args.storedPayments,
     paidIdsToReset: paidIdsToReset(line.payments, reset),
     skipUnchanged,
     newId: () => crypto.randomUUID(),
   });
+  // CA-07 (`PANEL_STABLE_ID`): an Add of a client-id contract keeps its month ids across a retry of the same save (`addLedger`).
+  const ledger = isNew && clientContractId(args) ? ledgerFor(line.id) : undefined;
+  const retrying = (ledger?.attempts ?? 0) > 0;
+  if (ledger) ledger.attempts += 1;
+  const plan = ledger ? withStableMonthIds(planned, ledger) : planned;
   // The bulk SAVE is the only panel log with a gate tail: its writes pass the shared `saveGate`,
   // each counted on this save's own meter (D59).
   const log = new SaveLog("bulk", "CAPEX panel save", true);
@@ -707,9 +784,20 @@ export async function saveCostLineBulk(args: SaveCostLineArgs, skipUnchanged: bo
   const meter = log.meter;
 
   return logged(log, async () => {
+    // A RETRY of the same Add: what the failed attempt already landed is found by id (a read, only on a retry), so the contract
+    // is not created twice and a month that landed is updated instead of created again (`CreateMultiple` refuses a known id).
+    let contractLanded = false;
+    let landedMonths: ReadonlySet<string> = new Set();
+    if (retrying) {
+      contractLanded = (await existingIds(CAPEX_CONTRACTS, [line.id])).has(line.id.toLowerCase());
+      if (contractLanded && plan.creates.length > 0) landedMonths = await existingIds(CAPEX_COSTS, plan.creates.map((c) => c.id));
+    }
+    const createsNow = plan.creates.filter((c) => !landedMonths.has(c.id.toLowerCase()));
+    const createsLanded = plan.creates.filter((c) => landedMonths.has(c.id.toLowerCase()));
     const costs = async (contractId: string) => {
       const targets: UpsertTarget[] = [
-        ...plan.creates.map((c) => ({ id: c.id, isNew: true, fields: newCostFields(contractId, owningBusinessUnitId, c, line.standardAssumptionId) })),
+        ...createsNow.map((c) => ({ id: c.id, isNew: true, fields: newCostFields(contractId, owningBusinessUnitId, c, line.standardAssumptionId) })),
+        ...createsLanded.map((c) => ({ id: c.id, isNew: false, fields: { vsb_cost: c.cost } })),
         ...plan.updates.map((u) => ({
           id: u.id,
           isNew: false,
@@ -736,7 +824,11 @@ export async function saveCostLineBulk(args: SaveCostLineArgs, skipUnchanged: bo
     };
 
     let contractId = line.id;
-    if (isNew) {
+    if (isNew && contractLanded) {
+      // CA-07: the failed attempt created it; nothing to send for the contract.
+      await log.step("contract create", async () => undefined, { count: () => 0 });
+      await costs(contractId);
+    } else if (isNew) {
       contractId = await log.step("contract create", () => gatedWrite(() => createContract(args), meter), { count: () => 1, gated: true });
       await costs(contractId);
     } else {
@@ -759,8 +851,59 @@ export async function saveCostLineBulk(args: SaveCostLineArgs, skipUnchanged: bo
       limit: PANEL_DELETE_LIMIT, label: "delete CAPEX cost",
     }), { count: () => deleter.sent(), how: () => deletesHow(deleter.sent()) });
 
+    if (ledger) addLedger.delete(line.id.toLowerCase()); // landed: a later Add of this id would be a new save
+    if (args.onWritten) {
+      try {
+        args.onWritten({
+          contractId, contractCreated: isNew,
+          created: plan.creates.map((c) => ({ id: c.id, year: c.year, month: c.month, cost: c.cost })),
+          updated: plan.updates.map((u) => ({ id: u.id, ...(u.cost === undefined ? {} : { cost: u.cost }), resetPaid: u.resetPaid })),
+          deletedIds: [...plan.deletes],
+        });
+      } catch { /* the caller's cache patch must never fail a save that landed */ }
+    }
     return contractId;
   });
+}
+
+/* ═══════════════════════════════════════════ a retry of the same Add (CA-07) ══ */
+
+/**
+ * The month ids of a new contract's failed attempt, so a retry of the SAME Add (same contract id) sends the same ids (D51 §3a, as
+ * Add Cost from Table). Keyed by the lower-cased contract id; an entry is dropped when its save lands. Bounded: a failed save the
+ * user never repeats must not accumulate (the oldest entry goes first).
+ */
+interface AddLedgerEntry { monthIds: Map<string, string>; attempts: number }
+const addLedger = new Map<string, AddLedgerEntry>();
+const ADD_LEDGER_MAX = 20;
+
+function ledgerFor(contractId: string): AddLedgerEntry {
+  const key = contractId.toLowerCase();
+  const known = addLedger.get(key);
+  if (known) return known;
+  const fresh: AddLedgerEntry = { monthIds: new Map(), attempts: 0 };
+  addLedger.set(key, fresh);
+  if (addLedger.size > ADD_LEDGER_MAX) addLedger.delete(addLedger.keys().next().value as string);
+  return fresh;
+}
+
+/** For tests: forget every failed Add. */
+export function resetAddLedger(): void {
+  addLedger.clear();
+}
+
+/** `plan` with each new month row's id replaced by the one this Add used before (or remembered now), by year and month. */
+function withStableMonthIds(plan: PanelCostPlan, ledger: AddLedgerEntry): PanelCostPlan {
+  return {
+    ...plan,
+    creates: plan.creates.map((c) => {
+      const cell = `${c.year}-${c.month}`;
+      const known = ledger.monthIds.get(cell);
+      if (known) return { ...c, id: known };
+      ledger.monthIds.set(cell, c.id);
+      return c;
+    }),
+  };
 }
 
 /** A delete step's readable "How" cell. */

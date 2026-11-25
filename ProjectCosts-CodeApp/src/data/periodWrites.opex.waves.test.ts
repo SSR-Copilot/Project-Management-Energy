@@ -28,6 +28,10 @@ const fake = vi.hoisted(() => {
     /** An update / delete / create of this id answers a failure. */
     failing: new Set<string>(),
     newIds: [] as string[],
+    /** A read with this label answers a failure (after its wave is released). */
+    readFails: new Set<string>(),
+    /** dvopt CB-09: the existence guard waits as a read of its own, so its wave can be seen. */
+    guardHolds: false,
   };
   async function hold(kind: "read" | "create" | "update" | "delete", label: string, id?: string, fields?: Row): Promise<void> {
     state.calls.push({ kind, label, id, fields, wave: state.wave, seq: state.seq++ });
@@ -57,6 +61,7 @@ const fake = vi.hoisted(() => {
 vi.mock("./client", () => ({
   fetchAll: async (label: string, _page: unknown, options?: { filter?: string }) => {
     await fake.hold("read", label);
+    if (fake.state.readFails.has(label)) throw new Error(`${label} failed`);
     if (label === "list OPEX chain children") {
       const id = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.exec(String(options?.filter))?.[0] ?? "";
       return fake.state.children[id] ?? [];
@@ -67,6 +72,23 @@ vi.mock("./client", () => ({
     await fake.hold("delete", "opex", id);
     if (fake.state.failing.has(id)) throw new Error(`refused ${id}`);
   },
+  // dvopt CB-03: the app's deletes go through `deleteIfExists`; with no 404 in this double it is `deleteRecord`.
+  deleteIfExists: async (_operation: string, _entitySet: string, id: string) => {
+    await fake.hold("delete", "opex", id);
+    if (fake.state.failing.has(id)) throw new Error(`refused ${id}`);
+  },
+}));
+vi.mock("./costUpdateGuard", () => ({
+  assertRowsExist: async () => { if (fake.state.guardHolds) await fake.hold("read", "guard"); },
+  rowExists: async () => false,
+}));
+// dvopt batch 2 (CB-09, `OPEX_WRITES_TOGETHER`): the waves below are pinned at the NEW numbers with the switch on; a describe at the end pins the
+// switch off at the old ones. `COST_WRITES_POLICY` is off: a refused write must fail at once in these wave counts (the policy has its own tests).
+const together = vi.hoisted(() => ({ on: true }));
+vi.mock("./leaseOpexFlags", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./leaseOpexFlags")>()),
+  get OPEX_WRITES_TOGETHER() { return together.on; },
+  COST_WRITES_POLICY: false,
 }));
 vi.mock("@/generated/services/Vsb_opexprojectcostsService", () => ({
   Vsb_opexprojectcostsService: fake.service("opex", "vsb_opexprojectcostid"),
@@ -156,10 +178,12 @@ const writesOf = (kind: Call["kind"]): Call[] => calls().filter((c) => c.kind ==
 const readLabels = (): string[] => writesOf("read").map((c) => c.label);
 
 beforeEach(() => {
+  together.on = true;
   invalidateCurrencies();
   releaseReversed = false;
   const s = fake.state;
   s.calls = []; s.wave = 0; s.seq = 0; s.held = []; s.inFlight = 0; s.peak = 0; s.failing = new Set(); s.newIds = []; s.children = {};
+  s.readFails = new Set(); s.guardHolds = false;
   s.rows = referenceRows();
 });
 
@@ -174,12 +198,13 @@ describe("OPT-11 OPEX save — requests and waves", () => {
     expect(updates.map((u) => u.id)).toEqual([HEAD, ...Array.from({ length: 6 }, (_, i) => CHILD(i + 1))]);
     // RECORDED on the unmodified module: 3 reference reads together, the head, the child query, then 6 cascade PATCHes one by one
     // = 9 waves, 11 requests. After OPT-11 (no catalogue given): the cascade is one wave = 4 waves, 11 requests.
-    expect(waves).toBe(4);
+    // dvopt CB-09 (`OPEX_WRITES_TOGETHER`, INTENDED CHANGE): the child query starts beside the head's PATCH = 3 waves, 11 requests.
+    expect(waves).toBe(3);
     expect(calls().length).toBe(11);
     expect(writesOf("update").slice(1).every((u) => u.wave === writesOf("update")[1]!.wave)).toBe(true);
   });
 
-  it("UT-PWOPEX-006 with the screen's OPEX catalogue and a warm currency table a head save sends NO reference read: 3 waves, 8 requests", async () => {
+  it("UT-PWOPEX-006 with the screen's OPEX catalogue and a warm currency table a head save sends NO reference read: 2 waves, 8 requests", async () => {
     fake.state.children[HEAD] = childRows(6);
     // Warm the shared currency read with one earlier save.
     await inWaves(() => writes.savePeriod(CTX, { ...PERIOD, id: CHILD(1), parentId: HEAD } as CostPeriod, false));
@@ -196,7 +221,8 @@ describe("OPT-11 OPEX save — requests and waves", () => {
     const { result, waves } = await inWaves(() => writes.savePeriod({ ...CTX, opexCatalog: catalog }, PERIOD, false));
     expect(outcome(result)).toBe("ok");
     expect(readLabels()).toEqual(["list OPEX chain children"]);
-    expect(waves).toBe(3);
+    // dvopt CB-09 (INTENDED CHANGE): the child query beside the head's PATCH, then the cascade (was 3 waves).
+    expect(waves).toBe(2);
     expect(calls().length).toBe(8);
     const head = writesOf("update")[0]!;
     expect(head.fields!["vsb_Subaccount@odata.bind"]).toBe(`/vsb_opexsubaccounts(${OM_SUB})`);
@@ -291,8 +317,9 @@ describe("OPT-11 OPEX standard import — requests and waves", () => {
     expect(creates[0]!.wave).toBeLessThan(Math.min(...creates.slice(1).map((c) => c.wave)));
     // The reproduced O-10 date chain (FT-BR-OPEX-089/091): period n starts when the period before it ends.
     expect(creates.map((c) => c.fields!["vsb_startdate"])).toEqual(["2024-01-01", "2026-01-01", "2028-01-01", "2030-01-01", "2032-01-01", "2034-01-01"]);
-    // RECORDED before: 9 waves (target reads, existing check, assumptions, then 6 creates one by one). After: 5 (the 5 tail rows together).
-    expect(waves).toBe(5);
+    // RECORDED before: 9 waves (target reads, existing check, assumptions, then 6 creates one by one). After OPT-11: 5 (the 5 tail rows together).
+    // dvopt CB-09 (INTENDED CHANGE): the existence check and the assumptions read together = 4.
+    expect(waves).toBe(4);
   });
 });
 
@@ -398,11 +425,150 @@ describe("OPT-11 failure semantics", () => {
       const creates = writesOf("create");
       expect(creates, `seed ${seed}: count`).toHaveLength(rows.length);
       expect(creates[0]!.wave, `seed ${seed}: head first`).toBeLessThan(Math.min(...creates.slice(1).map((c) => c.wave)));
-      expect(waves, `seed ${seed}: waves`).toBe(5);
+      expect(waves, `seed ${seed}: waves`).toBe(4); // CB-09: the existence check and the assumptions read together (was 5)
     }
   });
 });
 
 function outcome(result: PromiseSettledResult<unknown>): string {
   return result.status === "fulfilled" ? "ok" : String((result.reason as Error)?.stack ?? result.reason);
+}
+
+/* ═══════════════════════════════════ dvopt CB-09 (`OPEX_WRITES_TOGETHER`): independent awaits run together ══ */
+
+describe("CB-09 OPEX writes together — head save", () => {
+  it("UT-PWOPEX-030 the head's children are asked for in the SAME wave as its PATCH (on), after it (off); the same requests either way", async () => {
+    fake.state.children[HEAD] = childRows(6);
+    const on = await inWaves(() => writes.savePeriod(CTX, PERIOD, false));
+    expect(outcome(on.result)).toBe("ok");
+    const childRead = writesOf("read").find((r) => r.label === "list OPEX chain children")!;
+    const headPatch = writesOf("update")[0]!;
+    expect(childRead.wave).toBe(headPatch.wave);
+    const onRequests = calls().map((c) => `${c.kind}:${c.label}`).sort();
+    // The cascade still goes only after both have answered.
+    expect(Math.min(...writesOf("update").slice(1).map((u) => u.wave))).toBeGreaterThan(headPatch.wave);
+
+    beforeEachReset();
+    together.on = false;
+    fake.state.children[HEAD] = childRows(6);
+    const off = await inWaves(() => writes.savePeriod(CTX, PERIOD, false));
+    expect(outcome(off.result)).toBe("ok");
+    expect(writesOf("read").find((r) => r.label === "list OPEX chain children")!.wave).toBeGreaterThan(writesOf("update")[0]!.wave);
+    expect(off.waves).toBe(on.waves + 1);
+    expect(calls().map((c) => `${c.kind}:${c.label}`).sort()).toEqual(onRequests);
+  });
+
+  it("UT-PWOPEX-031 a refused head PATCH sends NO cascade (no cascade without the head); the early child read is dropped without an unhandled rejection", async () => {
+    fake.state.children[HEAD] = childRows(6);
+    fake.state.failing.add(HEAD);
+    fake.state.readFails.add("list OPEX chain children"); // even a failing early read must not surface
+    const { result } = await inWaves(() => writes.savePeriod(CTX, PERIOD, false));
+    expect(outcome(result)).toContain("refused");
+    expect(writesOf("update")).toHaveLength(1);
+  });
+
+  it("UT-PWOPEX-032 a failing children read after a good PATCH ends the save with that error, as before (the head is saved, nothing cascades)", async () => {
+    fake.state.children[HEAD] = childRows(2);
+    fake.state.readFails.add("list OPEX chain children");
+    const { result } = await inWaves(() => writes.savePeriod(CTX, PERIOD, false));
+    expect(outcome(result)).toContain("list OPEX chain children failed");
+    expect(writesOf("update").map((u) => u.id)).toEqual([HEAD]);
+  });
+
+  it("UT-PWOPEX-033 an Add and a CHILD edit start no early children read (unchanged)", async () => {
+    await inWaves(() => writes.savePeriod(CTX, { ...PERIOD, id: "" } as CostPeriod, true));
+    expect(readLabels().filter((l) => l === "list OPEX chain children")).toHaveLength(0);
+    beforeEachReset();
+    await inWaves(() => writes.savePeriod(CTX, { ...PERIOD, id: CHILD(2), parentId: HEAD, contractId: HEAD, periodIndex: 3 } as CostPeriod, false));
+    expect(readLabels().filter((l) => l === "list OPEX chain children")).toHaveLength(1); // the sibling read for the slot only
+  });
+
+  it("UT-PWOPEX-034 the existence guard of an Edit starts with the currency and group lookups (one wave), not after them; before the first write either way", async () => {
+    fake.state.guardHolds = true;
+    fake.state.children[HEAD] = childRows(1);
+    const on = await inWaves(() => writes.savePeriod(CTX, PERIOD, false));
+    expect(outcome(on.result)).toBe("ok");
+    const guardRead = writesOf("read").find((r) => r.label === "guard")!;
+    const lookups = writesOf("read").filter((r) => r.label.startsWith("list OPEX subaccounts") || r.label.startsWith("list transaction currencies"));
+    expect(lookups.length).toBeGreaterThan(0);
+    for (const l of lookups) expect(l.wave).toBe(guardRead.wave);
+    expect(guardRead.wave).toBeLessThan(writesOf("update")[0]!.wave);
+
+    beforeEachReset();
+    fake.state.guardHolds = true;
+    together.on = false;
+    fake.state.children[HEAD] = childRows(1);
+    const off = await inWaves(() => writes.savePeriod(CTX, PERIOD, false));
+    expect(outcome(off.result)).toBe("ok");
+    expect(off.waves).toBe(on.waves + 2); // the guard wave and the children wave
+  });
+});
+
+describe("CB-09 OPEX writes together — standard import", () => {
+  const assumption = (n: number, description: string) => ({
+    vsb_description: description, vsb_period: 952850000 + (n - 1),
+    vsb_durationinyears: 2, vsb_durationinmonths: 0, vsb_aggregation: 952850000, vsb_distributionfrequency: 1,
+    vsb_useinflationprofile: false, vsb_usecountryinflationprofile: false, _vsb_currency_value: EURO,
+  });
+  const ARGS = { mode: "om" as const, group: "WTG-1630", deviceId: DEVICE, codDate: "2024-01-01" };
+  const EXISTING = "check for an existing OPEX standard contract";
+  const ASSUMPTIONS = "list OPEX / Land Lease standard assumptions";
+
+  it("UT-PWOPEX-040 the existence check and the assumptions read share one wave (on), two waves (off), and the same rows are created", async () => {
+    fake.state.rows[ASSUMPTIONS] = [assumption(1, "Standard O&M"), assumption(2, "Standard O&M - 2")];
+    fake.state.newIds = ["head-new", "tail-new"];
+    const on = await inWaves(() => writes.addStandardContract(CTX, ARGS));
+    expect(outcome(on.result)).toBe("ok");
+    const existing = writesOf("read").find((r) => r.label === EXISTING)!;
+    const assumptions = writesOf("read").find((r) => r.label === ASSUMPTIONS)!;
+    expect(existing.wave).toBe(assumptions.wave);
+    const createsOn = writesOf("create").map((c) => c.fields);
+
+    beforeEachReset();
+    together.on = false;
+    fake.state.rows[ASSUMPTIONS] = [assumption(1, "Standard O&M"), assumption(2, "Standard O&M - 2")];
+    fake.state.newIds = ["head-new", "tail-new"];
+    const off = await inWaves(() => writes.addStandardContract(CTX, ARGS));
+    expect(outcome(off.result)).toBe("ok");
+    expect(writesOf("read").find((r) => r.label === ASSUMPTIONS)!.wave).toBeGreaterThan(writesOf("read").find((r) => r.label === EXISTING)!.wave);
+    expect(off.waves).toBe(on.waves + 1);
+    expect(writesOf("create").map((c) => c.fields)).toEqual(createsOn);
+  });
+
+  it("UT-PWOPEX-041 an existing standard contract is REFUSED first, with nothing created, even when the assumptions read also fails", async () => {
+    fake.state.rows[EXISTING] = [{ vsb_opexprojectcostid: HEAD }];
+    fake.state.readFails.add(ASSUMPTIONS);
+    const { result } = await inWaves(() => writes.addStandardContract(CTX, ARGS));
+    expect(outcome(result)).toContain("already has a standard contract");
+    expect(writesOf("create")).toHaveLength(0);
+  });
+
+  it("UT-PWOPEX-042 a failing existence check is thrown first (the assumptions answer is ignored); a failing assumptions read with no refusal is thrown after it", async () => {
+    fake.state.readFails.add(EXISTING);
+    fake.state.readFails.add(ASSUMPTIONS);
+    const first = await inWaves(() => writes.addStandardContract(CTX, ARGS));
+    expect(outcome(first.result)).toContain(`${EXISTING} failed`);
+    beforeEachReset();
+    fake.state.readFails.add(ASSUMPTIONS);
+    const second = await inWaves(() => writes.addStandardContract(CTX, ARGS));
+    expect(outcome(second.result)).toContain(`${ASSUMPTIONS} failed`);
+    expect(writesOf("create")).toHaveLength(0);
+  });
+
+  it("UT-PWOPEX-043 no assumptions configured still refuses with the same text and creates nothing", async () => {
+    fake.state.rows[ASSUMPTIONS] = [];
+    const { result } = await inWaves(() => writes.addStandardContract(CTX, ARGS));
+    expect(outcome(result)).toContain("No standard assumptions are configured");
+    expect(writesOf("create")).toHaveLength(0);
+  });
+});
+
+/** The file's own `beforeEach`, for a test that runs two scenarios in a row. */
+function beforeEachReset(): void {
+  invalidateCurrencies();
+  const s = fake.state;
+  together.on = true;
+  s.calls = []; s.wave = 0; s.seq = 0; s.held = []; s.inFlight = 0; s.peak = 0; s.failing = new Set(); s.newIds = []; s.children = {};
+  s.readFails = new Set(); s.guardHolds = false;
+  s.rows = referenceRows();
 }

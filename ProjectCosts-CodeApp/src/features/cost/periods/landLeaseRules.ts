@@ -2678,6 +2678,19 @@ export function bindParent(
   });
 }
 
+/** CB-07: a D118 follower write: an update on the period entity set that carries only the start date (and no parent bind). */
+function isFollowerStartUpdate(w: LeaseWrite): boolean {
+  if (w.op !== "update" || w.entitySet !== LEASE_ENTITY_SET.period || w.parentRef !== undefined) return false;
+  const keys = Object.keys(w.payload);
+  return keys.length === 1 && keys[0] === LEASE_PERIOD_COL.startDate;
+}
+
+/** CB-07: `w` and the write that opened the tier are both followers, or both period deletes. */
+function isWiderKind(w: LeaseWrite, opener: LeaseWrite): boolean {
+  if (isFollowerStartUpdate(w)) return isFollowerStartUpdate(opener);
+  return w.op === "delete" && w.entitySet === LEASE_ENTITY_SET.period && opener.op === "delete" && opener.entitySet === LEASE_ENTITY_SET.period;
+}
+
 /**
  * OPT-10 — splits a plan into TIERS: runs of consecutive writes that may be sent at the same time. Tier `n + 1` starts only
  * after every write of tier `n` has landed, and no tier starts after a failed one.
@@ -2694,9 +2707,23 @@ export function bindParent(
  *  - its `parentRef` is not the `ref` of a create in the tier (a bind waits for its create, whichever entity set that is on).
  * Different entity sets are therefore always ordered (header → allocations → periods, and deletes children before the parent).
  *
+ * WIDER (dvopt CB-07, `LEASE_TIER_WIDER`, `options.wider`; off by default so this function alone is the OPT-10 rule). Two more kinds of write
+ * may share a tier, each only with writes of its OWN kind and only where the audit shows independence:
+ *  - FOLLOWER start-date updates (D118): an update on the PERIOD entity set whose payload is exactly the start date. Every follower's
+ *    date is worked out by `planFollowingLeaseStarts` from the SAVED period alone (`previous start + previous duration` down the chain
+ *    in memory), not from the value another follower is about to write, so they do not read each other. They stay behind the saved
+ *    period's own update, which is a full-payload write and so never a follower (the D160 §12 correction stands: no follower beside it).
+ *  - PERIOD DELETES (a contract delete): different rows, no payload, no parent among them; the contract header's delete is a later tier
+ *    (a different entity set), so the children still go before the parent, and allocations (earlier tier) before the periods.
+ * A PERIOD CREATE is NOT widened: the `createdon` order of an import's periods is a product question (D160 owner decision 1).
+ * What changes on a failure: the sibling followers (or period deletes) already in flight may land, as the allocation rows do; nothing of a
+ * later tier is sent. A follower chain left with a gap heals on the next save (`planFollowingLeaseStarts` returns only the periods whose
+ * stored start differs), and a half-finished period delete finishes on a retry (a 404 counts as done, CB-03).
+ *
  * Returns the indexes into `writes`, in planner order inside each tier.
  */
-export function leaseWriteTiers(writes: readonly LeaseWrite[]): number[][] {
+export function leaseWriteTiers(writes: readonly LeaseWrite[], options: { wider?: boolean } = {}): number[][] {
+  const wider = options.wider === true;
   const tiers: number[][] = [];
   let tierWrite: LeaseWrite | null = null; // the write that opened the current tier: its entity set and op are the tier's
   let rowsInTier = new Set<string>();
@@ -2704,7 +2731,7 @@ export function leaseWriteTiers(writes: readonly LeaseWrite[]): number[][] {
   writes.forEach((w, index) => {
     const row = w.op === "create" ? null : `${w.entitySet}|${w.id}`;
     const needsLaterTier = tierWrite === null
-      || w.entitySet !== LEASE_ENTITY_SET.allocation
+      || !(w.entitySet === LEASE_ENTITY_SET.allocation || (wider && isWiderKind(w, tierWrite)))
       || w.entitySet !== tierWrite.entitySet
       || w.op !== tierWrite.op
       || (row !== null && rowsInTier.has(row))
@@ -3448,8 +3475,11 @@ export function planStandardImport(args: {
   subaccountName: string;
   /** Sorted by `description` ascending, as the canvas sorts them. */
   assumptions: readonly LeaseAssumptionRow[];
-  /** Every `Land Lease Project Costs` row already in this sub-account for this project. */
-  existingCostsInSubaccount: readonly LeaseCostRow[];
+  /**
+   * Every `Land Lease Project Costs` row already in this sub-account for this project. Only `isStandardContract` is read. Since dvopt
+   * CB-02 the screen passes a FRESH server read of the standard ones, not the cached book (the rule stays pure).
+   */
+  existingCostsInSubaccount: readonly Pick<LeaseCostRow, "id" | "subaccountId" | "isStandardContract">[];
   generators: readonly GeneratorOption[];
   /** The `Country Inflation Profiles` value for (country, COD year + 1), or null. */
   countryInflationProfile: number | null;
