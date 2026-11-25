@@ -97,6 +97,28 @@ Status of every row: **uncommitted on branch `optimization/stage3`, NOT product-
 | OPEX and Land Lease cards re-derived their rows, gates and warnings on every keystroke | Cards skip re-rendering while a panel is typed in; folded cards compute no rows or gates; OPEX row warnings are computed once per card with the O-4b behaviour kept (O&M 40 rows: 3,040 comparisons → 76; Other OPEX chain of 40: 5,840 → 39); Land Lease `buildContracts` groups once (OPT-26) | **fixed** (D160 §11) | UT-OPEX-OPT-001…006, UT-OPEXUI-OPT-001/002, UT-LLUI-OPT-001/002, UT-LLRULES-OPT-001 |
 | The Contracts, OPEX and Land Lease panels validated twice per render | The Save gate reuses the errors already computed, with every message and the order unchanged (Contracts: 1,500 generated forms, 0 mismatches against the old gate); the closing-date split is one pass, bit-identical to the old four (OPT-28) | **fixed** (D160 §11) | UT-CONTR-OPT-001…004, UT-OPEX-OPT-007/008, UT-LLRULES-OPT-002/003 |
 
+### 1.6 Rendering, memory and bundle (frontend optimization programme, D162, 25 Nov 2026)
+
+Status of every row: **uncommitted on branch `feature/frontend-performance-optimization`, NOT product-approved, not run on DEV**.
+- Render counts come from jsdom tests (`platform/renderProbe.ts`), each written to fail on the old code first.
+- Bytes come from production builds of `ed4354e` and of this branch.
+
+Details: `ProjectDocs/app-docs/frontend-optimization/09`.
+
+| Canvas challenge | Code app | Status | Evidence |
+|---|---|---|---|
+| (code-app defect) Add Cost from Table lost the user's unsaved edits when the session project refetched (tab return after 5 min, any project invalidation); Save then sent nothing | The sheet keys on whether a project is loaded, not on the project object; app-wide, an unchanged refetch keeps its cached objects (CA-31, FE-C1-02, FE-SH-01) | **fixed** (D162 §2) | UT-ACIDENT-001…003, UT-QSHARE-001…007 |
+| The app loaded every screen's controls at start-up | Start-up JavaScript **1,320 → 1,018 KiB minified, 374 → 298 KiB gzip (−20 %)**: the Fluent chunk keeps only what the shell needs, and shared components no longer ride along unused. Every screen's first visit is 6–27 % smaller | **fixed** (D162 §4) | `npm run bundle:report`; `09` §1–2 |
+| (code-app cost) Add Cost from Table shipped a spreadsheet formula engine it never uses | The engine is replaced by a stub: the screen's chunk **351 → under 75 KiB**; one formula parser fewer per cell commit. DIVERGENCE (D-2): a typed `=x` shows `=x`, which is also what is saved | **fixed** (D162 §3) | UT-FORMULASTUB-001, 002 |
+| Finance, Production and Admin Contracts loaded other screens' code | Finance no longer loads Revenues, Generators or Land Lease modules (−20 % on its first visit); Production no longer loads Land Lease (−16 %); Admin Contracts no longer loads Cost Contracts (−14 %). Each helper was moved, not copied | **fixed** (D162 §4) | UT-ADCONTR-FE-001, 002 (import boundary), UT-CAPEXACC-FE-001, 002 |
+| Galleries re-evaluated every control on any change | Typing in a side panel no longer redraws the screen behind it, whether the panel is on screen or still closing. Finance gallery and repayment rows: 12 → 1 rows per keystroke. Production season and negative-price rows: 27 → 0. Check List task table and stepper: 0 per comment keystroke. Contracts cards and DevCo picker: 0. Admin Check List Settings tables: 16 → 0 for 8 keystrokes. Admin Contracts cards: 0 | **fixed** (D162) | UT-FIN-FE-001…004, UT-PROD-FE-001…005, UT-CHK-FE-001/002, UT-CONTRACTS-FE-001…004, UT-ADCHK-FE-001…003, UT-ADCONTR-FE-003/004 |
+| The Project Gates grid redrew every gate and task on any click | One status-pill click redraws one row (was 2 full-table renders); opening the editor redraws none | **fixed** (D162) | UT-ADGATE-FE-001…005 |
+| Folding a card redrew every card | Land Lease: one card per fold click (was 9). OPEX: one commit per mount and rail switch (was 2) | **fixed** (D162) | UT-LEASE-FE-001, UT-OPEX-FE-001/002 |
+| (code-app) The header's error icon appeared only when something else redrew the header; "Report a problem" often missed the error that prompted it | The icon appears when the error is traced. The report is built when the panel opens (D-4) | **fixed** (D162 §3) | UT-SHELLRENDER-001, 003, 006 |
+| (code-app) Small lifecycle leaks | The Azure Maps token is refreshed only while a map is shown. The Grid Operator success flash timer is cleared on leave. The CAPEX grid's comment tooltip is removed with the grid. A cancelled load closes its `[VSB]` ACTION line | **fixed** (D162 §4) | UT-MAPTOKEN-FE-001…003, UT-GRIDOP-FE-001/002, UT-CAPEX-FE-001/002, UT-REQLOG-024/025 |
+| General Data waited for its data before starting the 1.7 MB map download | The map code starts downloading as the screen mounts, alongside the reads | **fixed** (D162) | UT-GDATA-FE-003 |
+| (test gate) The Add Cost grid tests ran react-spreadsheet on the original packages, not the ones the app is built with (since D140) | Vitest now loads the same ES build with the same aliases as the browser | **fixed** (D162 §4) | UT-FORMULASTUB-002 |
+
 ---
 
 ## Part 2 — Screen by screen
