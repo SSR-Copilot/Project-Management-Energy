@@ -7,6 +7,8 @@ interface FakeAi {
   addTelemetryInitializer: ReturnType<typeof vi.fn>;
   trackPageView: ReturnType<typeof vi.fn>;
   trackEvent: ReturnType<typeof vi.fn>;
+  trackMetric: ReturnType<typeof vi.fn>;
+  trackDependencyData: ReturnType<typeof vi.fn>;
   trackTrace: ReturnType<typeof vi.fn>;
   trackException: ReturnType<typeof vi.fn>;
 }
@@ -20,7 +22,7 @@ vi.mock("@microsoft/applicationinsights-web", () => ({
     const instance: FakeAi = {
       config,
       loadAppInsights: vi.fn(), addTelemetryInitializer: vi.fn(), trackPageView: vi.fn(),
-      trackEvent: vi.fn(), trackTrace: vi.fn(), trackException: vi.fn(),
+      trackEvent: vi.fn(), trackMetric: vi.fn(), trackDependencyData: vi.fn(), trackTrace: vi.fn(), trackException: vi.fn(),
     };
     sdk.instances.push(instance);
     return instance;
@@ -65,18 +67,51 @@ describe("App Insights wiring", () => {
     expect(ai.trackPageView).toHaveBeenCalledTimes(1);
   });
 
-  it("UT-AI-012 sends a platform metric as a custom event, URL query stripped", async () => {
+  it("UT-AI-012 sends a networkRequest metric as a dependency, not an event, URL query stripped", async () => {
     startAppInsights(CS);
     await appInsightsStarted();
     trackMetric({
       type: "networkRequest",
       data: { url: "https://org.crm4.dynamics.com/api/data/v9.2/vsb_projects?$filter=x", method: "GET", duration: 80, statusCode: 500, responseSize: 10 },
     });
-    expect(sdk.instances[0]!.trackEvent).toHaveBeenCalledWith({
-      name: "networkRequest",
-      properties: { url: "https://org.crm4.dynamics.com/api/data/v9.2/vsb_projects", method: "GET" },
-      measurements: { duration: 80, statusCode: 500, responseSize: 10 },
+    const ai = sdk.instances[0]!;
+    expect(ai.trackDependencyData).toHaveBeenCalledWith({
+      id: expect.any(String),
+      name: "GET /api/data/v9.2/vsb_projects",
+      data: "https://org.crm4.dynamics.com/api/data/v9.2/vsb_projects",
+      target: "org.crm4.dynamics.com",
+      type: "HTTP",
+      duration: 80,
+      responseCode: 500,
+      success: false,
+      properties: { responseSize: "10" },
     });
+    expect(ai.trackEvent).not.toHaveBeenCalled();
+  });
+
+  it("UT-AI-020 a request whose status the host left undefined (D122) is a dependency with code 0 that counts as a success", async () => {
+    startAppInsights(CS);
+    await appInsightsStarted();
+    trackMetric({
+      type: "networkRequest",
+      data: { url: "/api/data/v9.2/vsb_costs(0f8fad5b-d9cb-469f-a165-70867728950e)", method: "PATCH", duration: 12 } as never,
+    });
+    expect(sdk.instances[0]!.trackDependencyData).toHaveBeenCalledWith(expect.objectContaining({
+      name: "PATCH /api/data/v9.2/vsb_costs(:id)", data: "/api/data/v9.2/vsb_costs(0f8fad5b-d9cb-469f-a165-70867728950e)", responseCode: 0, success: true,
+    }));
+    expect(sdk.instances[0]!.trackDependencyData.mock.calls[0]![0]).not.toHaveProperty("target");
+  });
+
+  it("UT-AI-021 a sessionLoadSummary is a custom event and its timeToAppInteractive a custom metric", async () => {
+    startAppInsights(CS);
+    await appInsightsStarted();
+    trackMetric(LOAD);
+    const ai = sdk.instances[0]!;
+    expect(ai.trackEvent).toHaveBeenCalledWith(expect.objectContaining({ name: "sessionLoadSummary" }));
+    expect(ai.trackMetric).toHaveBeenCalledWith({ name: "timeToAppInteractive", average: 900 }, { appLoadResult: "optimal" });
+    ai.trackMetric.mockClear();
+    trackMetric({ type: "sessionLoadSummary", data: { successfulAppLaunch: false, appLoadResult: "other" } });
+    expect(ai.trackMetric).not.toHaveBeenCalled();
   });
 
   it("UT-AI-013 forwards trace() entries: a trace, or an exception for an Error", async () => {
