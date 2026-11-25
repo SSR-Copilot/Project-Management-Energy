@@ -52,7 +52,7 @@ import {
   NOTHING_STANDARD, revenuePanelStandard, validateSiteQuality, balancingYearOptions, balancingClusterReached, planSaveBalancing,
   planDeleteBalancing, REVENUE_SCREEN_TEXT, buildStandardFlags, buildStandardFlagsCanvasParity,
   planSaveContract, planDeleteContract, saveContractJob, deleteContractJob, saveBalancingJob,
-  deleteBalancingJob, SPINNER, newContractForm, applyRevenueEngine, standardHedgedVolume, editField,
+  deleteBalancingJob, SPINNER, newContractForm, applyRevenueEngine, SEED_INFLATION_START_YEAR, standardHedgedVolume, editField,
   shownDescription, withTerm, tariffP90Text, standardFromStored, editContractForm,
   toggleCountryInflation, changeInflationStartYear, sameInflationArea,
   countryInflationValueCanvasParity, resyncNegativePrice, fmtCardDate, fmtTariffCell,
@@ -509,6 +509,25 @@ describe("price curve (rule 11 / source ambiguity 1)", () => {
     // Italy still matches its own zone's COD-year row exactly.
     expect(priceExactRegion("Italy", "Italy_North")).toBe("Italy_North");
     expect(priceExactRegion("Germany", "Italy_North")).toBeNull();
+  });
+
+  it("UT-REV-919 the Add panel opens with an EMPTY Inflation Start Year (the \"YYYY\" hint), as the live canvas, even when the inflationstartyear assumption names a milestone (user, 25 Nov 2026)", () => {
+    const form = applyRevenueEngine({
+      project: project(),
+      rows: [
+        row("revenuetype", "", "ppa", "ppa"),
+        row("inflation", "useinflation", "true", "true"),
+        row("inflation", "inflationstartyear", "operationstartdatecod", "operationstartdatecod"),
+        ...curve,
+      ],
+      region: null, label: "PPA", productionExists: false, subaccountId: "sub-1", profiles: [], today: d("2026-10-20"),
+    });
+    expect(form.isStandardContract).toBe(true);
+    expect(form.useInflation).toBe(true);
+    expect(form.inflationStartYear).toBe("");
+    expect(form.std.inflationStartYear).toBe(false);
+    // The extract's seed is still there as the switch's other side, for the record.
+    expect(SEED_INFLATION_START_YEAR).toBe(false);
   });
 
   it("UT-REV-077 the QA report: German wind FiT, COD 2034, the curve in Fabric's row order → Bidding Price, Tariff p50 and p90 are 60.00", () => {

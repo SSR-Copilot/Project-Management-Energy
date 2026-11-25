@@ -1011,3 +1011,16 @@ The user: "scan whole application settings … not same as canvas". Each screen 
 | Generators (code) | `rules.ts` was one 5,700-line file of unrelated jobs; it is now seven files (rules, captions, display, write plans, rollback and delete handling, panel plans, replace plans) behind the same imports. No behaviour change; the 723 Generators tests pass untouched | fixed (internal) |
 | Cost screens | The standard-assumption catalogue is no longer re-read every time the browser tab is entered again (master data from the Settings screens). The project's own rows still refetch on focus | fixed |
 | Cost screens, Planning, Production, Team | One month-clamping `addMonths` and one `dateOnlyOf` instead of four and three copies | fixed (internal) |
+
+## Write feedback: success texts go away after two seconds, as the canvas Notify (25 Nov 2026) — reproduced
+
+| Screen | Change | Status |
+|---|---|---|
+| Every Project Management screen (shared `usePlanWrite` / `WriteFeedback`) | A save or delete success text ("Storage type was successfully saved for current project!", "Permit deleted." …) disappears after 2 s, as the canvas `Notify(…, NotificationType.Success, 2000)` does (21 of the PM app's 24 success notifications; three use 1000 ms). The code app's green bar had stayed until the next action (user, 25 Nov 2026). Error texts still stay until the next action: a failure must not be missed (the canvas kept its errors 10 s). The next run or leaving the screen cancels the timer. UT-PLANWRITE-032 | **reproduced** |
+| Application Settings and Cost screens (shared `useNotify` success toasts) | The success toasts ("New order was successfully saved.", "The period was deleted." …) stay 2 s instead of 5 s, the same timer as the Project Management success texts (user, 25 Nov 2026). The Settings and Cost canvas apps have no success `Notify` at all (the Settings canvas wrote its success text into a loading dialog it blanked in the same step, a SOURCE DEFECT), so the 2 s is the PM canvas's figure. Info toasts keep 5 s, warnings 10 s, errors stay until dismissed. UT-NOTIFY-* | **the user's request** |
+
+## Revenues: Add Revenue Contract opens with an empty Inflation Start Year, as the live canvas (25 Nov 2026) — reproduced (live canvas)
+
+| Screen | Change | Status |
+|---|---|---|
+| Revenues, Add Revenue Contract | The Inflation Start Year box opens empty with its "YYYY" hint, as the live canvas does (user screenshot pair, 25 Nov 2026); the code had seeded the COD (or FID / cluster) year from the `inflationstartyear` standard assumption, which is what the extracted 1.21.709 seed does (Y:6711-6760). The live app wins, as for the tab sort (D154) and the "Months" hint. Picking a Contract Start Date still fills the year, as the canvas picker's OnChange does; the field stays required, so Save waits for a year while inflation is on. The extract's seed is kept behind `SEED_INFLATION_START_YEAR` (`rules.ts`, `true` = the extract). UT-REV-919 | **reproduced** (live canvas) |
