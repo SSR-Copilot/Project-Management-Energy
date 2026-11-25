@@ -20,7 +20,7 @@ import { Button, makeStyles, mergeClasses, tokens } from "@fluentui/react-compon
 import { AddFilled, DeleteRegular, EditRegular } from "@fluentui/react-icons";
 import { type OpexPeriod } from "@/data/adminCost";
 import { CONTRACT_TYPE, type OpexContractType } from "@/domain/costStandards";
-import { DisabledReason, ExpandToggle, InlineEmpty, RowActions } from "@/components";
+import { DisabledReason, ExpandToggle, RowActions } from "@/components";
 import { fontFamily, palette } from "@/theme/tokens";
 import { MSG } from "./constants";
 import { canAddPeriod, canDeletePeriodRow, canDeleteRow, inactiveRowsReason, toStandardOpexRow, type ContractView } from "./rules";
@@ -114,15 +114,10 @@ export function OpexContractTable(props: OpexContractTableProps) {
   const cols = columns(type, currencyCode);
   const alignClass = (c: Column) => (c.align === "right" ? styles.right : c.align === "center" ? styles.center : undefined);
 
-  if (contracts.length === 0) {
-    return (
-      // NEW — no canvas equivalent: the canvas shows an empty gallery.
-      <InlineEmpty padding={12} size={13}>
-        No standard contracts for this country and technology yet. Use "Add Contract Type" to create one.
-      </InlineEmpty>
-    );
-  }
-
+  // No contracts: the column header shows over an empty body, as the canvas gallery's fixed header row
+  // (`lbl_LandLease_Content_Subaccounts_CardBody_CostsTableHeader_*`, ACS:1360-1809) stays while the gallery is
+  // empty. The port's text "No standard contracts for this country and technology yet. Use "Add Contract Type"
+  // to create one." had no canvas equivalent and was removed (user, 25 Nov 2026).
   return (
     <div className={styles.scroller}>
       <table

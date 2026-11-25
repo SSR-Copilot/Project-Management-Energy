@@ -14,7 +14,7 @@ vi.mock("./sanitize", async (orig) => {
 vi.mock("@microsoft/applicationinsights-web", () => ({
   SeverityLevel: { Verbose: 0, Information: 1, Warning: 2, Error: 3, Critical: 4 },
   ApplicationInsights: vi.fn().mockImplementation(function () {
-    return { loadAppInsights: vi.fn(), addTelemetryInitializer: vi.fn(), trackPageView: vi.fn(), trackTrace: vi.fn(), trackException: vi.fn(), trackEvent: (e: unknown) => spy.events.push(e) };
+    return { loadAppInsights: vi.fn(), addTelemetryInitializer: vi.fn(), trackPageView: vi.fn(), trackTrace: vi.fn(), trackException: vi.fn(), trackMetric: vi.fn(), trackEvent: (e: unknown) => spy.events.push(e) };
   }),
 }));
 

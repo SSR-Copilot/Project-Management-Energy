@@ -156,6 +156,15 @@ describe("Project General CheckList Screen (connected)", () => {
     expect(screen.getByTestId("but_Project_States_CheckList_Refresh")).toBeTruthy();
   });
 
+  it("UT-CHKLST-945 the next-cluster button carries its canvas Tooltip as the native hover text, on the button and its wrapper (user, 25 Nov 2026)", () => {
+    renderScreen();
+    const next = screen.getByTestId("pcf_Checklist_DisplayProject_Body_Content_Buttons_NextCluster");
+    const title = next.getAttribute("title") ?? "";
+    // The Draft cluster of the fixture is not completed and has no Only Notifications gate: the Gate Relevance count.
+    expect(title).toMatch(/^Gate Relevance Tasks: \d+ \/ \d+$/);
+    expect(screen.getByTestId("pcf_Checklist_DisplayProject_Body_Content_Buttons_NextCluster-wrap").getAttribute("title")).toBe(title);
+  });
+
   it("UT-CHKLST-902 the page lock lists its sections and disables the commands", () => {
     renderScreen({ project: { ...baseProject, projectNumber: null, netYieldP50: 0 } });
     const lock = screen.getByTestId("con_Milestones_Page_LockMessage_3");
