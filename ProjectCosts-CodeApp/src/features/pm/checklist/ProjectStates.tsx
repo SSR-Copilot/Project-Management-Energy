@@ -405,19 +405,20 @@ export function ClusterActions({ cancelApproval, reset, next, info, terminals }:
         </Button>
       ) : null}
       {next ? (
-        // The tooltip sits on a wrapper so it also shows while the button is disabled (a disabled
-        // button gets no hover events in the browser).
-        <Tooltip content={next.tooltip} relationship="description" withArrow>
-          <span className={s.nextWrap}>
+        // `pcf_…_Buttons_NextCluster.Tooltip` is the PowerCAT button's native hover text (the canvas shows the browser
+        // tooltip under the cursor, user screenshot 25 Nov 2026), as the Cancel Approval button's `title` here. It sits on
+        // the wrapper AND the button: the wrapper still shows it while the button is disabled (a disabled button gets no
+        // hover events; `primaryDisabled` passes them through), the button shows it at once when enabled. The Fluent
+        // Tooltip that wrapped the button did not show in the player (user, 25 Nov 2026).
+        <span className={s.nextWrap} title={next.tooltip} data-testid="pcf_Checklist_DisplayProject_Body_Content_Buttons_NextCluster-wrap">
           <Button appearance="primary" className={mergeClasses(s.action, s.text16, next.disabled ? s.primaryDisabled : s.primary, s.w260)}
-            disabled={next.disabled} aria-label={ARIA.nextCluster}
+            disabled={next.disabled} aria-label={ARIA.nextCluster} title={next.tooltip}
             // `IconName`: "TriggerApproval" (a lightning bolt) for an active gate, "CheckMark" otherwise.
             icon={next.icon === "TriggerApproval" ? <FlashRegular /> : <CheckmarkRegular />}
             data-testid="pcf_Checklist_DisplayProject_Body_Content_Buttons_NextCluster" onClick={next.onClick}>
             {next.caption}
           </Button>
-          </span>
-        </Tooltip>
+        </span>
       ) : null}
       {info !== null ? (
         <span className={s.info} data-testid="con_Checklist_DisplayProject_Body_Content_Buttons_Info">
