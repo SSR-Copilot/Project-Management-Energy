@@ -268,7 +268,9 @@ describe("Add Cost from Table without spinners (D58)", () => {
     savePending = true;
     renderScreen();
     const status = screen.getByTestId("add-costs-write-status");
-    expect(status).toHaveTextContent("Please wait, saving costs...");
+    // This screen's own canvas text (`Add Costs from Table.pa.yaml` line 30), not the CAPEX panel's.
+    expect(status).toHaveTextContent("Saving costs...");
+    expect(status).not.toHaveTextContent("Please wait");
     expect(status.getAttribute("role")).toBe("dialog");
     expect(status.getAttribute("aria-modal")).toBe("true");
     expect(status.querySelector(".fui-Spinner")).not.toBeNull();
@@ -297,7 +299,7 @@ describe("Add Cost from Table without spinners (D58)", () => {
   const expectBlocking = () => {
     const status = screen.getByTestId("add-costs-write-status");
     expect(status.getAttribute("role")).toBe("dialog");
-    expect(status).toHaveTextContent("Please wait, saving costs...");
+    expect(status).toHaveTextContent("Saving costs...");
     expect(status.querySelector(".fui-Spinner")).not.toBeNull();
   };
 

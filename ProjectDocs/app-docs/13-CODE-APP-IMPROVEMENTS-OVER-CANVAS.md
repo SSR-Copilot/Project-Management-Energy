@@ -1024,3 +1024,9 @@ The user: "scan whole application settings … not same as canvas". Each screen 
 | Screen | Change | Status |
 |---|---|---|
 | Revenues, Add Revenue Contract | The Inflation Start Year box opens empty with its "YYYY" hint, as the live canvas does (user screenshot pair, 25 Nov 2026); the code had seeded the COD (or FID / cluster) year from the `inflationstartyear` standard assumption, which is what the extracted 1.21.709 seed does (Y:6711-6760). The live app wins, as for the tab sort (D154) and the "Months" hint. Picking a Contract Start Date still fills the year, as the canvas picker's OnChange does; the field stays required, so Save waits for a year while inflation is on. The extract's seed is kept behind `SEED_INFLATION_START_YEAR` (`rules.ts`, `true` = the extract). UT-REV-919 | **reproduced** (live canvas) |
+
+## Add Costs from Table: the save text is this screen's own "Saving costs..." (25 Nov 2026) — reproduced
+
+| Screen | Change | Status |
+|---|---|---|
+| Cost, Add Costs from Table | The footer status while the sheet saves reads "Saving costs...", the screen's own `locSpinnerInformationText` (`Add Costs from Table.pa.yaml` line 30); the code had borrowed the single-cost panel's "Please wait, saving costs..." (user, 25 Nov 2026). The canvas's first text, "Checking subaccounts validations...", covered its 1 s timer before the save branch ran; the code app validates as the sheet is edited and the Save's own check takes under a millisecond before the first request leaves (WS-E), so there is no checking phase to label and none is shown. The non-blocking footer line itself stays as decided (D58). UT-ADDCOST-NOSPIN-002, UT-ADDCOST-BUSY-001/002 | **reproduced** |

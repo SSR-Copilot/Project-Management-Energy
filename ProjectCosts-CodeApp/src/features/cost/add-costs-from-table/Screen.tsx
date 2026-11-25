@@ -504,6 +504,13 @@ export default function AddCostsFromTableScreen() {
    * (`Visible: =locIsVisiblePopUpSpinner`, `InformationText: =locSpinnerInformationText`) with one
    * non-blocking status line in the footer, same verbatim text; while it shows, `busy` keeps the
    * panel from closing and the sheet is `inert`. Save stays guarded by `saveButtonDisabled`.
+   *
+   * The text is this screen's own `locSpinnerInformationText: "Saving costs..."` (`Add Costs from
+   * Table.pa.yaml` line 30, the timer's save branch), not the single-cost panel's "Please wait,
+   * saving costs..." (25 Nov 2026). The canvas' first text, "Checking subaccounts validations..."
+   * (the Save button's `OnSelect`), covered its 1 s timer before that branch ran; here the sheet is
+   * validated as it is edited and the Save's own check takes under a millisecond before the first
+   * request leaves (WS-E), so there is no checking phase to label.
    */
   return (
     <FormPanel centerClose
@@ -522,7 +529,7 @@ export default function AddCostsFromTableScreen() {
         <>
           {/* CA-15: a write still running from another screen (or an earlier visit) says so. */}
           <WriteStatus testId="add-costs-write-status" label={costWriteStatusLabel({
-            ownLabel: save.isPending ? "Please wait, saving costs..." : null,
+            ownLabel: save.isPending ? "Saving costs..." : null,
             ownPending: save.isPending, writeInFlight,
           })} />
           <PanelButtons
