@@ -1,8 +1,9 @@
 /**
  * The request log: what the app asked Dataverse for, how long it took and how many rows came back.
  *
- * Everything goes to the browser console (DevTools → Console, filter `[VSB]`), in every build; there
- * is no switch (product owner, 29 Oct 2026). Three kinds of line share one prefix:
+ * Everything goes to the browser console (DevTools → Console, filter `[VSB]`), in every build and every
+ * environment EXCEPT Production, where `vsb_EnvironmentName` = `Prod` prints nothing at all (D163,
+ * `consoleGate.ts`; before 25 Nov 2026 there was no switch, D72). Three kinds of line share one prefix:
  *
  *   [VSB] HTTP   GET vsb_projects?$select=… → 200 · 312 ms · 14.2 kB     every request the SDK sends, from any screen
  *   [VSB] DATA   delete vsb_costs: 40 rows, 40 calls, 3,100 ms in total …  data-layer calls of one kind and table, summed, with their row count
@@ -27,6 +28,7 @@
  * both count the requests made meanwhile; the numbers are a trace, not an invoice.
  */
 import type { Metric } from "@microsoft/power-apps/telemetry";
+import { consoleOutput } from "./consoleGate";
 
 export const LOG_PREFIX = "[VSB]";
 
@@ -95,9 +97,10 @@ export function shortUrl(url: string, max = 180): string {
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 
+// D163: every line goes through the console gate, which prints it, holds it until the environment is known, or (Prod) drops it.
 const emit = (level: "info" | "warn" | "error", line: string): void => {
   try {
-    console[level](line);
+    consoleOutput(level, line);
   } catch {
     // Logging must never break the app.
   }

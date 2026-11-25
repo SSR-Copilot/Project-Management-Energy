@@ -16,6 +16,7 @@ import { useLocation } from "react-router-dom";
 import { startupFlags } from "./startupFlags";
 import { startAppInsights } from "@/appInsights";
 import { readSession, readProjectLink, type Session } from "@/platform/powerClient";
+import { applyEnvironmentName } from "@/platform/consoleGate";
 import { loadEnvironmentVariables, loadProject, type EnvVars, type ProjectLoadScope } from "@/data/project";
 import { projectStateLookup } from "@/data/projectStateLookup";
 import { qk } from "@/data/keys";
@@ -84,8 +85,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   // App Insights starts from `vsb_ApplicationInsightsConnectionString`; a failed load turns it off.
   useEffect(() => {
-    if (envQuery.isSuccess) startAppInsights(envQuery.data.vsb_ApplicationInsightsConnectionString);
-    else if (envQuery.isError) startAppInsights(undefined, envQuery.error);
+    if (envQuery.isSuccess) {
+      // D163: the console gate learns the environment before Application Insights starts (its SDK prints through the same gate).
+      // `loadEnvironmentVariables` has already told it; this covers data that arrived another way and costs nothing twice.
+      applyEnvironmentName(envQuery.data.vsb_EnvironmentName);
+      startAppInsights(envQuery.data.vsb_ApplicationInsightsConnectionString);
+    } else if (envQuery.isError) startAppInsights(undefined, envQuery.error);
   }, [envQuery.isSuccess, envQuery.isError, envQuery.data]);
 
   /*

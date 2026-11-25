@@ -204,7 +204,12 @@ development sessions and is recorded here because the README doesn't carry it ye
 
 23. **Every call and action is traced in the console** (product owner, 29 Oct 2026, D72). Every Dataverse read,
     write, delete and bulk or flow call, and every page load and save, must show up as a `[VSB]` line in the browser
-    console, in every build (no environment switch, no download button). The logger is `platform/requestLog.ts`
+    console, in every build and every environment EXCEPT Production (no download button). **Production = the environment
+    variable `vsb_EnvironmentName` is `Prod`** (any letter case): there the app prints NOTHING to the console, on any screen, for
+    any operation (product owner, 25 Nov 2026, D163). The one gate is `platform/consoleGate.ts`; the app never calls
+    `console.*` itself (a new logger must print through `consoleOutput`), and a third-party library that prints on its own is
+    switched off through `consoleIsOpen()` (as the Application Insights SDK is). Until the variable has been read the lines are
+    held, then printed (not Prod) or dropped (Prod); if the read fails nothing is printed. The logger is `platform/requestLog.ts`
     (`logHttp`, `logData`, `loggedCall`, `actionLog`/`beginAction`, `logAction`); `app/queryLog.ts` already opens an
     ACTION line for every TanStack query and mutation. Rules for new or changed code:
     - Reads and writes go through the shared helpers in `data/client.ts` / `data/executePlan.ts` / `data/runPlan.ts`, which log

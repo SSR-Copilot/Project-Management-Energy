@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearTraces } from "@/platform/telemetry";
+import { applyEnvironmentName, openConsoleGateForTests, resetConsoleGate } from "@/platform/consoleGate";
 
 interface Listener {
   eventsSent?: (events: unknown[]) => void;
@@ -58,6 +59,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  openConsoleGateForTests();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -150,6 +152,31 @@ describe("App Insights console lines", () => {
     startAppInsights(CS);
     await appInsightsStarted();
     expect(instances()[0]!.config).toMatchObject({ connectionString: CS, loggingLevelConsole: 2 });
+  });
+
+  it("UT-AIDIAG-021 PROD (vsb_EnvironmentName = Prod): the SDK is started with its console output OFF and no line is printed (D163)", async () => {
+    applyEnvironmentName("Prod");
+    startAppInsights(CS);
+    await appInsightsStarted();
+    expect(instances()[0]!.config).toMatchObject({ connectionString: CS, loggingLevelConsole: 0 });
+    listener().eventsDiscarded!([{}], 1, 0);
+    expect(info).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("UT-AIDIAG-022 PROD: the OFF line for a missing connection string is not printed either", () => {
+    applyEnvironmentName("Prod");
+    startAppInsights(undefined);
+    startAppInsights(undefined, new Error("403"));
+    expect(info).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("UT-AIDIAG-023 while the environment is not known yet the SDK's own console output stays off", async () => {
+    resetConsoleGate();
+    startAppInsights(CS);
+    await appInsightsStarted();
+    expect(instances()[0]!.config).toMatchObject({ loggingLevelConsole: 0 });
   });
 
   it("UT-AIDIAG-020 starts the SDK with the CDN config blocked and the unload event off", async () => {

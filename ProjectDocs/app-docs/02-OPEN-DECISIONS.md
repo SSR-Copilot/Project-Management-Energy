@@ -9013,3 +9013,50 @@ Each finding is an isolated change (`08` lists the files). The configuration ite
    - cold-cache network on `/projects`;
    - the CA-31 check: edit the sheet, leave the tab for more than 5 min, return.
 3. Commit approval.
+
+## D163 — No console output in the Production environment (25 Nov 2026; number PROVISIONAL, may be renumbered at merge)
+
+**Status:** implemented on `RounakDev1`, uncommitted. NOT product-approved, not run on DEV. Supersedes the "no switch" line of D72 (29 Oct 2026) for Production only.
+**Request (25 Nov 2026):** the `[VSB]` console logs must keep working in every environment except Production, where `vsb_EnvironmentName` = `Prod`: there nothing may be generated, on any screen, for any operation.
+
+### 1. What changed
+
+| Where | Change |
+|---|---|
+| `platform/consoleGate.ts` (new) | The one gate. `consoleOutput(method, …args)` prints, holds or drops a console call; `applyEnvironmentName(name)` is told the environment; `consoleIsOpen()` is for third-party code that prints on its own. No imports, so no cycle. |
+| `platform/requestLog.ts` | `emit` (every HTTP, DATA, ACTION, ERROR, SLOW and `logAction` line) prints through the gate instead of `console[level]`. |
+| `data/saveLog.ts` | `printReport` (the Add Cost from Table, CAPEX, Land Lease and OPEX bulk-save reports: summary, collapsed groups, `console.table`, raw error) uses a gated console. |
+| `appInsights/appInsights.ts` | The SDK's `loggingLevelConsole` is `2` when the console is open, `0` otherwise (Prod, or environment not yet known). Its own start-up lines already go through `logAction`. |
+| `data/project.ts`, `app/SessionContext.tsx` | `loadEnvironmentVariables` (and the effect that starts Application Insights) tell the gate the value of `vsb_EnvironmentName` as soon as the variables have been read. |
+| `src/test/*` | None needed: the gate starts open under Vitest (`MODE === "test"`), so the 400 existing test files are unchanged. |
+
+### 2. Decisions
+
+| # | Decision | Why |
+|---|---|---|
+| 1 | **Prod = `vsb_EnvironmentName` equal to `Prod`, any letter case, spaces ignored.** `Production`, `Pre-Prod`, `Prod2` and an empty or missing value are NOT Prod. | The condition the owner gave. The loose case match is there so `prod` or `PROD` cannot slip through. |
+| 2 | **One gate, no per-logger switch.** Nothing in `src/` may call `console.*` directly (a test pins it, UT-CONGATE-030). | A second print path would be a way for a line to escape in Prod. |
+| 3 | **Lines before the answer are held, not printed.** The variable is read from Dataverse after start-up, so the first lines (the session and variable reads themselves) come before it. They wait (at most 1,000, oldest dropped), then print in their original order (not Prod) or are discarded (Prod). | "Not at any cost" for Prod, and "as it is" for every other environment. |
+| 4 | **Prod is final for the page.** A later read that says anything else cannot reopen the console. | The value cannot change while the page is open in a way that matters; reopening would be a hole. |
+| 5 | **If the variable cannot be read, nothing is printed** until a read succeeds. | Without the answer the app cannot tell Prod from another environment. The cost: in a non-Prod environment where that read fails (for example a missing privilege on Environment Variable Value), the console stays empty, so the first thing to check is that read, in the Network tab. **Open question for the owner:** accept this, or print in that case (which would print in a Prod whose variable read failed)? |
+| 6 | **Only the console is silenced.** The in-memory trace buffer behind "Report a problem", the on-screen messages and the Application Insights telemetry (traces, exceptions, dependencies, page views) are unchanged. | They are not console output. The report panel is how Prod users report a fault. |
+| 7 | **Not covered:** messages the browser or a third-party library prints on its own (a failed request line from the browser, the Power Apps player, React in a development build). | The app cannot suppress what it does not print. The Application Insights SDK is the one library the app configures, and it is switched off. |
+
+### 3. Visible differences outside Prod
+
+- Lines produced before the environment variable has been read now appear when it has been read (a fraction of a second to a few seconds into the page load), not as they happen. Their order and text are unchanged.
+- If the variable read fails, the console stays empty until a read succeeds (decision 5).
+
+### 4. Tests
+
+`consoleGate.test.ts` UT-CONGATE-001…016 (the gate, and every logger in Prod and not Prod), `project.environmentName.test.ts` UT-CONGATE-020…025 (the read tells the gate, default versus value row, missing variable, failed read), `appInsights.diagnostics.test.ts` UT-AIDIAG-021…023 (the SDK's console level and the OFF lines in Prod).
+
+### 5. Check on DEV and QA, then Prod (not done: needs a signed-in browser)
+
+1. DEV and QA (`vsb_EnvironmentName` not `Prod`): open Project Overview and each Cost screen, do one save: the `[VSB] HTTP / DATA / ACTION` lines and the save reports appear as before.
+2. A copy of an environment (or a test environment) with `vsb_EnvironmentName` = `Prod`: the same walk prints no line at all in the Console tab, including at page load and on a failed save; "Report a problem" still shows the last error.
+3. Console filter for `Application Insights` and `[VSB]`: empty in Prod.
+
+### 6. Rollback
+
+Revert the `consoleOutput` calls in `requestLog.ts` and `saveLog.ts` to `console[level]` / `console`, and set `loggingLevelConsole: 2` again. The gate file can stay.

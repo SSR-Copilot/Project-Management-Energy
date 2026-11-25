@@ -353,6 +353,7 @@ Found while porting about 6,100 canvas lines against the newer `.pa.yaml`: 13 de
 
 - **Cross-cutting:** every request, data call, page load and save now prints a `[VSB]` line in the browser console (requests, rows, milliseconds), in every build. The canvas has no such trace. The Add Cost from Table lines use the same format.
 - **Fixed (3 Nov 2026, D79, CA-28):** a load named by its raw query key printed the project GUID; `keyText` now prints `<id>` (UT-REQLOG-023).
+- **New (25 Nov 2026, D163, proposed, not approved):** in the Production environment (`vsb_EnvironmentName` = `Prod`) the app prints nothing to the browser console, on any screen, for any operation: the `[VSB]` request log, the save reports, the Application Insights start-up lines and the Application Insights SDK's own console output are all behind one gate (`platform/consoleGate.ts`). Every other environment prints exactly what it printed before. Lines produced before the variable has been read are held and then printed (not Prod) or discarded (Prod); if the variable cannot be read, nothing is printed. The canvas app has no console trace at all (UT-CONGATE-001…025, UT-AIDIAG-021…023).
 
 ## Add Cost from Table, year view (29 Oct 2026, D73) — removed 19 Nov 2026 (D139)
 

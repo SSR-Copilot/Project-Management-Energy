@@ -21,6 +21,7 @@
  */
 import type { ApplicationInsights, ITelemetryItem } from "@microsoft/applicationinsights-web";
 import type { Metric } from "@microsoft/power-apps/telemetry";
+import { consoleIsOpen } from "@/platform/consoleGate";
 import { rootCauseDetail } from "@/platform/errors";
 import { logAction } from "@/platform/requestLog";
 import { addSink, trace, type Severity, type TraceEntry } from "@/platform/telemetry";
@@ -222,8 +223,9 @@ export function startAppInsights(connectionString: string | undefined, loadError
             enableAutoRouteTracking: true,
             disableAjaxTracking: true,
             disableFetchTracking: true,
-            // The SDK's own warnings and errors (e.g. "Failed to send telemetry.") reach the console too.
-            loggingLevelConsole: 2,
+            // The SDK's own warnings and errors (e.g. "Failed to send telemetry.") reach the console too, except in
+            // Production (or while the environment is unknown), where the SDK prints nothing (D163, `consoleGate.ts`).
+            loggingLevelConsole: consoleIsOpen() ? 2 : 0,
             ...SDK_CSP_FRIENDLY,
           },
         });

@@ -33,6 +33,7 @@
 import {
   SAVE_REQUEST_LIMIT, formatMs, formatRequestDuration, type RequestMeter, type UpsertGroupReport,
 } from "./bulkSend";
+import { consoleOutput } from "@/platform/consoleGate";
 import { LOG_PREFIX } from "@/platform/requestLog";
 
 /** What `printReport` puts before every summary line: the request log's ACTION prefix (D78). */
@@ -257,6 +258,22 @@ export function rawErrorSection(error: unknown): SaveLogSection {
 type ConsoleLike = Partial<Pick<Console, "info" | "error" | "groupCollapsed" | "groupEnd" | "table">>;
 
 /**
+ * D163: the console as a report may use it, every method going through the console gate (`platform/consoleGate.ts`), so
+ * a Production environment prints nothing and an unknown one holds the report in order. A method the real console
+ * lacks stays missing, so the plain-line fallbacks below still apply.
+ */
+function gatedConsole(): ConsoleLike {
+  const real = console as ConsoleLike;
+  const gated: ConsoleLike = {};
+  if (typeof real.info === "function") gated.info = (...args: unknown[]) => consoleOutput("info", ...args);
+  if (typeof real.error === "function") gated.error = (...args: unknown[]) => consoleOutput("error", ...args);
+  if (typeof real.groupCollapsed === "function") gated.groupCollapsed = (...args: unknown[]) => consoleOutput("groupCollapsed", ...args);
+  if (typeof real.groupEnd === "function") gated.groupEnd = () => consoleOutput("groupEnd");
+  if (typeof real.table === "function") gated.table = (...args: unknown[]) => consoleOutput("table", ...args);
+  return gated;
+}
+
+/**
  * Prints the report: the summary through `console.info`, then each section as a collapsed group
  * (lines through `console.info`, the table through `console.table`, a raw error through
  * `console.error`). Without the group / table methods everything goes out as indented plain lines.
@@ -272,7 +289,7 @@ export function emitSaveLog(input: SaveLogReport | (() => SaveLogReport)): void 
 function printReport(input: SaveLogReport | (() => SaveLogReport)): void {
   try {
     const report = typeof input === "function" ? input() : input;
-    const c: ConsoleLike = console;
+    const c = gatedConsole();
     const info = (text: string): void => { if (typeof c.info === "function") c.info(text); };
     info(`${SAVE_LOG_PREFIX}${report.summary}`);
     for (const section of report.sections) {

@@ -14,6 +14,7 @@ import { Vsb_countryareasService } from "@/generated/services/Vsb_countryareasSe
 import { Vsb_projectstatesService } from "@/generated/services/Vsb_projectstatesService";
 import { EnvironmentvariablevaluesService } from "@/generated/services/EnvironmentvariablevaluesService";
 import { EnvironmentvariabledefinitionsService } from "@/generated/services/EnvironmentvariabledefinitionsService";
+import { applyEnvironmentName } from "@/platform/consoleGate";
 import { unwrap } from "@/platform/errors";
 import { trace } from "@/platform/telemetry";
 import { fetchAll } from "./client";
@@ -76,7 +77,10 @@ export async function loadEnvironmentVariables(): Promise<EnvVars> {
     byId.set(d.environmentvariabledefinitionid, name);
     if (d.defaultvalue) out[name] = d.defaultvalue;
   }
-  if (byId.size === 0) return out;
+  if (byId.size === 0) {
+    applyEnvironmentName(out.vsb_EnvironmentName);
+    return out;
+  }
 
   const values = await fetchAll(
     "list environment variable values",
@@ -95,6 +99,10 @@ export async function loadEnvironmentVariables(): Promise<EnvVars> {
     // A value row wins over the definition's default, which is the Dataverse precedence.
     if (name && v.value !== undefined && v.value !== null) out[name] = v.value;
   }
+  // D163: `vsb_EnvironmentName` = `Prod` silences every console line of the app from here on; any other answer
+  // (a missing variable included) releases the lines held while it was unknown. A failed read above never reaches
+  // this line, so the console stays quiet until a read succeeds.
+  applyEnvironmentName(out.vsb_EnvironmentName);
   return out;
 }
 
