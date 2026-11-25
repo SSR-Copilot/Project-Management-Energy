@@ -24,7 +24,7 @@
  *  - `lastDeleted()`: rows whose `delete` write succeeded (404 = gone included), in plan order, also after a
  *    part-way failure, so a screen can name only the real leftovers after a failed rollback.
  */
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
 import { isRecordGone, RECORD_GONE_TEXT } from "@/platform/errors";
 import { permissionMessage } from "@/platform/privileges";
@@ -130,6 +130,12 @@ export function writeErrorMessage(error: unknown, action: string, prefix?: (deta
 }
 
 /** `PlanResult.landed`, tolerating an `executePlan` stand-in (a screen test mock) that predates the field. */
+/**
+ * How long a success text stays: the canvas `Notify(…, NotificationType.Success, 2000)` (21 of the PM app's 24 success
+ * notifications; three use 1000). Exported for the tests.
+ */
+export const SUCCESS_TIMEOUT_MS = 2000;
+
 const landedOf = (r: PlanResult): readonly LandedRow[] => (r.landed as LandedRow[] | undefined) ?? [];
 /** `PlanResult.deleted` / `PlanResult.maybeLanded`, tolerated the same way. */
 const deletedOf = (r: PlanResult): readonly LandedRow[] => (r.deleted as LandedRow[] | undefined) ?? [];
@@ -161,6 +167,9 @@ export function usePlanWrite(opts: {
   const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  /** The timer that takes a success text away again after `SUCCESS_TIMEOUT_MS`; cleared on the next run and on unmount. */
+  const successTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (successTimer.current !== null) clearTimeout(successTimer.current); }, []);
   const [refreshing, setRefreshing] = useState(false);
   /** Background reloads still running (two quick jobs can overlap). */
   const pendingRefreshes = useRef(0);
@@ -286,13 +295,20 @@ export function usePlanWrite(opts: {
   const run = async (job: PlanJob): Promise<string[] | null> => {
     setError(null);
     setSuccess(null);
+    if (successTimer.current !== null) { clearTimeout(successTimer.current); successTimer.current = null; }
     landedRef.current = [];
     maybeLandedRef.current = [];
     deletedRef.current = [];
     setProgress(job.progress);
     try {
       const result = await mutation.mutateAsync(job);
-      if (job.success) setSuccess(typeof job.success === "function" ? job.success(result.plan) : job.success);
+      if (job.success) {
+        setSuccess(typeof job.success === "function" ? job.success(result.plan) : job.success);
+        // The canvas shows its success texts as `Notify(…, NotificationType.Success, 2000)` (21 of its 24 success
+        // notifications; the other three use 1000), so the bar disappeared after two seconds. The code app's bar stayed
+        // until the next action (user, 25 Nov 2026). Error texts keep staying: a failure must not be missed.
+        successTimer.current = setTimeout(() => { successTimer.current = null; setSuccess(null); }, SUCCESS_TIMEOUT_MS);
+      }
       return result.createdIds;
     } catch (e) {
       const own = e instanceof PlanError && job.failureText ? job.failureText(e.failures) : null;

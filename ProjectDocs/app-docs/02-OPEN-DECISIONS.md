@@ -8938,3 +8938,13 @@ After a deploy, open the app, use a few screens, wait about five minutes, then i
 - Not checked against a real ingestion endpoint; the host's `statusCode` being undefined on DEV (D122 §7) is still unexplained, and such rows show as code 0 successes.
 - `browserTimings` (page load time) depends on the SDK's `PageViewPerformance`, which is unchanged here; whether it arrives from inside the Power Apps player was not checked.
 - The `networkRequest` custom event is gone; if a saved query or workbook reads it, re-add one `trackEvent` next to the `trackDependencyData` call.
+
+## D162 — Generators: the turbine grid shows all its rows without a scrollbar, as the canvas (24 Nov 2026; number PROVISIONAL, may be renumbered at merge; D161 is the Application Insights dependencies record on `master`)
+
+**Status:** code in the working tree of branch `few-fix`, not on DEV.
+**Report:** "for 6 generator show it without scrollbar like canvas" (canvas / code app screenshot pair of a WTG card with six generators, 24 Nov 2026).
+
+**Canvas:** `pcf_…_GeneratorsList.Height = If(TotalRows < PageSize, TotalRows * 35 + 50, PageSize * 35 + 50)` (Y:2085-2098). In the live canvas the six rows and the header sit inside that 260-px box with no scrollbar (the rows draw about 35 px tall).
+**Code app before:** the same box (`maxHeight` inline per card) with a 42-px header and 42-px rows, so six rows need 294 px: the sixth row was cut and a vertical scrollbar appeared. This followed an 18 Nov 2026 reading that the canvas grid itself overflowed its box; the 24 Nov screenshot shows it does not.
+**Now:** the rows are 35 px (`turbineRow`, `sections/styles.ts`); the header stays 42 px. `42 + 35n ≤ 50 + 35n` for every n, so a page (at most `GENERATORS_PAGE_SIZE` = 30 rows) always fits its box. The reserved scrollbar gutter (`scrollbarGutter: stable`) is dropped; `overflowY: auto` remains as a safety net only. Alternate-row fill, widths and icons are unchanged.
+**Tests:** none added: the row height is a style token with no rule behind it (CONVENTIONS rule 5 covers data-dependent branches). The 37 Generators test files (629 tests), typecheck and lint pass.

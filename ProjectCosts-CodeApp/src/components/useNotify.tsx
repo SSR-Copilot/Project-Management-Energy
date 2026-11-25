@@ -10,7 +10,7 @@
  *
  *   | call      | intent  | stays                     | screen reader        |
  *   |-----------|---------|---------------------------|----------------------|
- *   | success   | success | 5 s                       | polite               |
+ *   | success   | success | 2 s (the canvas Notify)   | polite               |
  *   | info      | info    | 5 s                       | polite               |
  *   | warning   | warning | 10 s                      | assertive            |
  *   | error     | error   | until dismissed           | assertive            |
@@ -62,9 +62,13 @@ export interface Notify {
   dismissAll(): void;
 }
 
-/** Duration (ms; -1 = until dismissed) and politeness per intent. */
+/**
+ * Duration (ms; -1 = until dismissed) and politeness per intent. Success: 2 s, the canvas `Notify(…, Success, 2000)` of
+ * the Project Management app and the same timer as the PM screens' success bars (`usePlanWrite`); the Settings and Cost
+ * canvas apps show no success notification at all, and the user asked for one timer everywhere (25 Nov 2026).
+ */
 export const NOTIFY_BEHAVIOUR: Record<ToastIntent, { timeout: number; politeness: ToastPoliteness }> = {
-  success: { timeout: 5_000, politeness: "polite" },
+  success: { timeout: 2_000, politeness: "polite" },
   info: { timeout: 5_000, politeness: "polite" },
   warning: { timeout: 10_000, politeness: "assertive" },
   error: { timeout: -1, politeness: "assertive" },
