@@ -47,15 +47,27 @@ Scratch work stayed out of the repository:
   was removed first, so the real `node_modules` was untouched, then the worktree was removed. `git worktree list` shows
   only the main tree.
 
-## 4. Commits
+## 4. Commits and merges (25 Nov 2026, on the owner's instruction)
 
-None. On 25 Nov 2026, at the end of Stage 3, the owner chose **not to commit yet** and to review the diff first. The owner also chose to skip the E2E parity run. Each commit still needs the owner's explicit approval (standing rule). Proposed shape:
+The owner asked: "Proceed for merging commit and push to RounakDev1 and then to the master branch (all the merging commit push should be on both local and GitHub Branches). DO NOT publish this feature branch". E2E parity: skipped by the owner.
 
-1. `docs: add frontend optimization discovery and strategy`
-2. One `perf(frontend): …` commit per batch B1–B5, or a combined commit, as the owner prefers.
-3. `docs: finalize frontend optimization report`
+| Commit | What | Where |
+|---|---|---|
+| `a90d4f5` | `perf(frontend): fewer renders, a smaller start-up bundle and a sheet data-loss fix (D162)`: all code (81 files) | feature branch (local only) |
+| `815842a` | `docs: frontend optimization programme record, CA-31, D162, improvements log 1.6`. Only the D162 block of `02-OPEN-DECISIONS.md`; the owner's uncommitted D160 §13 stays out | feature branch (local only) |
+| `3b65425` | `Merge feature/frontend-performance-optimization into RounakDev1 (D162)` (no-ff) | `RounakDev1` |
+| `79a6e5f` | `Merge origin/master into RounakDev1`: 4 commits pushed to GitHub `master` the same afternoon by another developer (bug fixes; Application Insights, their **D161**) | `RounakDev1` |
+| (this commit) | `docs: record the D162 merges` | `RounakDev1` |
 
-No push, no merge into `RounakDev1`, and no Co-Authored-By trailer (the owner's git rule of 16 Nov 2026).
+**Renumbered:** this programme was provisionally **D161**. GitHub `master` took D161 at 13:34 for the Application Insights change, so this programme became **D162** before the merge, in code comments and docs alike. The merge conflict in `02-OPEN-DECISIONS.md` (both sides appended) was resolved by keeping both, in number order. `checklist/ProjectStates.tsx` merged automatically: the two changes touch different components.
+
+**Gate on the merged tree** (`79a6e5f`): `npm run verify` exit 0, with 428 files and 7,484 tests passed and the build green.
+
+**Pushes:**
+- `RounakDev1`, then `master`, to `origin` (GitHub), both fast-forwards of the remote.
+- Local `master` is fast-forwarded to `RounakDev1`, so both branches point at the same commit.
+- **The feature branch is not pushed.** It stays local with no upstream.
+- No Co-Authored-By trailer.
 
 ## 5. Source branch drift
 
