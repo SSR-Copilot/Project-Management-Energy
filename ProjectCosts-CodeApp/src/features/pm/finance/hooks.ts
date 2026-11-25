@@ -134,6 +134,12 @@ export function useDebtAssumptions(countryName: string | null): ScreenData<DebtA
   return out<DebtAssumptionSlices>(q, NO_SLICES);
 }
 
+/**
+ * The list `useBanks` answers while it has no rows (loading, a failed or unconnected Fabric read): ONE array, so the
+ * memoized `FinanceCards` that takes `banks` is not re-rendered by every Screen render (FE-P2-01, UT-FIN-FE-005).
+ */
+const NO_BANKS: BankRow[] = [];
+
 /** `Assumptions Banks SQL` (Fabric SQL, read only) — the bank picker. */
 export function useBanks(): ScreenData<BankRow[]> {
   const q = useQuery({
@@ -141,7 +147,7 @@ export function useBanks(): ScreenData<BankRow[]> {
     queryFn: listBanks,
     staleTime: REFERENCE_STALE,
   });
-  return out<BankRow[]>(q, []);
+  return out<BankRow[]>(q, NO_BANKS);
 }
 
 /** `AssumptionsKfWTrancheSQL` (Fabric SQL, read only) — the KfW-Tranche picker. */

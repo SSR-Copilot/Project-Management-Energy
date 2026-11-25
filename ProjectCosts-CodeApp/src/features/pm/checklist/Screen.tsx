@@ -24,7 +24,7 @@
  * Request Approval, Cancel Approval Request and the row's cancel ✕ run the approval flows through
  * `hooks.ts` / `data/flows.ts` (D81, 4 Nov 2026; under D29 they were visible and disabled).
  */
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, memo, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import {
   Button, MessageBar, MessageBarBody,
   Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow, Text, Tooltip,
@@ -36,10 +36,11 @@ import {
 } from "@fluentui/react-icons";
 import {
   ConfirmDialog, DateField, DateInput, EmptyState, FormPanel, LoadingOverlay, PanelButtons, PanelCancelButton,
-  TextAreaField, TextField, WriteFeedback, HINTS,
+  TextAreaField, TextField, WriteFeedback, HINTS, useStableCallback,
 } from "@/components";
 import { DATE_PICKER_FORMAT } from "@/domain/canvasDate";
 import { useSession } from "@/app/SessionContext";
+import { probeRender } from "@/platform/renderProbe";
 import { CHOICE_PROCESS } from "@/data/dataverseNames";
 import { checklistPerf } from "@/data/checklistPerfFlags";
 import { palette, space } from "@/theme/tokens";
@@ -57,6 +58,7 @@ import {
   stageTerminalToggle, startClusterNo, stepClockVisible, stepDescriptionLines, stepGateIcon, stepGateVisible,
   stepStateLabel, taskStateLabel, taskTableRows, terminalButtonVisible, terminalStates,
   toYmd, trackingFor, truncateHolding, TASK_TABLE_HEADERS, ymdToLocalIso,
+  type ApprovalIndexes, type ApprovalSettingsState,
   type ChecklistRow, type PanelState, type SequenceEntry, type TerminalKind, type TerminalStaging,
 } from "./rules";
 import { ClusterActions, ProjectStates, type ProjectStateStep, type TerminalAction } from "./ProjectStates";
@@ -427,6 +429,203 @@ type PanelForm =
 
 /* ────────────────────────────────────────────────────────────────── screen */
 
+interface ChecklistTaskTableProps {
+  rows: readonly ChecklistRow[];
+  approvalIx: ApprovalIndexes;
+  approvalsState: ApprovalSettingsState;
+  approvalsHint: string | null;
+  locked: boolean;
+  busy: boolean;
+  showHolding: boolean;
+  /** The row whose completion-date editor is open. */
+  dateRowId: string | null;
+  /** The row whose Complete write is in flight — drawn green meanwhile. */
+  completingRowId: string | null;
+  locale: string;
+  /** `checklistTableTitle(…)`: the table's accessible name. */
+  title: string;
+  /** CU-1: the Screen's pencil refs and the row whose picker takes focus when it opens. */
+  pencilRefs: MutableRefObject<Map<string, HTMLElement>>;
+  focusPickerRow: MutableRefObject<string | null>;
+  onToggleHolding: () => void;
+  onRowAction: (row: ChecklistRow) => void;
+  onCompletionDate: (row: ChecklistRow, value: string | null) => void;
+  onOpenDateEditor: (rowId: string) => void;
+  onCloseDateEditor: (rowId: string) => void;
+  onInProgress: (row: ChecklistRow) => void;
+  onHistory: (row: ChecklistRow) => void;
+  onCancelApproval: (row: ChecklistRow) => void;
+  onComment: (row: ChecklistRow) => void;
+}
+
+/**
+ * `gal_Checklist_DisplayProject_Body_General_Content` — the task table (FE-P1-03, D162). Memoized: the panels' comment and
+ * date drafts live in the Screen, so every keystroke in a panel re-rendered every task row (3–5 Fluent Buttons and a
+ * Tooltip each). Its props are the rows, the gates the rows read, the CU-1 focus refs and handlers with a fixed identity
+ * (`useStableCallback`), so a panel keystroke renders none of it (UT-CHK-FE-001). Markup, captions, `aria-label`s and
+ * test ids are those the Screen rendered inline.
+ */
+const ChecklistTaskTable = memo(function ChecklistTaskTable({
+  rows, approvalIx, approvalsState, approvalsHint, locked, busy, showHolding, dateRowId, completingRowId, locale, title,
+  pencilRefs, focusPickerRow, onToggleHolding, onRowAction, onCompletionDate, onOpenDateEditor, onCloseDateEditor,
+  onInProgress, onHistory, onCancelApproval, onComment,
+}: ChecklistTaskTableProps) {
+  probeRender("ChecklistTaskTable");
+  const s = useStyles();
+  return (
+    <div className={s.scroll}>
+      <Table size="small" className={mergeClasses(s.table, !showHolding && s.tableHoldingHidden)} aria-label={title} data-testid="gal_Checklist_DisplayProject_Body_General_Content">
+        <TableHeader>
+          <TableRow className={s.headerRow}>
+            <TableHeaderCell className={s.colGate}>{UI.header.gateRelevance}</TableHeaderCell>
+            <TableHeaderCell className={showHolding ? s.colName : s.colNameFixed}>{UI.header.holdingDescription}</TableHeaderCell>
+            <TableHeaderCell className={showHolding ? s.colHolding : s.colHoldingHidden}>
+              {/* `ico_…_HoldingText_Visibility` (18 x 18) at X = 0, the caption after it. */}
+              <span className={s.headerToggle}>
+                <Tooltip content={holdingColumnToggleLabel(showHolding)} relationship="label" withArrow>
+                  <Button appearance="transparent" size="small"
+                    icon={showHolding ? <EyeOffRegular /> : <EyeRegular />}
+                    aria-label={holdingColumnToggleLabel(showHolding)}
+                    data-testid="ico_Checklist_DisplayProject_Body_Content_OverviewHeader_HoldingText_Visibility"
+                    onClick={onToggleHolding} />
+                </Tooltip>
+                {showHolding ? UI.header.countryDescription : null}
+              </span>
+            </TableHeaderCell>
+            <TableHeaderCell className={s.colDate}>{UI.header.completionDate}</TableHeaderCell>
+            {/* "Status" spans the In Progress / Complete toggles and the comment icon (the canvas's
+                two blank header labels after it are folded into this column). */}
+            <TableHeaderCell className={s.colStatus}>{UI.header.status}</TableHeaderCell>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((row, rowIndex) => {
+            const ra = rowApprovalIn(approvalIx, row);
+            const label = ra.label;
+            const cancelVisible = showCancelApprovalIcon(label);
+            const holding = truncateHolding(row.holdingDescription);
+            const personaTip = checklistPersonaTooltip(ra.first, ra.iconVisible);
+            const disabledRow = locked || busy;
+            // C1: the actions that depend on the approval settings wait for them; the tooltip says why (it wins over the persona text).
+            const approvalsOff = approvalsState !== "ready";
+            const rowTip = approvalsHint ?? personaTip;
+            // CU-3: the row's buttons are described by the task's title (their aria-labels are the canvas ones and stay).
+            const taskTitleId = `checklist-task-${row.id}`;
+            const completeButton = (
+              <Button size="small" appearance="secondary" aria-label={label} aria-describedby={taskTitleId}
+                // Already green: hovering keeps the colour (PO, 3 Nov 2026); otherwise the canvas hover.
+                className={mergeClasses(s.rowButton,
+                  rowCompleteHighlighted(row, label) || completingRowId === row.id ? s.completeDone : s.completeHover)}
+                data-testid="but_Checklist_DisplayProject_Body_Content_ListRow_Complete"
+                disabled={disabledRow || approvalsOff || !rowActionEnabled(row, label, cancelVisible)}
+                onClick={() => onRowAction(row)}>
+                {label}
+              </Button>
+            );
+            return (
+              <Fragment key={row.id}>
+                <TableRow className={mergeClasses(s.bodyRow, rowIndex === 0 && s.firstRow)} data-testid="con_Checklist_DisplayProject_Body_Content_ListRow">
+                  <TableCell className={s.colGate} title={taskStateLabel(row.taskState)}>{gateRelevanceLabel(row.gateRelevance)}</TableCell>
+                  <TableCell id={taskTitleId} title={row.title}><span className={s.clip}>{row.title}</span></TableCell>
+                  <TableCell title={showHolding ? holding : undefined}>{showHolding ? <span className={s.clip}>{holding}</span> : null}</TableCell>
+                  <TableCell>
+                    {/* `con_…_ListRow_Container_CompletionDate`: the Edit button, then `Text(…, "ddd, mmm. dd, yyyy")`. */}
+                    {row.isCompletionDate && dateRowId === row.id ? (
+                      // The picker opens IN the cell, the ✕ beside it closes it (canvas pair, 3 Nov 2026).
+                      <span className={s.dateEdit} data-testid="date_con_Checklist_DisplayProject_Body_Content_CompletionDate"
+                        // CU-1: the picker's input takes focus when the editor opens.
+                        ref={(el) => {
+                          if (el && focusPickerRow.current === row.id) {
+                            focusPickerRow.current = null;
+                            el.querySelector("input")?.focus();
+                          }
+                        }}>
+                        {/* `SelectedDate`: the stored date, or today. `DatePicker@0.0.46`, LongAbbreviated, no `IsEditable`. */}
+                        <DateInput
+                          name={ARIA.completionDate}
+                          format={DATE_PICKER_FORMAT}
+                          locale={locale}
+                          allowTextInput={false}
+                          value={toYmd(row.completionDate ?? new Date().toISOString())} disabled={busy}
+                          onChange={(v) => onCompletionDate(row, v)} />
+                        <Button appearance="transparent" size="small" icon={<DismissRegular />} className={s.dateCancel}
+                          aria-label="but_Checklist_DisplayProject_Body_Content_CompletionDate_Cancel" title={UI.cancel}
+                          data-testid="but_Checklist_DisplayProject_Body_Content_CompletionDate_Cancel"
+                          // CU-1: focus goes back to the pencil that opened the editor.
+                          onClick={() => onCloseDateEditor(row.id)} />
+                      </span>
+                    ) : row.isCompletionDate ? (
+                      <span className={s.dateCell}>
+                        <Button appearance="transparent" size="small" icon={<EditRegular />}
+                          aria-label="but_Checklist_DisplayProject_Body_Content_ListRow_CompletionDate"
+                          aria-describedby={taskTitleId}
+                          data-testid="but_Checklist_DisplayProject_Body_Content_ListRow_CompletionDate"
+                          ref={(el: HTMLButtonElement | null) => {
+                            if (el) pencilRefs.current.set(row.id, el); else pencilRefs.current.delete(row.id);
+                          }}
+                          disabled={disabledRow}
+                          onClick={() => onOpenDateEditor(row.id)} />
+                        <Text size={200} title={taskStateLabel(row.taskState)}>{fmtCanvasDate(row.completionDate, false, locale)}</Text>
+                      </span>
+                    ) : null}
+                  </TableCell>
+                  <TableCell>
+                    {/* ApprovalMode icon · In Progress (or History) · cancel ✕ · Complete · comment. */}
+                    <span className={s.rowActions}>
+                      <span className={s.approvalSlot}>
+                        {ra.icon === "Mail" ? <MailRegular className={s.approvalIcon} aria-hidden /> : null}
+                        {ra.icon === "People" ? <PeopleRegular className={s.approvalIcon} aria-hidden /> : null}
+                      </span>
+                      {!cancelVisible ? (
+                        <Button size="small" appearance="secondary" aria-label={UI.inProgress} aria-describedby={taskTitleId}
+                          className={mergeClasses(s.rowButton, row.taskState === CHOICE_PROCESS.taskState.inProgress && s.inProgressOn, s.inProgressHover)}
+                          aria-pressed={row.taskState === CHOICE_PROCESS.taskState.inProgress}
+                          data-testid="but_Checklist_DisplayProject_Body_Content_ListRow_InProgress"
+                          // C1: the toggle resets the task's approval state, so it waits for the approval settings too.
+                          disabled={disabledRow || approvalsOff}
+                          onClick={() => onInProgress(row)}>
+                          {UI.inProgress}
+                        </Button>
+                      ) : (
+                        <Button size="small" appearance="transparent" aria-label={UI.history} aria-describedby={taskTitleId}
+                          className={mergeClasses(s.rowButton, s.historyButton)}
+                          data-testid="but_Checklist_DisplayProject_Body_Content_ListRow_History"
+                          disabled={disabledRow} onClick={() => onHistory(row)}>
+                          {UI.history}
+                        </Button>
+                      )}
+                      {cancelVisible ? (
+                        <Button appearance="transparent" size="small" className={s.cancelIcon} icon={<DismissRegular />}
+                          aria-label="ico_Checklist_DisplayProject_Body_Content_ListRow_CancelApproval" aria-describedby={taskTitleId}
+                          disabled={disabledRow} title={UI.cancelApproval}
+                          data-testid="ico_Checklist_DisplayProject_Body_Content_ListRow_CancelApproval"
+                          onClick={() => onCancelApproval(row)} />
+                      ) : null}
+                      {rowTip ? (
+                        // CU-12: on a wrapper, so the tooltip also shows while the button is disabled.
+                        <Tooltip content={<span className={s.preLine}>{lines(rowTip)}</span>} relationship="description" withArrow>
+                          <span className={s.tipWrap}>{completeButton}</span>
+                        </Tooltip>
+                      ) : completeButton}
+                      {/* `ico_…_ListRow_Comments` — opens the comment form; no tooltip or message (PO, 3 Nov 2026). */}
+                      <Button appearance="transparent" size="small" icon={<ClassicNoteIcon />}
+                        className={mergeClasses(s.noteIcon, rowHasNote(row) ? s.notePresent : s.noteAbsent)}
+                        aria-label="ico_Checklist_DisplayProject_Body_Content_ListRow_Comments" aria-describedby={taskTitleId}
+                        data-testid="ico_Checklist_DisplayProject_Body_Content_ListRow_Comments"
+                        disabled={disabledRow}
+                        onClick={() => onComment(row)} />
+                    </span>
+                  </TableCell>
+                </TableRow>
+              </Fragment>
+            );
+          })}
+        </TableBody>
+      </Table>
+        </div>
+  );
+});
+
 /**
  * One screen instance PER PROJECT (C10, CF-6 / generators GR-6): the route element is the same component for every project, so
  * an open panel, a selection and a date editor of project A would stay mounted over project B. Keying by the project id
@@ -635,7 +834,7 @@ function CheckListScreenBody() {
   /** The close X and Cancel close at once and reset the inputs (`btn_…_Buttons_Reset`). */
   const closePanel = () => setPanelForm(null);
 
-  const onRowAction = (row: ChecklistRow) => {
+  const onRowAction = useStableCallback((row: ChecklistRow) => {
     // C1: never decide "complete" from settings that have not been read.
     if (approvalsState !== "ready") return;
     const ra = rowApprovalIn(approvalIx, row);
@@ -649,7 +848,7 @@ function CheckListScreenBody() {
       // C8 (CU-14): the canvas progress text is the one for a change in progress, not the success text.
       progress: MSG.taskChanging(row.title), error: MSG.taskError,
     }).finally(() => setCompletingRowId(null));
-  };
+  });
 
   const onSave = async () => {
     if (!panel || panel.target.kind !== "cluster" || !project || !current) return;
@@ -710,6 +909,33 @@ function CheckListScreenBody() {
   const refreshFailed = !blocking
     && checklistLoadErrorMode(settingsQ.hasData ? [...mainReads, settingsQ] : mainReads) === "banner";
 
+  // The task table's handlers keep one identity for the visit (`useStableCallback`), so the memoized `ChecklistTaskTable`
+  // is not re-rendered by a panel keystroke; each reads the newest state when it is called (FE-P1-03).
+  const toggleHolding = useStableCallback(() => setShowHolding((v) => !v));
+  const onCompletionDate = useStableCallback((row: ChecklistRow, v: string | null) => {
+    const iso = ymdToLocalIso(v ?? "");
+    if (!iso) return;
+    const shown = new Intl.DateTimeFormat(locale).format(new Date(iso));
+    // The picker stays open with the new date (canvas pair); no green success bar (PO, 3 Nov 2026).
+    void writes.patchRow(row, completionDatePatch(iso), {
+      progress: MSG.completionDateChanging(shown, row.title),
+      error: MSG.completionDateError,
+    });
+  });
+  // CU-1: the picker's input takes focus when the editor opens; focus goes back to the pencil that opened it when it closes.
+  const openDateEditor = useStableCallback((rowId: string) => { focusPickerRow.current = rowId; setDateRowId(rowId); });
+  const closeDateEditor = useStableCallback((rowId: string) => { focusPencilRow.current = rowId; setDateRowId(null); });
+  const onInProgress = useStableCallback((row: ChecklistRow) => void writes.patchRow(row, inProgressTogglePatch(row), {
+    progress: MSG.taskChanging(row.title), error: MSG.taskError,
+  }));
+  const onHistory = useStableCallback((row: ChecklistRow) => openPanel({ kind: "checklist", row }));
+  const onCancelChecklistApproval = useStableCallback((row: ChecklistRow) => void writes.cancelChecklistApproval(row));
+  const onComment = useStableCallback((row: ChecklistRow) => setCommentForm({ row, text: row.note ?? "" }));
+  const onSelectCluster = useStableCallback((id: string) => { setDateRowId(null); setSelectedClusterId(id); });
+  const stableRefreshAll = useStableCallback(refreshAll);
+  // One object while the gate does not change: the memoized `ProjectStates` is not re-rendered by a panel keystroke.
+  const refresh = useMemo(() => ({ onClick: stableRefreshAll, disabled: refreshDisabled }), [stableRefreshAll, refreshDisabled]);
+
   if (blocking) {
     return (
       <div className={s.page} data-testid="Project General CheckList Screen">
@@ -754,9 +980,9 @@ function CheckListScreenBody() {
       {/* `cmp_CheckList_Project_States` (`ProjectStates.tsx`), with the page's one refresh at its top right. */}
       <ProjectStates
         steps={steps}
-        onSelect={(id) => { setDateRowId(null); setSelectedClusterId(id); }}
+        onSelect={onSelectCluster}
         selectDisabled={busy}
-        refresh={{ onClick: refreshAll, disabled: refreshDisabled }}
+        refresh={refresh}
       />
 
       {/* `con_Checklist_DisplayProject_Body_Content_Buttons` */}
@@ -800,167 +1026,14 @@ function CheckListScreenBody() {
       ) : null}
 
       {!loading && technologySupported ? (
-        <div className={s.scroll}>
-          <Table size="small" className={mergeClasses(s.table, !showHolding && s.tableHoldingHidden)} aria-label={checklistTableTitle(current?.name ?? null)} data-testid="gal_Checklist_DisplayProject_Body_General_Content">
-            <TableHeader>
-              <TableRow className={s.headerRow}>
-                <TableHeaderCell className={s.colGate}>{UI.header.gateRelevance}</TableHeaderCell>
-                <TableHeaderCell className={showHolding ? s.colName : s.colNameFixed}>{UI.header.holdingDescription}</TableHeaderCell>
-                <TableHeaderCell className={showHolding ? s.colHolding : s.colHoldingHidden}>
-                  {/* `ico_…_HoldingText_Visibility` (18 x 18) at X = 0, the caption after it. */}
-                  <span className={s.headerToggle}>
-                    <Tooltip content={holdingColumnToggleLabel(showHolding)} relationship="label" withArrow>
-                      <Button appearance="transparent" size="small"
-                        icon={showHolding ? <EyeOffRegular /> : <EyeRegular />}
-                        aria-label={holdingColumnToggleLabel(showHolding)}
-                        data-testid="ico_Checklist_DisplayProject_Body_Content_OverviewHeader_HoldingText_Visibility"
-                        onClick={() => setShowHolding((v) => !v)} />
-                    </Tooltip>
-                    {showHolding ? UI.header.countryDescription : null}
-                  </span>
-                </TableHeaderCell>
-                <TableHeaderCell className={s.colDate}>{UI.header.completionDate}</TableHeaderCell>
-                {/* "Status" spans the In Progress / Complete toggles and the comment icon (the canvas's
-                    two blank header labels after it are folded into this column). */}
-                <TableHeaderCell className={s.colStatus}>{UI.header.status}</TableHeaderCell>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((row, rowIndex) => {
-                const ra = rowApprovalIn(approvalIx, row);
-                const label = ra.label;
-                const cancelVisible = showCancelApprovalIcon(label);
-                const holding = truncateHolding(row.holdingDescription);
-                const personaTip = checklistPersonaTooltip(ra.first, ra.iconVisible);
-                const disabledRow = locked || busy;
-                // C1: the actions that depend on the approval settings wait for them; the tooltip says why (it wins over the persona text).
-                const approvalsOff = approvalsState !== "ready";
-                const rowTip = approvalsHint ?? personaTip;
-                // CU-3: the row's buttons are described by the task's title (their aria-labels are the canvas ones and stay).
-                const taskTitleId = `checklist-task-${row.id}`;
-                const completeButton = (
-                  <Button size="small" appearance="secondary" aria-label={label} aria-describedby={taskTitleId}
-                    // Already green: hovering keeps the colour (PO, 3 Nov 2026); otherwise the canvas hover.
-                    className={mergeClasses(s.rowButton,
-                      rowCompleteHighlighted(row, label) || completingRowId === row.id ? s.completeDone : s.completeHover)}
-                    data-testid="but_Checklist_DisplayProject_Body_Content_ListRow_Complete"
-                    disabled={disabledRow || approvalsOff || !rowActionEnabled(row, label, cancelVisible)}
-                    onClick={() => onRowAction(row)}>
-                    {label}
-                  </Button>
-                );
-                return (
-                  <Fragment key={row.id}>
-                    <TableRow className={mergeClasses(s.bodyRow, rowIndex === 0 && s.firstRow)} data-testid="con_Checklist_DisplayProject_Body_Content_ListRow">
-                      <TableCell className={s.colGate} title={taskStateLabel(row.taskState)}>{gateRelevanceLabel(row.gateRelevance)}</TableCell>
-                      <TableCell id={taskTitleId} title={row.title}><span className={s.clip}>{row.title}</span></TableCell>
-                      <TableCell title={showHolding ? holding : undefined}>{showHolding ? <span className={s.clip}>{holding}</span> : null}</TableCell>
-                      <TableCell>
-                        {/* `con_…_ListRow_Container_CompletionDate`: the Edit button, then `Text(…, "ddd, mmm. dd, yyyy")`. */}
-                        {row.isCompletionDate && dateRowId === row.id ? (
-                          // The picker opens IN the cell, the ✕ beside it closes it (canvas pair, 3 Nov 2026).
-                          <span className={s.dateEdit} data-testid="date_con_Checklist_DisplayProject_Body_Content_CompletionDate"
-                            // CU-1: the picker's input takes focus when the editor opens.
-                            ref={(el) => {
-                              if (el && focusPickerRow.current === row.id) {
-                                focusPickerRow.current = null;
-                                el.querySelector("input")?.focus();
-                              }
-                            }}>
-                            {/* `SelectedDate`: the stored date, or today. `DatePicker@0.0.46`, LongAbbreviated, no `IsEditable`. */}
-                            <DateInput
-                              name={ARIA.completionDate}
-                              format={DATE_PICKER_FORMAT}
-                              locale={locale}
-                              allowTextInput={false}
-                              value={toYmd(row.completionDate ?? new Date().toISOString())} disabled={busy}
-                              onChange={(v) => {
-                                const iso = ymdToLocalIso(v ?? "");
-                                if (!iso) return;
-                                const shown = new Intl.DateTimeFormat(locale).format(new Date(iso));
-                                // The picker stays open with the new date (canvas pair); no green success bar (PO, 3 Nov 2026).
-                                void writes.patchRow(row, completionDatePatch(iso), {
-                                  progress: MSG.completionDateChanging(shown, row.title),
-                                  error: MSG.completionDateError,
-                                });
-                              }} />
-                            <Button appearance="transparent" size="small" icon={<DismissRegular />} className={s.dateCancel}
-                              aria-label="but_Checklist_DisplayProject_Body_Content_CompletionDate_Cancel" title={UI.cancel}
-                              data-testid="but_Checklist_DisplayProject_Body_Content_CompletionDate_Cancel"
-                              // CU-1: focus goes back to the pencil that opened the editor.
-                              onClick={() => { focusPencilRow.current = row.id; setDateRowId(null); }} />
-                          </span>
-                        ) : row.isCompletionDate ? (
-                          <span className={s.dateCell}>
-                            <Button appearance="transparent" size="small" icon={<EditRegular />}
-                              aria-label="but_Checklist_DisplayProject_Body_Content_ListRow_CompletionDate"
-                              aria-describedby={taskTitleId}
-                              data-testid="but_Checklist_DisplayProject_Body_Content_ListRow_CompletionDate"
-                              ref={(el: HTMLButtonElement | null) => {
-                                if (el) pencilRefs.current.set(row.id, el); else pencilRefs.current.delete(row.id);
-                              }}
-                              disabled={disabledRow}
-                              onClick={() => { focusPickerRow.current = row.id; setDateRowId(row.id); }} />
-                            <Text size={200} title={taskStateLabel(row.taskState)}>{fmtCanvasDate(row.completionDate, false, locale)}</Text>
-                          </span>
-                        ) : null}
-                      </TableCell>
-                      <TableCell>
-                        {/* ApprovalMode icon · In Progress (or History) · cancel ✕ · Complete · comment. */}
-                        <span className={s.rowActions}>
-                          <span className={s.approvalSlot}>
-                            {ra.icon === "Mail" ? <MailRegular className={s.approvalIcon} aria-hidden /> : null}
-                            {ra.icon === "People" ? <PeopleRegular className={s.approvalIcon} aria-hidden /> : null}
-                          </span>
-                          {!cancelVisible ? (
-                            <Button size="small" appearance="secondary" aria-label={UI.inProgress} aria-describedby={taskTitleId}
-                              className={mergeClasses(s.rowButton, row.taskState === CHOICE_PROCESS.taskState.inProgress && s.inProgressOn, s.inProgressHover)}
-                              aria-pressed={row.taskState === CHOICE_PROCESS.taskState.inProgress}
-                              data-testid="but_Checklist_DisplayProject_Body_Content_ListRow_InProgress"
-                              // C1: the toggle resets the task's approval state, so it waits for the approval settings too.
-                              disabled={disabledRow || approvalsOff}
-                              onClick={() => void writes.patchRow(row, inProgressTogglePatch(row), {
-                                progress: MSG.taskChanging(row.title), error: MSG.taskError,
-                              })}>
-                              {UI.inProgress}
-                            </Button>
-                          ) : (
-                            <Button size="small" appearance="transparent" aria-label={UI.history} aria-describedby={taskTitleId}
-                              className={mergeClasses(s.rowButton, s.historyButton)}
-                              data-testid="but_Checklist_DisplayProject_Body_Content_ListRow_History"
-                              disabled={disabledRow} onClick={() => openPanel({ kind: "checklist", row })}>
-                              {UI.history}
-                            </Button>
-                          )}
-                          {cancelVisible ? (
-                            <Button appearance="transparent" size="small" className={s.cancelIcon} icon={<DismissRegular />}
-                              aria-label="ico_Checklist_DisplayProject_Body_Content_ListRow_CancelApproval" aria-describedby={taskTitleId}
-                              disabled={disabledRow} title={UI.cancelApproval}
-                              data-testid="ico_Checklist_DisplayProject_Body_Content_ListRow_CancelApproval"
-                              onClick={() => void writes.cancelChecklistApproval(row)} />
-                          ) : null}
-                          {rowTip ? (
-                            // CU-12: on a wrapper, so the tooltip also shows while the button is disabled.
-                            <Tooltip content={<span className={s.preLine}>{lines(rowTip)}</span>} relationship="description" withArrow>
-                              <span className={s.tipWrap}>{completeButton}</span>
-                            </Tooltip>
-                          ) : completeButton}
-                          {/* `ico_…_ListRow_Comments` — opens the comment form; no tooltip or message (PO, 3 Nov 2026). */}
-                          <Button appearance="transparent" size="small" icon={<ClassicNoteIcon />}
-                            className={mergeClasses(s.noteIcon, rowHasNote(row) ? s.notePresent : s.noteAbsent)}
-                            aria-label="ico_Checklist_DisplayProject_Body_Content_ListRow_Comments" aria-describedby={taskTitleId}
-                            data-testid="ico_Checklist_DisplayProject_Body_Content_ListRow_Comments"
-                            disabled={disabledRow}
-                            onClick={() => setCommentForm({ row, text: row.note ?? "" })} />
-                        </span>
-                      </TableCell>
-                    </TableRow>
-                  </Fragment>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </div>
+        <ChecklistTaskTable
+          rows={rows} approvalIx={approvalIx} approvalsState={approvalsState} approvalsHint={approvalsHint}
+          locked={locked} busy={busy} showHolding={showHolding} dateRowId={dateRowId} completingRowId={completingRowId}
+          locale={locale} title={checklistTableTitle(current?.name ?? null)} pencilRefs={pencilRefs} focusPickerRow={focusPickerRow}
+          onToggleHolding={toggleHolding} onRowAction={onRowAction} onCompletionDate={onCompletionDate}
+          onOpenDateEditor={openDateEditor} onCloseDateEditor={closeDateEditor} onInProgress={onInProgress}
+          onHistory={onHistory} onCancelApproval={onCancelChecklistApproval} onComment={onComment}
+        />
       ) : null}
 
       {/*

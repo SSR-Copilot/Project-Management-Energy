@@ -31,6 +31,7 @@ import { prepareLogReport, screenSaveFailureReport, toSaveFailure } from "@/data
 import { deferSaveLog, emitSaveLog } from "@/data/saveLog";
 import { addCostSaveTimeline } from "@/features/cost/costing/saveTimeline";
 import { rootCauseDetail } from "@/platform/errors";
+import { probeRender } from "@/platform/renderProbe";
 import {
   ADDCOST_MSG, buildInitialSheet, canOpenBulkEdit, canSaveBulkEdit, saveFailureText,
   sheetTitle, sheetYearRange, validateSheet, type SheetRow, type ValidationError,
@@ -82,6 +83,7 @@ const ROUND_TRIP_FAILED = (names: string[]): string =>
   + "Nothing was saved. Please reload the screen and report this if it persists.";
 
 export default function AddCostsFromTableScreen() {
+  probeRender("AddCostsFromTableScreen");
   const navigate = useNavigate();
   const [search] = useSearchParams();
   const category = resolveCategory(search.get("category"));
@@ -151,8 +153,15 @@ export default function AddCostsFromTableScreen() {
    * raw output pairs rows that have nothing to do with each other — which is precisely how a
    * project's historical costs were emptied in one save.
    */
+  /*
+   * CA-31 (D162, FE-C1-02): the memo keys on WHETHER a project is loaded, never on the `project` object. `ProjectContext` holds
+   * `Date`s, so every refetch of an unchanged project (window focus after its 5-minute stale time, any `qk.project` invalidation)
+   * hands over a NEW object; keyed on it, the sheet was rebuilt from the server snapshot and the grid re-seeded, silently dropping
+   * the user's unsaved edits. The only project facts the sheet uses are its first and last year, already keys below.
+   */
+  const hasProject = Boolean(project);
   const loaded = useMemo(() => {
-    if (!sheetQuery.data || !project) return null;
+    if (!sheetQuery.data || !hasProject) return null;
     const loadedRows = buildInitialSheet({
       subaccounts: sheetQuery.data.subaccounts,
       contracts: sheetQuery.data.contracts,
@@ -169,7 +178,7 @@ export default function AddCostsFromTableScreen() {
     return { loadedRows, grid, roundTripped };
     // `currentYear` is stable for the component's lifetime.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sheetQuery.data, project, years.start, years.end]);
+  }, [sheetQuery.data, hasProject, years.start, years.end]);
 
   const initialGrid: SheetGrid | null = loaded?.grid ?? null;
 
@@ -187,6 +196,13 @@ export default function AddCostsFromTableScreen() {
 
   useEffect(() => {
     if (!loaded) return;
+    /*
+     * D162 (review of FE-C1-04): an edit's pending read-back belongs to the grid this load replaces. The grid re-seeds one commit
+     * later and its first report is no longer read back, so a timer firing in between would put the OLD grid's edits back into
+     * `currentRows`, which Save sends, while the grid shows the reloaded data.
+     */
+    if (readBackTimer.current !== null) clearTimeout(readBackTimer.current);
+    readBackTimer.current = null;
     setOriginalRows(loaded.roundTripped);
     setCurrentRows(loaded.roundTripped);
   }, [loaded]);
@@ -249,7 +265,13 @@ export default function AddCostsFromTableScreen() {
     readBackTimer.current = null;
     if (readBackOf.current !== readBackInputs.current.loaded) {
       readBackOf.current = readBackInputs.current.loaded;
-      readBackNow(grid);
+      /*
+       * FE-C1-04 (D162): the first report after a (re)load is the grid seeded from `loaded.grid` (`SpreadSheetComp` only
+       * dresses its cells, never their values), so reading it back gives `loaded.roundTripped` again — which the effect
+       * above sets as `currentRows` anyway (on the first mount it even overwrote this read-back in the same commit). It is
+       * not read back a second time; `latestGrid` is recorded, and a pending edit timer was cleared above, as before.
+       * UT-ADDCOST-FE-001 pins `currentRows` = `roundTripped` after load.
+       */
       return;
     }
     readBackTimer.current = setTimeout(() => {

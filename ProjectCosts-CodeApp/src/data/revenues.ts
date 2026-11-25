@@ -24,7 +24,6 @@ import {
   BALANCING_COL, FLAG_COL, HEDGE_VOLUME_COL, PROJECT_COL, REVENUE_COL, ALL_STANDARD_FLAG_KEYS,
   type AssumptionRow, type BalancingPeriod, type CountryInflationProfileRow, type IndividualVolumeRow,
   type OverlappingContract, type RevenueProject, type StandardFlags, type StoredRevenueContract,
-  type Technology,
 } from "@/features/pm/revenues/rules";
 import { CHOICE_FINANCE } from "./dataverseNames";
 import { localDayOf } from "@/domain/dates";
@@ -34,24 +33,17 @@ import { rowStr as str, rowNum as num } from "./rowValues";
 import { listProjectStates } from "./generalData";
 import { loadCountryInflation, loadCurrencies } from "./landLease";
 import { listRevenueAssumptions } from "./milestones";
+// The project-row mapper the PM screens share: moved to `./pmProjectRow` (FE-P2-05, D162) so Finance reads it without this
+// module; re-exported, so every importer of these names from here is unchanged.
+import { PROJECT_SELECT, formatted, toRevenueProject, toTechnology } from "./pmProjectRow";
+export { PROJECT_SELECT, toRevenueProject, toTechnology };
 
 type Raw = Record<string, unknown>;
 const raw = <T,>(rows: T[]): Raw[] => rows as unknown as Raw[];
 const bool = (v: unknown): boolean => v === true || v === 1;
-const formatted = (r: Raw, col: string): string | null => str(r[`${col}@OData.Community.Display.V1.FormattedValue`]);
 
 /** A Date Only value (`yyyy-mm-dd…`) as a LOCAL calendar day (rule 18). Shared with `data/finance.ts`. */
 export const day = localDayOf; // OPT-31 (B8): the one definition is `domain/dates.localDayOf` (UT-DATES-OPT-004)
-
-/** `Switch(Technology, Wind, …, PV, …)` — the option-set value, decoded once. */
-export function toTechnology(v: unknown): Technology {
-  if (v === CHOICE_FINANCE.technology.wind) return "Wind";
-  if (v === CHOICE_FINANCE.technology.pv) return "PV";
-  return "Other";
-}
-
-/** The project columns `RevenueProject` is built from. Finance adds `vsb_financingoptions` (D34). */
-export const PROJECT_SELECT = Object.values(PROJECT_COL);
 
 /**
  * `Set(gblRecordSelectedProject, LookUp(Projects, …))` (`OnVisible`, L31-37), with the cluster
@@ -76,34 +68,6 @@ export async function loadRevenueProject(
   ]);
   const r = raw(rows)[0];
   return r ? toRevenueProject(r, states) : null;
-}
-
-/** One `vsb_projects` row (read with `PROJECT_SELECT`) as the `RevenueProject` the PM screens share. */
-export function toRevenueProject(r: Raw, states: readonly { id: string; order: number | null }[]): RevenueProject {
-  const clusterId = str(r[PROJECT_COL.clusterState]);
-  const countryId = str(r[PROJECT_COL.country]);
-  return {
-    id: String(r[PROJECT_COL.id]),
-    projectIdText: str(r[PROJECT_COL.projectIdText]),
-    projectName: str(r[PROJECT_COL.projectName]),
-    countryName: formatted(r, PROJECT_COL.country),
-    countryCode: countryId,
-    technology: toTechnology(r[PROJECT_COL.technology]),
-    areaName: formatted(r, PROJECT_COL.countryArea),
-    cod: day(r[PROJECT_COL.cod]),
-    fid: day(r[PROJECT_COL.fid]),
-    construction: day(r[PROJECT_COL.construction]),
-    legallyBindingPermits: day(r[PROJECT_COL.legallyBindingPermits]),
-    applicationSubmitted: day(r[PROJECT_COL.applicationSubmitted]),
-    projectDevelopmentStarted: day(r[PROJECT_COL.projectDevelopmentStarted]),
-    feasibilityStudies: day(r[PROJECT_COL.feasibilityStudies]),
-    netYieldP50: num(r[PROJECT_COL.netYieldP50]),
-    totalCapacity: num(r[PROJECT_COL.totalCapacity]),
-    endDate: day(r[PROJECT_COL.endDate]),
-    clusterStateName: formatted(r, PROJECT_COL.clusterState),
-    owningBusinessUnitId: str(r[PROJECT_COL.owningBusinessUnit]),
-    clusterStateOrder: clusterId ? states.find((s) => s.id === clusterId)?.order ?? null : null,
-  };
 }
 
 const REVENUE_SELECT = [...Object.values(REVENUE_COL), ...ALL_STANDARD_FLAG_KEYS.map((k) => FLAG_COL[k])];

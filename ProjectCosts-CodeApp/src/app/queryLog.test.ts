@@ -46,6 +46,30 @@ describe("query log", () => {
       .toBe('["land-lease-book","<id>"]');
   });
 
+  it("UT-REQLOG-024 a cancelled load closes its ACTION (marked cancelled) and stops tagging later lines (D162, FE-SH-07)", async () => {
+    const client = new QueryClient();
+    const stop = attachQueryLog(client);
+    const never = client.fetchQuery({ queryKey: ["slow"], queryFn: ({ signal }) => new Promise((_, reject) => {
+      signal.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+    }) }).catch(() => undefined);
+    await client.cancelQueries({ queryKey: ["slow"] });
+    await never;
+    expect(lines().at(-1)).toMatch(/^\[VSB\] ACTION Load \["slow"\]: \d+ ms, 0 requests, 0 rows, cancelled \[a\d+\]$/);
+    const cancelledId = lines().at(-1)!.match(/\[(a\d+)\]$/)![1];
+    logHttp({ url: "/vsb_projects", method: "GET", statusCode: 200, duration: 3 });
+    expect(lines().filter((l: string) => l.includes("HTTP")).at(-1) ?? "").not.toContain(cancelledId);
+    stop();
+  });
+
+  it("UT-REQLOG-025 a query removed while it loads closes its ACTION", () => {
+    const client = new QueryClient();
+    const stop = attachQueryLog(client);
+    void client.fetchQuery({ queryKey: ["gone"], queryFn: () => new Promise(() => undefined) }).catch(() => undefined);
+    client.removeQueries({ queryKey: ["gone"] });
+    expect(lines().at(-1)).toMatch(/^\[VSB\] ACTION Load \["gone"\]: \d+ ms, 0 requests, 0 rows, cancelled \[a\d+\]$/);
+    stop();
+  });
+
   it("UT-REQLOG-022 a long query key is cut", () => {
     expect(keyText(["a".repeat(200)])).toHaveLength(80);
     expect(keyText(["x", 1])).toBe('["x",1]');

@@ -21,7 +21,8 @@
 
     /* `@/x` resolves to `src/x`. `baseUrl` is deprecated in TS 6, so the path is relative
        to this config file instead. The matching Vite alias is in `vite.config.ts`. */
-    "paths": { "@/*": ["./src/*"] },
+    // D162: `fast-formula-parser` is aliased to the stub in vite.config.ts; the types follow the alias.
+    "paths": { "@/*": ["./src/*"], "fast-formula-parser": ["./src/platform/formulaParserStub.ts"] },
 
     /* Linting. `strict` was NOT in the Vite scaffold; the canvas app leaned on Power Fx's
        Blank() coalescing everywhere, so every ported nullable needs the compiler's help. */

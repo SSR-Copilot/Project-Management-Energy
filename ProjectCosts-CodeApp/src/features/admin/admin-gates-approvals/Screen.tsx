@@ -33,7 +33,7 @@ import { useMemo } from "react";
 import { makeStyles, Text, tokens } from "@fluentui/react-components";
 import {
   ConfirmDialog, CountryTechnologyPicker, LoadingOverlay, NoticeBar, QueryStates, useNotify,
-  useQueryHealth,
+  useQueryHealth, useStableCallback,
 } from "@/components";
 import { useAdminAccess } from "@/app/useCurrentUser";
 import { useBusyRunner } from "@/features/shared/useBusyRunner";
@@ -144,33 +144,39 @@ export default function ProjectGatesSettingsScreen() {
     () => buildGateRows(allStates, dataset.data?.templates ?? []),
     [allStates, dataset.data?.templates],
   );
-  const collapsed = new Set(rows.filter((r) => collapsedSet.has(String(r.order))).map((r) => r.order));
+  // FE-AD-01 (D162): one set per collapse change, so the memoised `GateTable` is not rendered by an editor, dialog or overlay.
+  const isCollapsedOrder = collapsedSet.has;
+  const collapsed = useMemo(
+    () => new Set(rows.filter((r) => isCollapsedOrder(String(r.order))).map((r) => r.order)),
+    [rows, isCollapsedOrder],
+  );
 
   /* ───────────────────────────────────────────────────────────── editors ── */
 
   const openEditor = (target: EditorTarget, initialForm: ApprovalForm) => editor.open({ target, initialForm });
 
-  const openGate = (row: GateRow) => {
+  // FE-AD-01: the grid's handlers are stable (`useStableCallback`), so the memoised rows keep their props.
+  const openGate = useStableCallback((row: GateRow) => {
     if (!dataset.data) return;
     openEditor(gateEditorTarget(allStates, row), seedGateForm(row, dataset.data.people));
-  };
+  });
 
-  const openAddTask = (row: GateRow) => {
+  const openAddTask = useStableCallback((row: GateRow) => {
     if (!dataset.data) return;
     const candidates = taskCandidates(dataset.data, row.state);
     openEditor(
       { kind: "task", mode: "create", row, label: gateLabel(allStates, row.state), candidates },
       emptyTaskForm(candidates),
     );
-  };
+  });
 
-  const openEditTask = (row: GateRow, task: TaskRow) => {
+  const openEditTask = useStableCallback((row: GateRow, task: TaskRow) => {
     if (!dataset.data) return;
     openEditor(
       { kind: "task", mode: "edit", row, label: gateLabel(allStates, row.state), task, candidates: [] },
       seedTaskForm(task, dataset.data.people),
     );
-  };
+  });
 
   /*
    * Every write below runs its success toast / close and its catch INSIDE `runner.run`, so the
@@ -304,6 +310,11 @@ export default function ProjectGatesSettingsScreen() {
     });
   };
 
+  const toggleCollapse = useStableCallback((order: number) => collapsedSet.toggle(String(order)));
+  const toggleGate = useStableCallback((row: GateRow) => row.template && void handleToggle("gate", row.template.id, row.template.gateActive, `gate '${row.description}'`));
+  const toggleTask = useStableCallback((task: TaskRow) => void handleToggle("task", task.approval.id, task.approval.gateActive, `task '${task.checklist.name}'`));
+  const askDeleteTask = useStableCallback((row: GateRow, task: TaskRow) => dialog.ask("delete", { row, task }));
+
   /* ───────────────────────────────────────────────────────────── render ── */
 
   const queries = ctx ? [countries, states, dataset] : [countries, states];
@@ -352,13 +363,13 @@ export default function ProjectGatesSettingsScreen() {
           canEdit={canEdit}
           collapsed={collapsed}
           isPending={runner.isPending}
-          onToggleCollapse={(order) => collapsedSet.toggle(String(order))}
-          onToggleGate={(row) => row.template && void handleToggle("gate", row.template.id, row.template.gateActive, `gate '${row.description}'`)}
-          onToggleTask={(task) => void handleToggle("task", task.approval.id, task.approval.gateActive, `task '${task.checklist.name}'`)}
+          onToggleCollapse={toggleCollapse}
+          onToggleGate={toggleGate}
+          onToggleTask={toggleTask}
           onEditGate={openGate}
           onAddTask={openAddTask}
           onEditTask={openEditTask}
-          onDeleteTask={(row, task) => dialog.ask("delete", { row, task })}
+          onDeleteTask={askDeleteTask}
         />
       </>
     );

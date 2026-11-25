@@ -20,7 +20,7 @@
  * left navigation and report-problem panel are the app shell's. Every caption, gate and write
  * comes from `rules.ts`; every read and write from `./hooks`.
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Button, Dropdown, Field, MessageBar, MessageBarBody, Option, Tab, TabList, Text, Tooltip, makeStyles,
@@ -197,6 +197,13 @@ export default function GridOperatorScreen() {
   const [edited, setEdited] = useState<GridOperatorForm | null>(null);
   const [touched, setTouched] = useState<ReadonlySet<GridOperatorField>>(new Set());
   const [flash, setFlash] = useState<string | null>(null);
+  // The canvas `Notify`: a bar across the top of the app, gone after a second (PO, 27 Oct 2026). Cleared with the
+  // screen, as Planning's success bar (FE-P2-08, D162): a timer no longer outlives the screen.
+  useEffect(() => {
+    if (!flash) return;
+    const t = window.setTimeout(() => setFlash(null), 1000);
+    return () => window.clearTimeout(t);
+  }, [flash]);
   const form = edited ?? baseline;
 
   const loading = projectQ.isLoading || recordQ.isLoading;
@@ -227,9 +234,8 @@ export default function GridOperatorScreen() {
     const ids = await writes.run(saveGridOperatorJob(form, project, record, lang));
     if (ids !== null) {
       setEdited(null); setTouched(new Set());
-      // The canvas `Notify`: a bar across the top of the app, gone after a second (PO, 27 Oct 2026).
-      setFlash(writes.success ?? SAVE_SUCCESS);
-      window.setTimeout(() => setFlash(null), 1000);
+      // The job's own success text (`saveGridOperatorJob`), not `writes.success` read from the render before the Save.
+      setFlash(SAVE_SUCCESS);
     }
   };
   const onCancel = () => { writes.clear(); setEdited(null); setTouched(new Set()); };

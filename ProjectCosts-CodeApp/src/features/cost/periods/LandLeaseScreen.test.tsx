@@ -16,6 +16,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { FluentProvider } from "@fluentui/react-components";
 import type { ReactNode } from "react";
 import { vsbTheme } from "@/theme/fluent";
+import { countRenders } from "@/test/renderCounts";
 import {
   LAND_LEASE_AGGREGATION, LAND_LEASE_PERIOD, LAND_LEASE_SECURED, TECHNOLOGY,
   type LeaseCostRow, type LeasePeriodRow,
@@ -30,8 +31,10 @@ let loading = false;
 let loadError: Error | null = null;
 const mutateAsync = vi.fn(async (_writes: unknown[]) => ({ createdIds: {} }));
 
-vi.mock("@/app/SessionContext", () => ({
-  useSession: () => ({
+// One session object, as the app's context keeps it across renders (an unchanged project keeps its identity, D162 B1):
+// a fresh `project` per render would rebuild `ctx` and re-render every memoised card (UT-LEASE-FE-001).
+vi.mock("@/app/SessionContext", () => {
+  const session = {
     projectId: "11111111-1111-1111-1111-111111111111",
     project: {
       projectId: "11111111-1111-1111-1111-111111111111",
@@ -45,8 +48,9 @@ vi.mock("@/app/SessionContext", () => ({
     envVars: {},
     loading: false,
     projectNotFound: false,
-  }),
-}));
+  };
+  return { useSession: () => session };
+});
 
 // One identity per value, as the TanStack query result has in the app (OPT-26: a fresh object per render would rebuild `ctx`).
 let extrasValue: { data: { countryId: string; technology: number | undefined }; isLoading: boolean } | undefined;
@@ -197,6 +201,32 @@ describe("LandLeaseScreen", () => {
     // NEW: none of a card's props changed, so nothing is recomputed.
     expect(ruleCalls).toEqual(before);
     expect(before.subaccountPeriodRows).toBeGreaterThan(0); // the open card really was live
+  });
+
+  it("UT-LEASE-FE-001 FE-C2-06 a fold click renders the clicked card only, and the open card keeps its rows", () => {
+    const renders = countRenders();
+    try {
+      render(<Harness><LandLeaseScreen /></Harness>);
+      openCard("Locations");
+      expect(screen.getByTestId("lease-select-p1")).toBeInTheDocument();
+      renders.reset();
+      const rowsBefore = ruleCalls.subaccountPeriodRows;
+      fireEvent.click(screen.getByTestId("leasecard-Other"));
+      expect(screen.getByTestId("leasecard-Other")).toHaveAttribute("aria-expanded", "true");
+      expect(renders.ofPrefix("SubaccountCard:")).toBe(1);
+      expect(renders.of("SubaccountCard:sa-9")).toBe(1);
+      // Locations stays open and was not rebuilt.
+      expect(screen.getByTestId("lease-select-p1")).toBeInTheDocument();
+      expect(ruleCalls.subaccountPeriodRows).toBe(rowsBefore + 1); // only the newly opened card computes its rows
+
+      renders.reset();
+      fireEvent.click(screen.getByTestId("leasecard-Locations")); // folds it
+      expect(screen.getByTestId("leasecard-Locations")).toHaveAttribute("aria-expanded", "false");
+      expect(screen.queryByTestId("lease-select-p1")).toBeNull();
+      expect(renders.ofPrefix("SubaccountCard:")).toBe(1);
+    } finally {
+      renders.stop();
+    }
   });
 
   it("UT-LLUI-OPT-002 folded cards compute neither rows nor command gates; only the open card does", () => {

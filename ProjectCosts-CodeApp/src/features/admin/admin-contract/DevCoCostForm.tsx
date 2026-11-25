@@ -23,12 +23,13 @@
  * Hard-coded colours with no theme token: `#323130` (the canvas label colour) and
  * `rgba(238, 148, 12, 0.125)` (the USED box fill, `rec_Contracts_RightPanel_NewEdit_CostssRow_Used`).
  */
-import { useId, useState } from "react";
+import { memo, useId, useState } from "react";
 import {
   Button, Checkbox, Spinner, Text, makeStyles, mergeClasses, tokens,
 } from "@fluentui/react-components";
 import { ChevronDownRegular, ChevronUpRegular, SubtractRegular } from "@fluentui/react-icons";
 import { NoticeBar, VisuallyHidden } from "@/components";
+import { probeRender } from "@/platform/renderProbe";
 import { palette } from "@/theme/tokens";
 import {
   CARD_TEXT, isStaleSelection, rootState, toggleLeaf, toggleRoot,
@@ -118,9 +119,14 @@ export interface DevCoCostFormProps {
   disabled?: boolean;
 }
 
-export function DevCoCostForm({
+/**
+ * FE-AD-05 (D162): memoised. The screen hands it a memoised `selected` set and stable handlers, so typing in the panel's other
+ * fields renders no tree (UT-ADCONTR-FE-003).
+ */
+export const DevCoCostForm = memo(function DevCoCostForm({
   roots, selected, classes, onChange, loading, errorText, onRetry, disabled,
 }: DevCoCostFormProps) {
+  probeRender("DevCoCostForm");
   const styles = useStyles();
   const usedDescriptionId = useId();
   const [openRoot, setOpenRoot] = useState<string | undefined>();
@@ -221,4 +227,4 @@ export function DevCoCostForm({
       )}
     </section>
   );
-}
+});

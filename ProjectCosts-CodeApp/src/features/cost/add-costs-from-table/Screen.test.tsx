@@ -20,6 +20,7 @@ import type { AddCostSheetData } from "@/data/addCostSheet";
 import { CHOICE, rowIdentity, type ExistingContract, type SheetRow } from "./rules";
 import { saveButtonDisabled, saveRequestRows, sheetLocked } from "./saveRetry";
 import type { SheetGrid } from "./spreadsheet/SpreadSheet";
+import { countRenders } from "@/test/renderCounts";
 
 /* ── the doubles ──────────────────────────────────────────────────────────── */
 
@@ -62,10 +63,27 @@ vi.mock("@/features/cost/costing/useCostBook", () => ({
   useSaveAddCostSheet: () => ({ mutateAsync, isPending: savePending, error: null, reset: () => undefined }),
 }));
 
+/** FE-C1-04: full grid read-backs (`gridToJson`, the expensive half) and what Save's prepare was handed. */
+const traced = vi.hoisted(() => ({ gridToJson: 0, prepareArgs: [] as unknown[] }));
+vi.mock("./spreadsheet/adapter", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./spreadsheet/adapter")>();
+  return {
+    ...actual,
+    prepareSheetSave: (args: Parameters<typeof actual.prepareSheetSave>[0]) => {
+      traced.prepareArgs.push(args);
+      return actual.prepareSheetSave(args);
+    },
+  };
+});
+
 vi.mock("./spreadsheet/SpreadSheet", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./spreadsheet/SpreadSheet")>();
   return {
     ...actual,
+    gridToJson: (...args: Parameters<typeof actual.gridToJson>) => {
+      traced.gridToJson += 1;
+      return actual.gridToJson(...args);
+    },
     // Reports the grid it is handed once, as the real grid does on mount; `reportGrid` plays an edit.
     // Keyed on `data` only, as the real grid is.
     SpreadSheetComp: (props: { data: SheetGrid; onDataChange: (g: SheetGrid) => void }) => {
@@ -136,6 +154,8 @@ beforeEach(() => {
   reportGrid = null;
   lastGrid = null;
   gridProps = [];
+  traced.gridToJson = 0;
+  traced.prepareArgs = [];
   vi.spyOn(console, "info").mockImplementation(() => undefined);
   vi.spyOn(console, "error").mockImplementation(() => undefined);
 });
@@ -406,6 +426,53 @@ describe("Add Cost from Table — all years, deferred read-back", () => {
     // Nothing is left pending to overwrite the saved rows later.
     await act(async () => { await new Promise((r) => setTimeout(r, READ_BACK_DELAY_MS + 50)); });
     expect(mutateAsync).toHaveBeenCalledTimes(1);
+  });
+
+  /* FE-C1-04 (D162): the grid's first report after a (re)load is the loaded grid itself, already read back as `roundTripped`. */
+
+  it("UT-ADDCOST-FE-001 after load the current rows ARE the loaded round trip: an untouched Save diffs roundTripped against itself", async () => {
+    renderScreen();
+    await clickSave();
+    expect(traced.prepareArgs).toHaveLength(1);
+    const args = traced.prepareArgs[0] as { roundTripped: SheetRow[]; originalRows: SheetRow[]; currentRows: SheetRow[] };
+    expect(args.roundTripped.length).toBeGreaterThan(0);
+    expect(args.currentRows).toEqual(args.roundTripped);
+    expect(args.originalRows).toEqual(args.roundTripped);
+    expect(sentArgs(0).changedRows).toEqual([]);
+  });
+
+  it("UT-ADDCOST-FE-002 a sheet load reads the whole grid back once, not twice; a fresh load once more", () => {
+    const renders = countRenders();
+    try {
+      const view = renderScreen();
+      // The first render, then the one the load effect's `setCurrentRows` causes. This stub grid reports in the same commit
+      // as that effect, so before FE-C1-04 the read-back's `setCurrentRows` was batched into it (2 as well); the real grid
+      // re-hydrates through its own state, one commit later, where the read-back cost one more render and validation.
+      expect(renders.of("AddCostsFromTableScreen")).toBe(2);
+      // Before FE-C1-04: 2 (`loaded.roundTripped`, then the grid's first report read back again).
+      expect(traced.gridToJson).toBe(1);
+
+      traced.gridToJson = 0;
+      renders.reset();
+      sheet.data = freshData(); // a refetch lands: the grid re-hydrates
+      view.rerender(
+        <MemoryRouter initialEntries={["/costs/add-from-table?category=1"]}><AddCostsFromTableScreen /></MemoryRouter>,
+      );
+      expect(traced.gridToJson).toBe(1);
+      expect(renders.of("AddCostsFromTableScreen")).toBe(2);
+    } finally {
+      renders.stop();
+    }
+  });
+
+  it("UT-ADDCOST-FE-003 the first EDIT after a load is still read back and sent", async () => {
+    renderScreen();
+    traced.gridToJson = 0;
+    editJanuary("250");
+    await act(async () => { await new Promise((r) => setTimeout(r, READ_BACK_DELAY_MS + 50)); });
+    expect(traced.gridToJson).toBe(1);
+    await clickSave();
+    expect(sentJanuary(0)).toEqual([250]);
   });
 });
 

@@ -12,13 +12,14 @@
  * InProgress `Success` + "60", Completed `Success`, Rejected `Warning` + "20", RequestCanceled
  * `Warning` + "10", Inactive `Warning`.
  */
-import type { ReactElement } from "react";
+import { memo, type ReactElement } from "react";
 import { Button, Tooltip, makeStyles, mergeClasses, tokens } from "@fluentui/react-components";
 import {
   ArrowClockwiseRegular, ArrowLeftRegular, CheckmarkFilled, CheckmarkRegular, ClockAlarmRegular, DismissRegular, FlashRegular,
   InfoFilled, InfoRegular, LockClosedRegular, bundleIcon, MailRegular, PeopleRegular, SubtractCircleFilled, SubtractCircleRegular,
 } from "@fluentui/react-icons";
 import { palette } from "@/theme/tokens";
+import { probeRender } from "@/platform/renderProbe";
 import { ARIA, UI, stepCardDescription, type TerminalKind } from "./rules";
 
 /** Outline at rest, filled on hover (Fluent's bundled-icon pair). */
@@ -279,7 +280,12 @@ export interface ProjectStatesProps {
 /** The `Char(13)` tooltips, one line per piece. */
 const lines = (text: string | null): string => (text ?? "").replace(/\r/g, "\n");
 
-export function ProjectStates({ steps, onSelect, selectDisabled = false, refresh }: ProjectStatesProps) {
+/**
+ * Memoized (FE-P1-03, D162): the Screen passes memoized `steps`, a stable `onSelect` and a memoized `refresh`, so a
+ * keystroke in a Check List panel does not re-render the stepper (UT-CHK-FE-001).
+ */
+export const ProjectStates = memo(function ProjectStates({ steps, onSelect, selectDisabled = false, refresh }: ProjectStatesProps) {
+  probeRender("ProjectStates");
   const s = useStyles();
   return (
     <div className={s.wrap}>
@@ -353,7 +359,7 @@ export function ProjectStates({ steps, onSelect, selectDisabled = false, refresh
       </div>
     </div>
   );
-}
+});
 
 /* ─────────────────────────────────────────────────────────────── actions */
 

@@ -23,7 +23,9 @@ import { useEffect, useRef, useState } from "react";
 import * as atlas from "azure-maps-control";
 import "azure-maps-control/dist/atlas.min.css";
 import { makeStyles } from "@fluentui/react-components";
-import { azureMapsToken, invalidateAzureMapsToken, mapErrorKind, type MapErrorKind } from "@/platform/azureMapsToken";
+import {
+  azureMapsToken, invalidateAzureMapsToken, mapErrorKind, retainAzureMapsToken, type MapErrorKind,
+} from "@/platform/azureMapsToken";
 import { logError } from "@/platform/requestLog";
 import { palette } from "@/theme/tokens";
 import { MAP_MESSAGES } from "./rules";
@@ -91,6 +93,8 @@ export default function ProjectMap(props: ProjectMapProps) {
       },
     });
     mapRef.current = map;
+    // The token's background refresh runs only while a map is on screen (FE-P1-05, D162).
+    const releaseToken = retainAzureMapsToken();
     map.events.add("error", (e) => {
       const error = (e as { error?: unknown }).error ?? new Error("unknown map error");
       const kind = mapErrorKind(error);
@@ -127,6 +131,7 @@ export default function ProjectMap(props: ProjectMapProps) {
       });
     });
     return () => {
+      releaseToken();
       map.dispose();
       mapRef.current = null;
       pinSource.current = null;

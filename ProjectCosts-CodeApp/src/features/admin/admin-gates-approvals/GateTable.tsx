@@ -19,14 +19,15 @@
  * `canEdit` (admin access): without it the status pills, Add Task and Delete are disabled; Edit
  * stays enabled so the approvers can still be read in the panel.
  */
-import { useMemo, type ReactNode } from "react";
+import { memo, useMemo, useState, type ReactNode } from "react";
 import {
   Button, makeStyles, mergeClasses, Table, TableBody, TableCell, TableHeader,
   TableHeaderCell, TableRow, Text, Tooltip, tokens,
 } from "@fluentui/react-components";
 import { AddRegular, DeleteRegular, EditRegular, WarningRegular } from "@fluentui/react-icons";
-import { DisabledReason, ExpandToggle, ExpandToggleSpacer, RowActions, StatusPill } from "@/components";
+import { DisabledReason, ExpandToggle, ExpandToggleSpacer, RowActions, StatusPill, useStableCallback } from "@/components";
 import { palette, space } from "@/theme/tokens";
+import { probeRender } from "@/platform/renderProbe";
 import type { GatesDataset } from "@/data/adminGatesApprovals";
 import {
   buildTaskIndex, createPeopleParser, isGateToggleLocked, LABELS, NO_PERMISSION_MESSAGE, participantCell, pmCell,
@@ -180,6 +181,232 @@ function PmCellView({ pmId, people, showMail }: { pmId: string | null; people: G
   );
 }
 
+/* ═════════════════════════════════════════════════════════════════ the rows ══ */
+
+type PeopleParser = ReturnType<typeof createPeopleParser>;
+
+/** Same members, each identical: a `GateRow` / `TaskRow` rebuilt for a new dataset with the same contents. */
+const sameMembers = (a: object, b: object) => {
+  const ka = Object.keys(a);
+  return ka.length === Object.keys(b).length
+    && ka.every((k) => (a as Record<string, unknown>)[k] === (b as Record<string, unknown>)[k]);
+};
+
+/**
+ * FE-AD-01 (D162): the row views' `memo` comparison. Every prop must be identical, except `row` / `task`, which are rebuilt on
+ * every dataset change (`buildGateRows`, `buildTaskIndex`) and so compare member by member: an unchanged template, approval or
+ * checklist keeps its identity through the optimistic update and an unchanged refetch (structural sharing), so only the row
+ * whose data changed renders. A skipped row keeps its previous `row` / `task` object, which has the same members.
+ */
+function sameRowProps<P extends object>(a: P, b: P): boolean {
+  return (Object.keys(a) as (keyof P & string)[]).every((k) => {
+    const x = a[k];
+    const y = b[k];
+    if (x === y) return true;
+    return (k === "row" || k === "task") && typeof x === "object" && typeof y === "object" && x !== null && y !== null
+      && sameMembers(x, y);
+  });
+}
+
+interface GateRowViewProps {
+  row: GateRow;
+  hasTasks: boolean;
+  collapsed: boolean;
+  pending: boolean;
+  canEdit: boolean;
+  people: GatesDataset["people"];
+  parsePeople: PeopleParser;
+  onToggleCollapse: (order: number) => void;
+  onToggleGate: (row: GateRow) => void;
+  onEditGate: (row: GateRow) => void;
+}
+
+const GateRowView = memo(function GateRowView({
+  row, hasTasks, collapsed, pending, canEdit, people, parsePeople, onToggleCollapse, onToggleGate, onEditGate,
+}: GateRowViewProps) {
+  const styles = useStyles();
+  const t = row.template;
+  /** The gate row's stable id: its `Project States` row (a placeholder has no template id). */
+  const gid = row.state.id;
+  probeRender(`GateRow:${gid}`);
+  return (
+    <TableRow className={styles.gateRow} data-testid={`con_Admin_ProjectGates_DefaultClusterApproval_Item-${gid}`}>
+      <TableCell className={styles.cell}>
+        <div className={styles.descriptionCell}>
+          {/* `btn_…_Item_Collapse.Visible`: only while the gate has task rows. */}
+          {hasTasks ? (
+            <ExpandToggle
+              variant="icon24"
+              expanded={!collapsed}
+              label={collapsed ? LABELS.expand : LABELS.collapse}
+              testId={`btn_Admin_ProjectGates_DefaultClusterApproval_Item_Collapse-${gid}`}
+              onToggle={() => onToggleCollapse(row.order)}
+            />
+          ) : <ExpandToggleSpacer variant="icon24" />}
+          <Text className={styles.gateName} data-testid={`lbl_Admin_ProjectGates_DefaultClusterApproval_Item_ApprovalDescription-${gid}`}>
+            {row.description}
+          </Text>
+          {/* DIVERGENCE: NEW — the duplicate warning (see `buildGateRows`). */}
+          {row.templateCount > 1 ? (
+            <Tooltip
+              relationship="description"
+              content={`${row.templateCount} default approvals exist for this gate. The oldest one is shown; ask an administrator to remove the duplicates.`}
+            >
+              <WarningRegular className={styles.warning} aria-label="Duplicate default approvals" tabIndex={0} />
+            </Tooltip>
+          ) : null}
+        </div>
+      </TableCell>
+      <TableCell className={styles.cell} data-testid={`btn_Admin_ProjectGates_DefaultClusterApproval_Item_PortfolioManager-${gid}`}>
+        <PmCellView pmId={t?.pmId ?? null} people={people} showMail={false} />
+      </TableCell>
+      <TableCell className={styles.cell} data-testid={`lbl_Admin_ProjectGates_DefaultClusterApproval_Item_ControllingApprovals-${gid}`}>
+        <PeopleCell cell={participantCell(parsePeople(t?.contributors), "Contributors")} />
+      </TableCell>
+      <TableCell className={styles.cell} data-testid={`lbl_Admin_ProjectGates_DefaultClusterApproval_Item_Approvers-${gid}`}>
+        <PeopleCell cell={participantCell(parsePeople(t?.approvals), "Approvers")} />
+      </TableCell>
+      <TableCell className={styles.cell} data-testid={`lbl_Admin_ProjectGates_DefaultClusterApproval_Item_Notifications-${gid}`}>
+        <PeopleCell cell={participantCell(parsePeople(t?.notifications), "Notifications")} />
+      </TableCell>
+      <TableCell className={styles.cell}>
+        {/* Caption "Active" / "Inactive" (`.Text`). The shared pill builds its own aria-label from `subject`. */}
+        <StatusPill
+          variant="toggle"
+          active={t?.gateActive ?? false}
+          locked={!canEdit || isGateToggleLocked(row)}
+          pending={pending}
+          subject={`Gate ${row.description}`}
+          testId={`btn_Admin_ProjectGates_DefaultClusterApproval_Item_ToggleStauts-${gid}`}
+          onToggle={() => onToggleGate(row)}
+        />
+      </TableCell>
+      <TableCell className={styles.cell}>
+        <RowActions
+          tooltip="always" tone="brand"
+          actions={[{
+            key: "edit", icon: <EditRegular />, label: LABELS.edit,
+            testId: `btn_Admin_ProjectGates_DefaultClusterApproval_Item_Edit-${gid}`,
+            onClick: () => onEditGate(row),
+          }]}
+        />
+      </TableCell>
+    </TableRow>
+  );
+}, sameRowProps);
+
+interface TaskRowViewProps {
+  task: TaskRow;
+  /** The parent gate's order; the table resolves it to the gate row for Edit / Delete. */
+  gateOrder: number;
+  last: boolean;
+  pending: boolean;
+  canEdit: boolean;
+  people: GatesDataset["people"];
+  parsePeople: PeopleParser;
+  onToggleTask: (task: TaskRow) => void;
+  onEditTask: (gateOrder: number, task: TaskRow) => void;
+  onDeleteTask: (gateOrder: number, task: TaskRow) => void;
+}
+
+const TaskRowView = memo(function TaskRowView({
+  task, gateOrder, last, pending, canEdit, people, parsePeople, onToggleTask, onEditTask, onDeleteTask,
+}: TaskRowViewProps) {
+  const styles = useStyles();
+  const a = task.approval;
+  probeRender(`GateTaskRow:${a.id}`);
+  const tc = parsePeople(a.contributors);
+  const ta = parsePeople(a.approvers);
+  const tn = parsePeople(a.notifications);
+  return (
+    <TableRow data-testid={`cnt_Admin_ProjectGates_DefaultClusterApproval_Item_ChecklistDefaultApproval_Item-${a.id}`}>
+      <TableCell className={mergeClasses(styles.cell, styles.taskCell)}>
+        <span className={mergeClasses(styles.treeLine, last && styles.treeLineLast)} aria-hidden="true" data-tree="line" />
+        <span className={styles.treeElbow} aria-hidden="true" data-tree="elbow" />
+        <Text
+          className={styles.taskName}
+          data-testid={`lbl_Admin_ProjectGates_DefaultClusterApproval_Item_ChecklistDefaultApproval_Item_ApprovalDescription-${a.id}`}
+        >
+          {task.checklist.name}
+        </Text>
+      </TableCell>
+      <TableCell className={styles.cell} data-testid={`lbl_Admin_ProjectGates_DefaultClusterApproval_Item_ChecklistDefaultApproval_Item_PortfolioManager-${a.id}`}>
+        <PmCellView pmId={a.pmId} people={people} showMail />
+      </TableCell>
+      <TableCell className={styles.cell} data-testid={`lbl_Admin_ProjectGates_DefaultClusterApproval_Item_ChecklistDefaultApproval_Item_Contributors-${a.id}`}>
+        <PeopleCell task cell={participantCell(tc, "Contributors")} />
+      </TableCell>
+      <TableCell className={styles.cell} data-testid={`lbl_Admin_ProjectGates_DefaultClusterApproval_Item_ChecklistDefaultApproval_Item_Approvers-${a.id}`}>
+        <PeopleCell task cell={participantCell(ta, "Approvers")} />
+      </TableCell>
+      <TableCell className={styles.cell} data-testid={`lbl_Admin_ProjectGates_DefaultClusterApproval_Item_ChecklistDefaultApproval_Item_Notifications-${a.id}`}>
+        <PeopleCell task cell={taskNotificationsCell(tc, ta, tn)} />
+      </TableCell>
+      <TableCell className={styles.cell}>
+        {/* The canvas task pill has no `DisplayMode` (always enabled); here it needs admin access. */}
+        <StatusPill
+          variant="toggle"
+          active={a.gateActive}
+          locked={!canEdit}
+          pending={pending}
+          subject={`Task ${task.checklist.name}`}
+          testId={`btn_Admin_ProjectGates_DefaultClusterApproval_Item_ChecklistDefaultApproval_Item_ToggleStatus-${a.id}`}
+          onToggle={() => onToggleTask(task)}
+        />
+      </TableCell>
+      <TableCell className={styles.cell}>
+        <RowActions
+          tooltip="always" tone="brand" gap={4}
+          actions={[
+            {
+              key: "edit", icon: <EditRegular />, label: LABELS.edit,
+              testId: `btn_Admin_ProjectGates_DefaultClusterApproval_Item_ChecklistDefaultApproval_Item_Edit-${a.id}`,
+              onClick: () => onEditTask(gateOrder, task),
+            },
+            {
+              key: "delete", icon: <DeleteRegular />, label: LABELS.delete, disabled: !canEdit,
+              testId: `btn_Admin_ProjectGates_DefaultClusterApproval_Item_ChecklistDefaultApproval_Item_Delete-${a.id}`,
+              onClick: () => onDeleteTask(gateOrder, task),
+            },
+          ]}
+        />
+      </TableCell>
+    </TableRow>
+  );
+}, sameRowProps);
+
+interface AddTaskRowViewProps {
+  row: GateRow;
+  canEdit: boolean;
+  addEnabled: boolean;
+  tasksAvailable: boolean;
+  onAddTask: (row: GateRow) => void;
+}
+
+const AddTaskRowView = memo(function AddTaskRowView({ row, canEdit, addEnabled, tasksAvailable, onAddTask }: AddTaskRowViewProps) {
+  const styles = useStyles();
+  const gid = row.state.id;
+  probeRender(`GateAddRow:${gid}`);
+  return (
+    <TableRow className={styles.addTaskRow} data-testid={`con_AddChecklistApproval-${gid}`}>
+      <TableCell colSpan={COLUMNS.length}>
+        {/* The disabled reason is a keyboard-reachable tooltip, not a native `title`. */}
+        <DisabledReason reason={!canEdit ? NO_PERMISSION_MESSAGE : addEnabled ? null : addTaskDisabledReason(tasksAvailable)}>
+          <Button
+            className={styles.addTask} appearance="transparent" icon={<AddRegular />}
+            disabled={!canEdit || !addEnabled}
+            aria-label={LABELS.addTask}
+            data-testid={`but_Admin_ProjectGatest_Approvals_Row_Edit_3-${gid}`}
+            onClick={() => onAddTask(row)}
+          >
+            {LABELS.addTask}
+          </Button>
+        </DisabledReason>
+      </TableCell>
+    </TableRow>
+  );
+}, sameRowProps);
+
 /* ════════════════════════════════════════════════════════════════ the table ══ */
 
 export interface GateTableProps {
@@ -199,177 +426,84 @@ export interface GateTableProps {
   onDeleteTask: (row: GateRow, task: TaskRow) => void;
 }
 
-export function GateTable(props: GateTableProps) {
+/**
+ * FE-AD-01 (D162): memoised, and so are its rows. The screen passes stable handlers and a memoised `collapsed` set, so opening an
+ * editor, a dialog or the overlay renders no row, and a status pill renders its own row only (UT-ADGATE-FE-001…004).
+ */
+export const GateTable = memo(function GateTable(props: GateTableProps) {
+  probeRender("GateTable");
   const styles = useStyles();
   const { rows, dataset, canEdit, collapsed, isPending } = props;
   const tasksAvailable = !dataset.checklistError;
-  // OPT-27(a): the task rows, the Add Task gate and the parsed participant lists are derived once per dataset, not per row per render.
-  const { taskIndex, parsePeople } = useMemo(
-    () => ({ taskIndex: buildTaskIndex(dataset), parsePeople: createPeopleParser() }),
-    [dataset],
-  );
+  // OPT-27(a): the task rows and the Add Task gate are derived once per dataset, not per row per render.
+  const taskIndex = useMemo(() => buildTaskIndex(dataset), [dataset]);
+  // FE-AD-06 (D162): the participant-JSON cache lives as long as the table. It is pure per string, so a new dataset (an
+  // optimistic toggle, its rollback, a refetch) re-parses nothing it has already parsed (UT-ADGATE-FE-005).
+  const [parsePeople] = useState(() => createPeopleParser());
+
+  // A task row knows its gate by order; Edit and Delete hand the screen the current gate row, as before.
+  const rowOf = (order: number) => rows.find((r) => r.order === order);
+  const editTask = useStableCallback((order: number, task: TaskRow) => {
+    const row = rowOf(order);
+    if (row) props.onEditTask(row, task);
+  });
+  const deleteTask = useStableCallback((order: number, task: TaskRow) => {
+    const row = rowOf(order);
+    if (row) props.onDeleteTask(row, task);
+  });
 
   const body: ReactNode[] = [];
   for (const row of rows) {
     const tasks = taskIndex.tasksOf(row.state);
     const isCollapsed = collapsed.has(row.order);
     const t = row.template;
-    const contributors = parsePeople(t?.contributors);
-    const approvers = parsePeople(t?.approvals);
-    const notifications = parsePeople(t?.notifications);
-    const addEnabled = tasksAvailable && taskIndex.canAdd(row.state);
-
-    /** The gate row's stable id: its `Project States` row (a placeholder has no template id). */
-    const gid = row.state.id;
     body.push(
-      <TableRow key={`gate-${row.order}`} className={styles.gateRow} data-testid={`con_Admin_ProjectGates_DefaultClusterApproval_Item-${gid}`}>
-        <TableCell className={styles.cell}>
-          <div className={styles.descriptionCell}>
-            {/* `btn_…_Item_Collapse.Visible`: only while the gate has task rows. */}
-            {tasks.length > 0 ? (
-              <ExpandToggle
-                variant="icon24"
-                expanded={!isCollapsed}
-                label={isCollapsed ? LABELS.expand : LABELS.collapse}
-                testId={`btn_Admin_ProjectGates_DefaultClusterApproval_Item_Collapse-${gid}`}
-                onToggle={() => props.onToggleCollapse(row.order)}
-              />
-            ) : <ExpandToggleSpacer variant="icon24" />}
-            <Text className={styles.gateName} data-testid={`lbl_Admin_ProjectGates_DefaultClusterApproval_Item_ApprovalDescription-${gid}`}>
-              {row.description}
-            </Text>
-            {/* DIVERGENCE: NEW — the duplicate warning (see `buildGateRows`). */}
-            {row.templateCount > 1 ? (
-              <Tooltip
-                relationship="description"
-                content={`${row.templateCount} default approvals exist for this gate. The oldest one is shown; ask an administrator to remove the duplicates.`}
-              >
-                <WarningRegular className={styles.warning} aria-label="Duplicate default approvals" tabIndex={0} />
-              </Tooltip>
-            ) : null}
-          </div>
-        </TableCell>
-        <TableCell className={styles.cell} data-testid={`btn_Admin_ProjectGates_DefaultClusterApproval_Item_PortfolioManager-${gid}`}>
-          <PmCellView pmId={t?.pmId ?? null} people={dataset.people} showMail={false} />
-        </TableCell>
-        <TableCell className={styles.cell} data-testid={`lbl_Admin_ProjectGates_DefaultClusterApproval_Item_ControllingApprovals-${gid}`}>
-          <PeopleCell cell={participantCell(contributors, "Contributors")} />
-        </TableCell>
-        <TableCell className={styles.cell} data-testid={`lbl_Admin_ProjectGates_DefaultClusterApproval_Item_Approvers-${gid}`}>
-          <PeopleCell cell={participantCell(approvers, "Approvers")} />
-        </TableCell>
-        <TableCell className={styles.cell} data-testid={`lbl_Admin_ProjectGates_DefaultClusterApproval_Item_Notifications-${gid}`}>
-          <PeopleCell cell={participantCell(notifications, "Notifications")} />
-        </TableCell>
-        <TableCell className={styles.cell}>
-          {/* Caption "Active" / "Inactive" (`.Text`). The shared pill builds its own aria-label from `subject`. */}
-          <StatusPill
-            variant="toggle"
-            active={t?.gateActive ?? false}
-            locked={!canEdit || isGateToggleLocked(row)}
-            pending={t ? isPending(t.id) : false}
-            subject={`Gate ${row.description}`}
-            testId={`btn_Admin_ProjectGates_DefaultClusterApproval_Item_ToggleStauts-${gid}`}
-            onToggle={() => props.onToggleGate(row)}
-          />
-        </TableCell>
-        <TableCell className={styles.cell}>
-          <RowActions
-            tooltip="always" tone="brand"
-            actions={[{
-              key: "edit", icon: <EditRegular />, label: LABELS.edit,
-              testId: `btn_Admin_ProjectGates_DefaultClusterApproval_Item_Edit-${gid}`,
-              onClick: () => props.onEditGate(row),
-            }]}
-          />
-        </TableCell>
-      </TableRow>,
+      <GateRowView
+        key={`gate-${row.order}`}
+        row={row}
+        hasTasks={tasks.length > 0}
+        collapsed={isCollapsed}
+        pending={t ? isPending(t.id) : false}
+        canEdit={canEdit}
+        people={dataset.people}
+        parsePeople={parsePeople}
+        onToggleCollapse={props.onToggleCollapse}
+        onToggleGate={props.onToggleGate}
+        onEditGate={props.onEditGate}
+      />,
     );
 
     // `gal_…_ChecklistDefaultApprovals.Visible`: hidden while the gate is collapsed.
     if (!isCollapsed) {
       tasks.forEach((task, index) => {
-        const a = task.approval;
-        const tc = parsePeople(a.contributors);
-        const ta = parsePeople(a.approvers);
-        const tn = parsePeople(a.notifications);
-        const last = index === tasks.length - 1;
         body.push(
-          <TableRow key={`task-${a.id}`} data-testid={`cnt_Admin_ProjectGates_DefaultClusterApproval_Item_ChecklistDefaultApproval_Item-${a.id}`}>
-            <TableCell className={mergeClasses(styles.cell, styles.taskCell)}>
-              <span className={mergeClasses(styles.treeLine, last && styles.treeLineLast)} aria-hidden="true" data-tree="line" />
-              <span className={styles.treeElbow} aria-hidden="true" data-tree="elbow" />
-              <Text
-                className={styles.taskName}
-                data-testid={`lbl_Admin_ProjectGates_DefaultClusterApproval_Item_ChecklistDefaultApproval_Item_ApprovalDescription-${a.id}`}
-              >
-                {task.checklist.name}
-              </Text>
-            </TableCell>
-            <TableCell className={styles.cell} data-testid={`lbl_Admin_ProjectGates_DefaultClusterApproval_Item_ChecklistDefaultApproval_Item_PortfolioManager-${a.id}`}>
-              <PmCellView pmId={a.pmId} people={dataset.people} showMail />
-            </TableCell>
-            <TableCell className={styles.cell} data-testid={`lbl_Admin_ProjectGates_DefaultClusterApproval_Item_ChecklistDefaultApproval_Item_Contributors-${a.id}`}>
-              <PeopleCell task cell={participantCell(tc, "Contributors")} />
-            </TableCell>
-            <TableCell className={styles.cell} data-testid={`lbl_Admin_ProjectGates_DefaultClusterApproval_Item_ChecklistDefaultApproval_Item_Approvers-${a.id}`}>
-              <PeopleCell task cell={participantCell(ta, "Approvers")} />
-            </TableCell>
-            <TableCell className={styles.cell} data-testid={`lbl_Admin_ProjectGates_DefaultClusterApproval_Item_ChecklistDefaultApproval_Item_Notifications-${a.id}`}>
-              <PeopleCell task cell={taskNotificationsCell(tc, ta, tn)} />
-            </TableCell>
-            <TableCell className={styles.cell}>
-              {/* The canvas task pill has no `DisplayMode` (always enabled); here it needs admin access. */}
-              <StatusPill
-                variant="toggle"
-                active={a.gateActive}
-                locked={!canEdit}
-                pending={isPending(a.id)}
-                subject={`Task ${task.checklist.name}`}
-                testId={`btn_Admin_ProjectGates_DefaultClusterApproval_Item_ChecklistDefaultApproval_Item_ToggleStatus-${a.id}`}
-                onToggle={() => props.onToggleTask(task)}
-              />
-            </TableCell>
-            <TableCell className={styles.cell}>
-              <RowActions
-                tooltip="always" tone="brand" gap={4}
-                actions={[
-                  {
-                    key: "edit", icon: <EditRegular />, label: LABELS.edit,
-                    testId: `btn_Admin_ProjectGates_DefaultClusterApproval_Item_ChecklistDefaultApproval_Item_Edit-${a.id}`,
-                    onClick: () => props.onEditTask(row, task),
-                  },
-                  {
-                    key: "delete", icon: <DeleteRegular />, label: LABELS.delete, disabled: !canEdit,
-                    testId: `btn_Admin_ProjectGates_DefaultClusterApproval_Item_ChecklistDefaultApproval_Item_Delete-${a.id}`,
-                    onClick: () => props.onDeleteTask(row, task),
-                  },
-                ]}
-              />
-            </TableCell>
-          </TableRow>,
+          <TaskRowView
+            key={`task-${task.approval.id}`}
+            task={task}
+            gateOrder={row.order}
+            last={index === tasks.length - 1}
+            pending={isPending(task.approval.id)}
+            canEdit={canEdit}
+            people={dataset.people}
+            parsePeople={parsePeople}
+            onToggleTask={props.onToggleTask}
+            onEditTask={editTask}
+            onDeleteTask={deleteTask}
+          />,
         );
       });
     }
 
     // `con_AddChecklistApproval` has no `Visible`, so Add Task stays while the gate is collapsed.
     body.push(
-      <TableRow key={`add-${row.order}`} className={styles.addTaskRow} data-testid={`con_AddChecklistApproval-${gid}`}>
-        <TableCell colSpan={COLUMNS.length}>
-          {/* The disabled reason is a keyboard-reachable tooltip, not a native `title`. */}
-          <DisabledReason reason={!canEdit ? NO_PERMISSION_MESSAGE : addEnabled ? null : addTaskDisabledReason(tasksAvailable)}>
-            <Button
-              className={styles.addTask} appearance="transparent" icon={<AddRegular />}
-              disabled={!canEdit || !addEnabled}
-              aria-label={LABELS.addTask}
-              data-testid={`but_Admin_ProjectGatest_Approvals_Row_Edit_3-${gid}`}
-              onClick={() => props.onAddTask(row)}
-            >
-              {LABELS.addTask}
-            </Button>
-          </DisabledReason>
-        </TableCell>
-      </TableRow>,
+      <AddTaskRowView
+        key={`add-${row.order}`}
+        row={row}
+        canEdit={canEdit}
+        addEnabled={tasksAvailable && taskIndex.canAdd(row.state)}
+        tasksAvailable={tasksAvailable}
+        onAddTask={props.onAddTask}
+      />,
     );
   }
 
@@ -390,4 +524,4 @@ export function GateTable(props: GateTableProps) {
       </Table>
     </div>
   );
-}
+});
