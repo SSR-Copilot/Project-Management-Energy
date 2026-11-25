@@ -74,6 +74,20 @@ describe("rounding", () => {
     expect(n.pfxRound(-2.5)).toBe(-3);
     expect(Math.round(-2.5)).toBe(-2); // JS differs — this is why pfxRound exists
   });
+  it("UT-DOM-013a a half hidden by a binary representation error still rounds up, as the canvas Round (25 Nov 2026)", () => {
+    // 0.1055 * 100 is 10.549999999999999 as a double; the canvas showed 10.6, the code 10.5.
+    expect(0.1055 * 100).toBe(10.549999999999999);
+    expect(n.pfxRound(0.1055 * 100, 1)).toBe(10.6);
+    expect(n.pfxRound(1.005, 2)).toBe(1.01);
+    expect(n.pfxRound(-(0.1055 * 100), 1)).toBe(-10.6);
+    // A value genuinely below the half is unchanged.
+    expect(n.pfxRound(10.5499, 1)).toBe(10.5);
+    expect(n.pfxRound(10.54999999999, 1)).toBe(10.5);
+    // The other years of the same screenshot: not halves, unchanged.
+    expect(n.pfxRound(0.09 * 100, 1)).toBe(9);
+    expect(n.pfxRound(0.092 * 100, 1)).toBe(9.2);
+    expect(n.pfxRound(0.063 * 100, 1)).toBe(6.3);
+  });
   it("UT-DOM-014 roundUp/roundDown match RoundUp/RoundDown", () => {
     expect(n.roundUp(4.0001, 0)).toBe(5);
     expect(n.roundDown(4.9999, 0)).toBe(4);

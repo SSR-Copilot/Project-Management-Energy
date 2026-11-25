@@ -1053,3 +1053,9 @@ The user: "scan whole application settings … not same as canvas". Each screen 
 | Screen | Change | Status |
 |---|---|---|
 | Cost, Add Costs from Table | The footer status while the sheet saves reads "Saving costs...", the screen's own `locSpinnerInformationText` (`Add Costs from Table.pa.yaml` line 30); the code had borrowed the single-cost panel's "Please wait, saving costs..." (user, 25 Nov 2026). The canvas's first text, "Checking subaccounts validations...", covered its 1 s timer before the save branch ran; the code app validates as the sheet is edited and the Save's own check takes under a millisecond before the first request leaves (WS-E), so there is no checking phase to label and none is shown. The non-blocking footer line itself stays as decided (D58). UT-ADDCOST-NOSPIN-002, UT-ADDCOST-BUSY-001/002 | **reproduced** |
+
+## Round: a half hidden by a binary representation error rounds up, as the canvas (25 Nov 2026) — reproduced
+
+| Screen | Change | Status |
+|---|---|---|
+| Every screen that reproduces a canvas `Round` (shared `pfxRound`, 42 call sites: Production, Revenues, Finance, General Data, Generators, Milestones, yield statistics, dates) | The Add Production WTG negative-price curve showed 10.5 for 2027 where the canvas shows 10.6 (user screenshot pair, 25 Nov 2026). The standard assumption is stored as 0.1055; `0.1055 * 100` is 10.549999999999999 as a double, and the code's `Round` twin rounded that scaled value with `Math.round` to 10.5, while the canvas runtime snaps to 15 significant digits first and rounds the half away from zero to 10.6. `pfxRound` now snaps the scaled value to 15 significant digits before rounding, so every reproduced `Round` agrees with the canvas on such halves; a value genuinely below the half is unchanged. UT-DOM-013a, UT-PROD-122 | **reproduced** |

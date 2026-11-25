@@ -896,6 +896,14 @@ describe("parseStandardAssumptions (Fabric SQL, connected 28 Oct 2026)", () => {
       { year: 2029, pv: 1.2, wind: 0 },
     ]);
   });
+
+  it("UT-PROD-122 a stored 0.1055 reads 10.6, as the canvas Round (user screenshot pair, Add Production WTG 2027, 25 Nov 2026)", () => {
+    // 0.1055 × 100 is 10.549999999999999 as a double; a plain Math.round gave 10.5 while the canvas showed 10.6.
+    const { negativePrices } = parseStandardAssumptions([
+      { valuetype: "negativeprices", category: "2027", pv: "0.1055", wind: "0.1055" },
+    ]);
+    expect(negativePrices).toEqual([{ year: 2027, pv: 10.6, wind: 10.6 }]);
+  });
 });
 
 describe("D117 the seasonality Total Sum in the user's language", () => {
