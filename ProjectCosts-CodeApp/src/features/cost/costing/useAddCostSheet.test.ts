@@ -62,6 +62,7 @@ const {
   BACKGROUND_DELETE_FAILED, COST_DELETE_FAILED_RECONCILED, COST_DELETE_FAILED_NOT_RECONCILED,
 } = await import("@/data/addCostSheet");
 const { BulkDeleteError } = await import("@/data/bulkWrites");
+const { setCapexOptFlags, resetCapexOptFlags } = await import("@/data/capexOptFlags");
 
 type Outcome = {
   requests: number; error?: unknown; costDeleteError?: unknown; contractDeleteError?: unknown;
@@ -85,7 +86,8 @@ const flush = () => new Promise((r) => setTimeout(r, 0));
  */
 const CAPEX_KEYS = [
   { queryKey: ["cost-book", "p-1", 3], refetchType: "all" },
-  { queryKey: ["capex-totals", "p-1"], refetchType: "all" },
+  // CA-06 (dvopt, ADDCOST_LEAN_REFRESH): the not-displayed Summary totals refetch only while a Summary tab is mounted.
+  { queryKey: ["capex-totals", "p-1"], refetchType: "active" },
 ];
 
 describe("useAddCostSheet", () => {
@@ -282,19 +284,31 @@ describe("useSaveAddCostSheet — saved state at once (D51 §11.19)", () => {
     await flush();
   });
 
-  it("UT-ACSHEET-QUERY-010 the CAPEX book and totals refetch with type all; the sheet stays none; the period book and DevCo keep the default", async () => {
+  it("UT-ACSHEET-QUERY-010 the CAPEX book refetches with type all and the totals with type active (CA-06); the sheet stays none; the period book and DevCo keep the default", async () => {
     reset();
     const options = useSaveAddCostSheet(3) as unknown as PatchOptions;
     options.onSuccess({ applied: APPLIED });
     expect(invalidations).toEqual(expect.arrayContaining([
       { queryKey: ["add-cost-sheet", "p-1", 3], refetchType: "none" },
       { queryKey: ["cost-book", "p-1", 3], refetchType: "all" },
-      { queryKey: ["capex-totals", "p-1"], refetchType: "all" },
+      { queryKey: ["capex-totals", "p-1"], refetchType: "active" },
       { queryKey: ["cost-book", "p-1", "none"] },
       { queryKey: ["devCoCapexContracts", "p-1"] },
       { queryKey: ["devCoCapexCosts", "p-1"] },
     ]));
     expect(invalidations).toHaveLength(6);
+  });
+
+  it("UT-ACSHEET-QUERY-010b with ADDCOST_LEAN_REFRESH off the totals refetch with type all, as before the dvopt work", async () => {
+    reset();
+    setCapexOptFlags({ ADDCOST_LEAN_REFRESH: false });
+    try {
+      const options = useSaveAddCostSheet(3) as unknown as PatchOptions;
+      options.onSuccess({ applied: APPLIED });
+      expect(invalidations).toContainEqual({ queryKey: ["capex-totals", "p-1"], refetchType: "all" });
+    } finally {
+      resetCapexOptFlags();
+    }
   });
 
   it("UT-ACSHEET-QUERY-011 no cached book: nothing is written to the cache; it is still refetched", () => {
