@@ -32,6 +32,7 @@ vi.mock("./client", () => ({
 }));
 vi.mock("./generators", () => ({
   listGeneratorTypes: async () => h.types,
+  listGeneratorTypeIds: async () => h.types, // dvopt PA-10: the count reads the ids alone
   listProjectTurbines: async () => { h.turbineReads += 1; return h.turbines.map((t) => ({ ...t, status: t.statecode })); },
 }));
 

@@ -33,6 +33,7 @@ import {
 import { PROJECT_COL } from "@/features/pm/shared/projectRow";
 import "./financeBulk"; // registers the schedule tables with the bulk backend (a side effect)
 import { financePerf } from "./financeFlags";
+import { generatorsPerf } from "./generatorsPerfFlags";
 import { mapLimit } from "./concurrency";
 import { fetchAll, fetchPage } from "./client";
 import { ACTIVE, and, chunk, eq, guid, lookupEq, lookupIn } from "./odata";
@@ -143,6 +144,7 @@ export async function listRepaymentAmounts(projectId: string): Promise<StoredRep
     financingInputId: str(r[REPAYMENT_COL.financingInput]) ?? "",
     year: Number(str(r[REPAYMENT_COL.year]) ?? NaN),
     amount: num(r[REPAYMENT_COL.amount]) ?? 0,
+    storedAmount: num(r[REPAYMENT_COL.amount]),
   }));
 }
 
@@ -164,6 +166,7 @@ export async function listStepUpMargins(projectId: string): Promise<StoredStepUp
     startYear: num(r[STEPUP_COL.startYear]) ?? 0,
     duration: num(r[STEPUP_COL.duration]) ?? 0,
     margin: num(r[STEPUP_COL.margin]) ?? 0,
+    hasBlank: [STEPUP_COL.order, STEPUP_COL.startYear, STEPUP_COL.duration, STEPUP_COL.margin].some((c) => num(r[c]) === null),
   }));
 }
 
@@ -213,11 +216,19 @@ async function readInOrder<T, R>(parts: readonly T[], read: (part: T) => Promise
  * `vsb_generatorinproject` has no project lookup (D8): the project's generator types are read, then
  * their turbines through the polymorphic `vsb_moduletypeinprojectid`.
  */
-export async function countActiveTurbines(projectId: string): Promise<number> {
-  // A dynamic import (FE-P2-05, D162): the Generators data module is fetched only when the Decommissioning card or panel
-  // first needs the count (`lazyReads`), not with the Finance screen's chunk.
-  const { listGeneratorTypes } = await import("./generators");
-  const types = await listGeneratorTypes(projectId);
+export async function countActiveTurbines(projectId: string, cachedTypeIds?: readonly string[] | null): Promise<number> {
+  // PA-10 (`GENERATORS_PERF.typeReadsLean`, dvopt T-22): only the type ids are used, so (1) a list of the types the Generators warm-up
+  // cached and that is as fresh as this visit is reused (`cachedTypeIds`, from the hook), and (2) otherwise the ids alone are read
+  // (`$select` = the id) instead of the 12-column list. OFF: the full list is read, as before.
+  let types: { id: string }[];
+  if (generatorsPerf().typeReadsLean && cachedTypeIds) {
+    types = cachedTypeIds.map((id) => ({ id }));
+  } else {
+    // A dynamic import (FE-P2-05, D162): the Generators data module is fetched only when the Decommissioning card or panel
+    // first needs the count (`lazyReads`), not with the Finance screen's chunk.
+    const { listGeneratorTypeIds, listGeneratorTypes } = await import("./generators");
+    types = generatorsPerf().typeReadsLean ? await listGeneratorTypeIds(projectId) : await listGeneratorTypes(projectId);
+  }
   if (types.length === 0) return 0;
   // OPT-07e: the `statecode eq 0` clause is sent to the server and only the id is selected, so the active rows come back and the
   // count is their number. Same count as the old browser-side `status === 0` over every turbine (`listProjectTurbines` maps a

@@ -15,6 +15,9 @@
  *    visit seeds are one job, not six jobs with six reloads.
  *  - `wideGroups` (D149): the tranche Save's concurrent group goes out 16 at a time (`WIDE_GROUP_CONCURRENCY`, as the
  *    Generators saves since D144 and the Production Save since D145) instead of 8; the tranche write stays first and alone.
+ *  - `changedRowsOnly` (dvopt T-32, PA-03, "FINANCE_CHANGED_ROWS_ONLY"; default ON): a tranche Save writes only the repayment and
+ *    step-up rows whose stored values differ from the form (and the new ones); the unchanged rows are not PATCHed again. OFF: every
+ *    row is written, as the canvas `ForAll(Patch)` does (`modifiedon` and the audit history of unchanged rows then move).
  *  - `bulkSchedules`: the repayment schedule and the step-up margins of a tranche Save go through `CreateMultiple` /
  *    `UpdateMultiple` once a table has `BULK_MIN_ROWS` rows. OFF until the live probe on DEV has passed (rule 5 of
  *    this work: nothing here may write to an environment), like every `GENERATORS_BULK` flag; flipping it is a one-line
@@ -26,6 +29,7 @@ export interface FinancePerfFlags {
   targetedReload: boolean;
   concurrentWrites: boolean;
   wideGroups: boolean;
+  changedRowsOnly: boolean;
   bulkSchedules: boolean;
 }
 
@@ -35,12 +39,13 @@ const DEFAULTS: Readonly<FinancePerfFlags> = {
   targetedReload: true,
   concurrentWrites: true,
   wideGroups: true,
+  changedRowsOnly: true,
   bulkSchedules: false,
 };
 
 /** Every switch off: today's requests exactly (tests, and the rollback in one line). */
 export const FINANCE_PERF_ALL_OFF: Readonly<FinancePerfFlags> = {
-  parallelReads: false, lazyReads: false, targetedReload: false, concurrentWrites: false, wideGroups: false, bulkSchedules: false,
+  parallelReads: false, lazyReads: false, targetedReload: false, concurrentWrites: false, wideGroups: false, changedRowsOnly: false, bulkSchedules: false,
 };
 
 let override: Partial<FinancePerfFlags> | null = null;

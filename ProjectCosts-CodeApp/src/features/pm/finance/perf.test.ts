@@ -160,8 +160,8 @@ afterEach(() => { setBulkBackend(null); setFinancePerfFlags(null); });
 describe("UT-FINPERF switches", () => {
   it("UT-FINPERF-101 the defaults: every switch on except the bulk one, which waits for the live probe", () => {
     expect(financePerf()).toEqual({
-      parallelReads: true, lazyReads: true, targetedReload: true, concurrentWrites: true, wideGroups: true, bulkSchedules: false,
-    }); // D149: `wideGroups` joined the list (on)
+      parallelReads: true, lazyReads: true, targetedReload: true, concurrentWrites: true, wideGroups: true, changedRowsOnly: true, bulkSchedules: false,
+    }); // D149: `wideGroups` joined the list (on); dvopt PA-03: `changedRowsOnly` joined it (on)
   });
 
   it("UT-FINPERF-102 a test override replaces switches, and null restores the defaults", () => {

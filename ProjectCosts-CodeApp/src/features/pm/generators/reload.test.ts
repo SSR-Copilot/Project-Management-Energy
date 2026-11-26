@@ -46,6 +46,8 @@ describe("GENERATORS_PERF — the switches (D141)", () => {
       deleteReadWaves: true,
       // OPT-07a S4-05 (B6): the project's country from the shared 30-minute countries list, ON.
       countryFromSharedList: true,
+      // dvopt T-22 (PA-05, PA-08, PA-09, PA-10, PA-15): five network trims, all ON.
+      flowBesideReads: true, productionLeanReload: true, turbinesRefetchOnce: true, typeReadsLean: true, omGuardOneRead: true,
     });
     expect(generatorsPerf()).toEqual(GENERATORS_PERF);
   });

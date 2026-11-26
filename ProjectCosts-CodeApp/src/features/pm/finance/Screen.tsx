@@ -1311,6 +1311,7 @@ export default function ProjectFinanceScreen() {
       form, project, seniorDebtCategoryId: categoryOf(CATEGORY_ORDER.seniorDebt)?.id ?? null,
       duplicateIds: await fetchTrancheDuplicates(trancheUniqueKey(form)),
       storedRepayments: repaymentsQ.data, storedStepUps: stepUpsQ.data, language: lang,
+      changedRowsOnly: financePerf().changedRowsOnly,
     }))), projectId, "schedules"));
     if (ids !== null) setSelectedTrancheId(null);
   };
