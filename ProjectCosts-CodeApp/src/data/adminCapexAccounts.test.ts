@@ -63,6 +63,7 @@ vi.mock("./client", async () => {
       if (fetchPageErrors[label]) throw fetchPageErrors[label];
       return fetchPageRows[label] ?? [];
     },
+    guardedCall: actual.guardedCall,
     deleteRecord: async (_op: string, table: string, id: string) => {
       if (failDeleteFor.has(id)) throw new Error(`delete ${id} denied`);
       deleted.push({ table, id });
@@ -84,6 +85,18 @@ vi.mock("./adminRowWrites", async () => {
       if (failBulk) throw new actual.RowWriteError("per-row write denied", false);
       bulkCalls.push({ table, primaryKey, rows });
     },
+    // The clean-up's resilient zero phase (AD-01): same recorder and the same failure switch as `updateRowsEach` above.
+    updateRowsSettled: async (_op: string, table: string, primaryKey: string, rows: Record<string, unknown>[]) => {
+      if (rows.length === 0) return { landed: 0, failures: [] };
+      if (failBulk) return { landed: 0, failures: [{ index: 0, error: new Error("per-row write denied") }] };
+      bulkCalls.push({ table, primaryKey, rows });
+      return { landed: rows.length, failures: [] };
+    },
+    // AD-08: the create-then-update pair's second write has no existence read; it goes through the same fake client.
+    updateRecordJustCreated: (operation: string, table: string, id: string, fields: Record<string, unknown>) =>
+      actual.updateRecordJustCreated(operation, table, id, fields, {
+        client: () => guardedClient as unknown as import("./client").GuardedUpdateClient,
+      }),
   };
 });
 
@@ -105,6 +118,10 @@ vi.mock("@/generated/services/Vsb_capexcostsService", () => ({
   Vsb_capexcostsService: { getAll: vi.fn() },
 }));
 
+import { setRetrySleeper } from "./adminRowWrites";
+import { ADMIN_OPT } from "./adminFlags";
+
+const ADMIN_OPT_DEFAULTS = { ...ADMIN_OPT };
 import {
   DELETE_BLOCKED, DeleteBlockedError, DuplicateNumberError, PartialStepError, RecordGoneError,
   cleanUpForecastCosts, createCapexAccount, deactivateCapexAccount, deactivateCapexAccountStatus,
@@ -119,6 +136,8 @@ const SUB_A = G(3);
 const SUB_B = G(4);
 
 beforeEach(() => {
+  Object.assign(ADMIN_OPT, ADMIN_OPT_DEFAULTS);
+  setRetrySleeper(async () => {});
   fetchAllRows = {}; fetchAllCalls = []; fetchPageRows = {}; fetchPageCalls = []; fetchPageErrors = {};
   deleted = []; createCalls = []; updateCalls = []; bulkCalls = [];
   failUpdateFor = new Set(); failBulk = false; failDeleteFor = new Set(); fetchAllFn = undefined;
@@ -237,9 +256,18 @@ describe("Upsert guard: no update can recreate a deleted row (SDK 1.3.1 PATCH up
     expect(updateCalls.map((u) => u.id)).toEqual([ACCOUNT, SUB_B]);
   });
 
-  it("UT-ADCAPEX-016 Does not PATCH a just-created row that vanished; reports it as the inactive step failing", async () => {
+  it("UT-ADCAPEX-016 Does not PATCH a just-created row that vanished; reports it as the inactive step failing (existence read, ADMIN_NO_REDUNDANT_EXISTS off)", async () => {
+    ADMIN_OPT.ADMIN_NO_REDUNDANT_EXISTS = false;
     goneIds.add(NEW_ID);
     const result = await createCapexAccount({ parentId: PARENT, number: "1", name: "A" });
+    expect(updateCalls).toEqual([]);
+    expect(result.inactiveError).toBeInstanceOf(RecordGoneError);
+  });
+
+  it("UT-ADCAPEX-016b With ADMIN_NO_REDUNDANT_EXISTS on (default) a vanished just-created row is refused by the PATCH 404, still as RecordGoneError, with no existence read", async () => {
+    deletedAfterCheck.add(NEW_ID);
+    const result = await createCapexAccount({ parentId: PARENT, number: "1", name: "A" });
+    expect(existsCalls).toEqual([]);
     expect(updateCalls).toEqual([]);
     expect(result.inactiveError).toBeInstanceOf(RecordGoneError);
   });
@@ -521,6 +549,20 @@ describe("Status changes", () => {
     expect(error).toBeInstanceOf(PartialStepError);
     expect(error.failedStep).toBe("Later-year costs deleted (2 rows)");
     expect(error.completed).toEqual(["Subaccount set to Inactive", "Future-month costs set to 0 (1 row)"]);
+    // AD-01 (CLEANUP_RESILIENT, default on): the count plus the failed rows and the "a rerun is safe" note.
+    expect(error.detail).toBe(
+      "1 of 2 later-year cost rows were deleted (1 failed after retries; running the clean-up again is safe, it skips the rows already done)",
+    );
+  });
+
+  it("UT-ADCAPEX-036b With CLEANUP_RESILIENT off the fail-fast pools report the old in-step count", async () => {
+    ADMIN_OPT.CLEANUP_RESILIENT = false;
+    fetchAllRows["list CAPEX contracts for deactivated accounts"] = [{ vsb_capexprojectcontractid: G(500) }];
+    fetchAllRows["list current-year forecast CAPEX costs"] = [{ vsb_capexcostid: "z1" }];
+    fetchAllRows["list future-year forecast CAPEX costs"] = [{ vsb_capexcostid: "d1" }, { vsb_capexcostid: "d2" }];
+    failDeleteFor.add("d2");
+    const error = await cleanUpForecastCosts([SUB_A], 2026, 10).catch((e: unknown) => e) as PartialStepError;
+    expect(error.failedStep).toBe("Later-year costs deleted (2 rows)");
     expect(error.detail).toBe("1 of 2 later-year cost rows were deleted");
   });
 });

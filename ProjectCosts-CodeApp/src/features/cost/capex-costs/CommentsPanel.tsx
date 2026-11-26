@@ -30,6 +30,8 @@ import { FormPanel, LoadingOverlay, PanelButtons, WriteStatus } from "@/componen
 import { space } from "@/theme/tokens";
 import { useSession } from "@/app/SessionContext";
 import { useCurrentUser } from "@/app/useCurrentUser";
+import { CAPEX_OPT } from "@/data/capexOptFlags";
+import { mapLimitFirstFailure } from "@/data/concurrency";
 import { writeCommandsDisabled } from "@/domain/writeGuard";
 import { useCapexComments, useCommentWrites } from "../costing/useCostBook";
 import { useCostWriteInFlight, useWriteFailureReport } from "../costing/useCostWriteFlight";
@@ -47,6 +49,9 @@ import {
 interface Working extends CapexComment { isNew: boolean }
 
 const isTemp = (id: string) => id.startsWith("draft-");
+
+/** CA-15: how many comment deletes of one Save run at once (the panel's own delete gate in `data/capexWrites.ts` is 4 too). */
+const COMMENT_DELETE_LIMIT = 4;
 
 /** One month of this contract that a payment-date comment can be attached to. */
 interface CostOption { id: string; year: number; month: number }
@@ -513,7 +518,15 @@ export function CommentsPanel(props: CommentsPanelProps) {
     onSavingChange?.(true);
     onDismiss();
     try {
-      for (const id of deletedIds) await writes.remove.mutateAsync(id);
+      // CA-15 (`COMMENT_DELETES_OVERLAP`): the deletes touch disjoint rows, so they run together, 4 at a time, before any create or
+      // edit (roots in `createdOn` order and replies after their parent's real id stay strictly sequential below). `mapLimitFirstFailure`
+      // stops STARTING deletes after a refusal and throws the failure of the lowest id in input order, as the loop's first throw
+      // did (CA-18: a refused delete stops the remaining writes).
+      if (CAPEX_OPT.COMMENT_DELETES_OVERLAP) {
+        await mapLimitFirstFailure(deletedIds, (id) => writes.remove.mutateAsync(id), COMMENT_DELETE_LIMIT);
+      } else {
+        for (const id of deletedIds) await writes.remove.mutateAsync(id);
+      }
 
       const idMap = new Map<string, string>();
       /*

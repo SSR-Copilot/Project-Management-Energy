@@ -198,6 +198,27 @@ export function staleOnlyKeys(
   return [qk.project(projectId), qk.milestoneProject(projectId), qk.generalDataProject(projectId)];
 }
 
+/**
+ * PA-09 (dvopt T-22, `GENERATORS_PERF.turbinesRefetchOnce`): the kinds whose save changes the SET of WTG types (a type is added, deleted or
+ * replaced). The turbines key embeds the type ids (`useProjectTurbines`), so an invalidation of the `turbines` prefix refetched the
+ * active query under the OLD key (its result is discarded: the types reload changes the key) and the NEW key fetched again. For these kinds
+ * the turbines are only marked stale; the key change fetches them once, after the types have been read.
+ *
+ * Only for a successful save: that is when the type set has certainly changed (the first plan creates / deletes the type row and `then`
+ * has landed before the reload starts). A refused, failed or part-way save leaves the set as it was, so the key does not change and the
+ * turbines are refetched as before (`withReload` switches the job back in `onWritten(false)`).
+ */
+export const TYPE_SET_KINDS: readonly ReloadKind[] = ["addWtgType", "deleteWtgType", "replaceWtg"];
+
+/** The turbines key (a PREFIX of every type-set key) a type-set save marks stale instead of refetching, or `[]`. */
+export function turbinesStaleOnlyKeys(
+  projectId: string | undefined, kind: ReloadKind, flags: Readonly<GeneratorsPerfFlags> = generatorsPerf(),
+): readonly QueryKey[] {
+  if (!flags.turbinesRefetchOnce || !flags.targetedReload || !projectId || !TYPE_SET_KINDS.includes(kind)) return [];
+  const families = familiesFor(kind);
+  return families?.includes("turbines") ? familyKeys(projectId, "turbines") : [];
+}
+
 /** What the trace line names for `staleOnlyKeys`, in the same order. */
 const STALE_ONLY_NAMES = "session project, Milestones project, General Data project";
 
@@ -214,13 +235,20 @@ export function withReload(
   const families = familiesFor(kind) ?? [];
   const previous = job.onWritten;
   const stale = staleOnlyKeys(projectId, kind, flags);
-  return {
+  const turbinesOnce = turbinesStaleOnlyKeys(projectId, kind, flags);
+  const staleAll = [...stale, ...turbinesOnce];
+  const out: PlanJob = {
     ...job,
     invalidate: keys,
-    ...(stale.length > 0 ? { staleOnly: stale } : {}),
+    ...(staleAll.length > 0 ? { staleOnly: staleAll } : {}),
     onWritten: (ok) => {
       previous?.(ok);
-      logAction(`Generators reload after ${kind}${ok ? "" : " (failed)"}: ${families.length} of ${FAMILY_ORDER.length} query groups (${families.join(", ")})${stale.length > 0 ? `; marked stale, not fetched: ${STALE_ONLY_NAMES}` : ""}`);
+      // PA-09: a save that did not succeed left the type set as it was, so the key will not change: the turbines reload as before.
+      // `usePlanWrite` reads `staleOnly` after this callback (onSettled), and this is the very object it was given.
+      const turbinesDeferred = ok && turbinesOnce.length > 0;
+      if (!ok && turbinesOnce.length > 0) out.staleOnly = stale.length > 0 ? stale : undefined;
+      logAction(`Generators reload after ${kind}${ok ? "" : " (failed)"}: ${families.length} of ${FAMILY_ORDER.length} query groups (${families.join(", ")})${stale.length > 0 ? `; marked stale, not fetched: ${STALE_ONLY_NAMES}` : ""}${turbinesDeferred ? "; turbines fetched once, under the new type set" : ""}`);
     },
   };
+  return out;
 }

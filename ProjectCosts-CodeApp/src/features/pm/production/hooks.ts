@@ -27,11 +27,12 @@
  * seasonality and negative prices (connected 28 Oct 2026). When the read fails the standards stay
  * blank and the panel says so; the yield can still be saved with typed values.
  */
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ES, ES_ADMIN, ES_FINANCE, ES_PLANT, ES_PRODUCTION } from "@/data/dataverseNames";
 import { qk } from "@/data/keys";
 import type { ScreenData } from "@/data/notConnected";
-import { usePlanWrite } from "@/data/usePlanWrite";
+import { generatorsPerf } from "@/data/generatorsPerfFlags";
+import { usePlanWrite, type PlanJob } from "@/data/usePlanWrite";
 import {
   listEnergyYields, listProjectRevenues, listStandardRevenueAssumptions, listStoredNegativePrices,
   loadGenerationInputs, loadProductionProject, loadStoredSeasonality,
@@ -161,6 +162,7 @@ export interface SaveYieldRequest {
  */
 export function useProductionWrites(projectId: string | undefined) {
   const id = projectId ?? "";
+  const qc = useQueryClient();
   const w = usePlanWrite({
     invalidate: [qk.productionAll(id), qk.milestoneProject(id), qk.generalDataProject(id)],
     action: "change this project's energy yields",
@@ -173,6 +175,8 @@ export function useProductionWrites(projectId: string | undefined) {
    * part 2 decides on.
    */
   type Seen = {
+    /** The yields the roll-up read (after the action's writes); they seed the screen's own yields read (PA-08). */
+    yields?: EnergyYieldRow[];
     next: { netYieldP50: number; standardCostCreated: boolean } | null;
     /** The project row the roll-up read, handed to part 2 (OPT-24) so it is not read a second time. */
     project?: ProductionProject;
@@ -182,7 +186,32 @@ export function useProductionWrites(projectId: string | undefined) {
     if (!project) throw new Error("The project could not be read.");
     seen.next = { netYieldP50: projectYieldTotals(yields).netP50, standardCostCreated: project.standardCostCreated };
     seen.project = project;
+    seen.yields = yields;
     return planRollUp(id, yields);
+  };
+
+  /**
+   * PA-08 (`GENERATORS_PERF.productionLeanReload`, dvopt T-22). The roll-up has just read the yields AFTER the action's writes, and its own
+   * writes touch only the project's columns, so those rows ARE what a reload would read: they are put into the screen's yields query and
+   * the reload skips that query (one yields read less per action). The project, the stored seasonality / negative prices and the two
+   * project copies still reload. Applied from `onWritten` (which runs before the reload picks its keys) and only when the roll-up did
+   * read: a failed action write, or a refused roll-up, reloads everything as before.
+   */
+  const withLeanReload = (job: PlanJob, seen: Seen): PlanJob => {
+    if (!generatorsPerf().productionLeanReload) return job;
+    const lean: PlanJob = {
+      ...job,
+      onWritten: (ok) => {
+        job.onWritten?.(ok);
+        if (seen.yields === undefined) return;
+        qc.setQueryData(qk.production(id, "yields"), seen.yields);
+        lean.invalidate = [
+          qk.production(id, "project"), qk.production(id, "seasonality"), qk.production(id, "negativePrices"),
+          qk.milestoneProject(id), qk.generalDataProject(id),
+        ];
+      },
+    };
+    return lean;
   };
 
   /** Part 2: the one-shot generation, only when `shouldGenerate` on the new p50. */
@@ -190,6 +219,10 @@ export function useProductionWrites(projectId: string | undefined) {
     if (seen.next === null || !shouldGenerate(seen.next)) return true;
     const generated = await w.run({
       progress: UI.loadingStandardContracts,
+      // PA-08: the generation writes the four CAPEX flags on the project (and creates contracts no query of this screen reads), never a
+      // yield, so only the project copies reload. OFF: the hook's whole-screen reload, as before.
+      ...(generatorsPerf().productionLeanReload
+        ? { invalidate: [qk.production(id, "project"), qk.milestoneProject(id), qk.generalDataProject(id)] } : {}),
       plan: async () => {
         // OPT-24: the project the roll-up just read (it holds what the generation uses: id, name, COD, country, technology and
         // business unit; the roll-up writes only yield columns). The reads of the generation itself (`loadGenerationInputs`) stay live.
@@ -203,7 +236,7 @@ export function useProductionWrites(projectId: string | undefined) {
 
   const saveYield = async (req: SaveYieldRequest): Promise<boolean> => {
     const seen: Seen = { next: null };
-    const done = await w.run({
+    const done = await w.run(withLeanReload({
       progress: UI.saving,
       errorText: (d) => `${PRODUCTION_SCREEN_TEXT.saveError}: ${d}`,
       then: rollUp(seen),
@@ -221,33 +254,33 @@ export function useProductionWrites(projectId: string | undefined) {
           yields, revenues,
         });
       },
-    });
+    }, seen));
     return done !== null && (await generateIfDue(seen));
   };
 
   const deleteYield = async (row: EnergyYieldRow): Promise<boolean> => {
     const seen: Seen = { next: null };
-    const done = await w.run({
+    const done = await w.run(withLeanReload({
       progress: UI.saving,
       then: rollUp(seen),
       plan: async () => {
         const [yields, revenues] = await Promise.all([listEnergyYields(id), listProjectRevenues(id)]);
         return planDeleteYield({ row: yields.find((y) => y.id === row.id) ?? row, yields, revenues });
       },
-    });
+    }, seen));
     return done !== null && (await generateIfDue(seen));
   };
 
   const changeStatus = async (row: EnergyYieldRow): Promise<boolean> => {
     const seen: Seen = { next: null };
-    const done = await w.run({
+    const done = await w.run(withLeanReload({
       progress: UI.saving,
       then: rollUp(seen),
       plan: async () => {
         const [yields, revenues] = await Promise.all([listEnergyYields(id), listProjectRevenues(id)]);
         return planStatusChange({ row: yields.find((y) => y.id === row.id) ?? row, yields, revenues });
       },
-    });
+    }, seen));
     return done !== null && (await generateIfDue(seen));
   };
 

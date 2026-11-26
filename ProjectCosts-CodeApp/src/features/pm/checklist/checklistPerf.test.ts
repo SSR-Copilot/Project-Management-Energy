@@ -40,7 +40,8 @@ afterEach(() => { setChecklistPerfFlags(null); });
 
 describe("the rollout switches (D150)", () => {
   it("UT-CHKPERF-070 every switch ships ON, ALL_OFF turns every one off, and a test override can be installed and removed", () => {
-    expect(Object.values(CHECKLIST_PERF).every((v) => v === true)).toBe(true);
+    // QA-07: `backfillTogether` ships OFF (an unordered write stream waits for a DEV run); every other switch ships ON.
+    expect(Object.entries(CHECKLIST_PERF).filter(([, v]) => v !== true).map(([k]) => k)).toEqual(["backfillTogether"]);
     expect(Object.values(CHECKLIST_PERF_ALL_OFF).every((v) => v === false)).toBe(true);
     expect(Object.keys(CHECKLIST_PERF_ALL_OFF).sort()).toEqual(Object.keys(CHECKLIST_PERF).sort());
     expect(checklistPerf()).toEqual(CHECKLIST_PERF);

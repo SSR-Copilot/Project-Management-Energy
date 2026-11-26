@@ -56,6 +56,7 @@ import { emptyPlan, type PlannedWrite, type WritePlan } from "@/data/writePlan";
 import type { PlanResult } from "@/data/executePlan";
 import { SERVER_DECIDES, loadAllocations, loadNewTypeInputs, loadPvDeleteInputs, loadPvFollowUpInputs, useModulePermissionFlows, loadReplaceInputs, loadTypeDeleteInputs, useAllWtgLandLeaseCosts, useDeviceCosts, useEntraObjectId, useGeneratorCatalog, useGeneratorModels, useGeneratorTypes, useGeneratorWrites, useGeneratorsProject, useInflationIndex, useInverterTypes, useOpexDependency, usePlantSupplierCatalog, useProjectPlanning, useProjectTurbines, usePvModuleCatalog, usePvModuleTypes, useSimpleTypes, useSubstructureTypes } from "./hooks";
 import { confirmNeedsLazyRead, lazyNeeds, lazyPending, loadGate, readKnown } from "./loadGate";
+import { cancelBesideReads } from "./flowBesideReads";
 import { withReload, type ReloadKind } from "./reload";
 import { applyOptimisticToggle, nextToggleStatus } from "./optimisticToggle";
 import { HydrogenSection, InverterSection, PvSection, StorageSection, SubstationSection, SubstructureSection } from "./sections/FamilySections";
@@ -1031,9 +1032,11 @@ function GeneratorsScreenBody() {
       success: () => replaceSuccessText(box.unmatched),
       errorText: WRITE_ERROR.wtgReplace,
       plan: async (): Promise<WritePlan> => {
-        box.inputs = await loadReplaceInputs(planProject.id, oldType.id);
-        // D97 — "RDel001: Cancel pending permission for replaced generator", before the old type goes.
-        await permissionFlows.cancelIfOpen("wtg", oldType);
+        // D97 — "RDel001: Cancel pending permission for replaced generator", before the old type goes. PA-05: the flow and the Identify
+        // reads are independent and run together; the plan below is built after both have settled.
+        box.inputs = await cancelBesideReads(
+          () => permissionFlows.cancelIfOpen("wtg", oldType), () => loadReplaceInputs(planProject.id, oldType.id), "readFirst",
+        );
         const plan = planReplaceGeneratorType({
           project: planProject, oldType, inCountry: form.inCountry, model, costPerWtg: replaceCost,
           selectedHeight: replaceHub ?? 0, revisedHubHeight: numericOr(form.revisedHubHeight, 0, lang),
@@ -1083,9 +1086,10 @@ function GeneratorsScreenBody() {
       success: REPLACE_MSG.pvReplaced,
       errorText: WRITE_ERROR.pvReplace,
       plan: async (): Promise<WritePlan> => {
-        box.inputs = await loadReplaceInputs(planProject.id, oldPv.id);
-        // D97 — an open request on the replaced PV type is cancelled before it goes.
-        await permissionFlows.cancelIfOpen("pv", oldPv);
+        // D97 — an open request on the replaced PV type is cancelled before it goes (PA-05: beside the Identify reads).
+        box.inputs = await cancelBesideReads(
+          () => permissionFlows.cancelIfOpen("pv", oldPv), () => loadReplaceInputs(planProject.id, oldPv.id), "readFirst",
+        );
         return planReplacePvType({
           project: planProject, oldPv, form, deviceCostModules: deviceQ.data.modules,
           otherSupplierChosen: replacePvOther, inputs: box.inputs, lang,
@@ -1169,8 +1173,11 @@ function GeneratorsScreenBody() {
           progress: WRITE_MSG.working, success: WRITE_MSG.typeDeleted, errorText: WRITE_ERROR.typeDelete,
           plan: async (): Promise<WritePlan> => {
             // D97 — `If(Not(IsBlank(FlowRunId)), Requestpermissioncancellation.Run(…))` (Y:15659), before any delete.
-            await permissionFlows.cancelIfOpen("wtg", d.type);
-            const inputs = await loadTypeDeleteInputs(planProject.id, d.type.id, typeTurbines.map((t) => t.id));
+            // PA-05: beside the Identify reads; the plan is built after both have settled.
+            const inputs = await cancelBesideReads(
+              () => permissionFlows.cancelIfOpen("wtg", d.type),
+              () => loadTypeDeleteInputs(planProject.id, d.type.id, typeTurbines.map((t) => t.id)), "cancelFirst",
+            );
             return planDeleteGeneratorType({
               project: planProject, type: d.type, allTypes: types, allocations: inputs.allocations,
               allocationCountByCost: inputs.countByCost, opexCostIds: inputs.opexCostIds,
@@ -1231,8 +1238,10 @@ function GeneratorsScreenBody() {
             // G2 — the unit, its land lease and the O&M costs go first, as the confirmation says.
             plan: async (): Promise<WritePlan> => {
               // D97 — the open request is cancelled first (Y:15469).
-              await permissionFlows.cancelIfOpen("pv", d.row);
-              const inputs = await loadPvDeleteInputs(planProject.id, d.row.id);
+              // PA-05: beside the Identify reads; the plan is built after both have settled.
+              const inputs = await cancelBesideReads(
+                () => permissionFlows.cancelIfOpen("pv", d.row), () => loadPvDeleteInputs(planProject.id, d.row.id), "cancelFirst",
+              );
               return planDeletePvType({
                 project: planProject, pv: d.row, pvRows: pvQ.data, inverters: inverterQ.data,
                 substructures: substructureQ.data, deviceCostFix: deviceQ.data.mountingFix,

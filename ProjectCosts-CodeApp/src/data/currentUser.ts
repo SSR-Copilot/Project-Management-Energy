@@ -25,6 +25,7 @@ import { SystemusersService } from "@/generated/services/SystemusersService";
 import { TeamsService } from "@/generated/services/TeamsService";
 import { Vsb_countriesService } from "@/generated/services/Vsb_countriesService";
 import { startupFlags } from "@/app/startupFlags";
+import { bootDvopt } from "./bootDvoptFlags";
 import { fetchAll } from "./client";
 import { and, chunk, eq, guid, or } from "./odata";
 
@@ -186,7 +187,19 @@ const readCountryBusinessUnits = () => fetchAll(
   { select: ["vsb_name", "_vsb_businessunit_value"] },
 ).catch(() => []);
 
-export async function loadCurrentUser(entraObjectId: string | undefined): Promise<CurrentUser> {
+/** The country rows the badge's business-unit map is built from (`vsb_name`, `_vsb_businessunit_value`). */
+export type CountryBusinessUnitRow = { vsb_name?: string | null | undefined; _vsb_businessunit_value?: string | null | undefined };
+
+export interface LoadCurrentUserOptions {
+  /**
+   * PB-06 (`COUNTRIES_ONE_KEY`): where the country rows come from. `useCurrentUser` passes the shared `vsb_countries` entry
+   * (`qk.adminCountries`), so the map costs no request of its own when another screen has read the list. Absent, or with
+   * the switch off: the user's own unkeyed read, as before. A failed read still costs the map only (it is caught like it was).
+   */
+  readCountries?: () => Promise<readonly CountryBusinessUnitRow[]>;
+}
+
+export async function loadCurrentUser(entraObjectId: string | undefined, options: LoadCurrentUserOptions = {}): Promise<CurrentUser> {
   if (!entraObjectId) {
     return {
       editableCountries: [], isProjectDataAllCountries: false,
@@ -203,7 +216,11 @@ export async function loadCurrentUser(entraObjectId: string | undefined): Promis
   const parallel = startupFlags.parallelUserLookups;
   const userRead = readUserRow(entraObjectId);
   const directoryRead = parallel ? readDirectoryEntry(entraObjectId) : undefined;
-  const countryRead = parallel ? readCountryBusinessUnits() : undefined;
+  const countryRead = parallel
+    ? (options.readCountries && bootDvopt().countriesOneKey
+      ? options.readCountries().catch((): CountryBusinessUnitRow[] => [])
+      : readCountryBusinessUnits())
+    : undefined;
 
   const users = await userRead;
   const row = users[0];
@@ -240,7 +257,7 @@ const ROLE_SELECT = ["roleid", "name", "_businessunitid_value"];
 
 async function loadBadgeScope(
   systemUserId: string,
-  countryRead?: ReturnType<typeof readCountryBusinessUnits>,
+  countryRead?: Promise<readonly CountryBusinessUnitRow[]>,
 ) {
   const id = guid(systemUserId);
 

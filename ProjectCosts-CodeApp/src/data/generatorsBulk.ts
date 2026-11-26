@@ -23,6 +23,8 @@ import { DataError, unwrap } from "@/platform/errors";
 import { logAction, loggedCall } from "@/platform/requestLog";
 import { fetchAll } from "./client";
 import { realSleep, retryDelay, type Sleeper } from "./retry";
+import { POLICY_BULK_TRANSPORT, POLICY_VERIFY_READS } from "./requestFlags";
+import { readPolicyPage, sendWithPolicy } from "./requestPolicy";
 import { forEachLimit } from "./concurrency";
 import { ES_PLANT } from "./dataverseNames";
 import { chunk, idIn, OWNING_BU_BIND } from "./odata";
@@ -335,10 +337,17 @@ async function sendPerRow(
   let failure: { cause: unknown } | undefined;
   await forEachLimit(rows, async (row) => {
     if (failure) return;
-    counter.sent += 1;
-    try {
-      const created = await gatedWrite(() => loggedCall(action, t.entitySetName,
+    // T-11 (WE-02): each ATTEMPT takes a gate slot and counts as a request; the policy sits outside the gate (a retry wait holds no
+    // slot). A per-row create is tried again only on a 429; an update (absolute values) also on a 5xx or a network failure.
+    const attempt = () => {
+      counter.sent += 1;
+      return gatedWrite(() => loggedCall(action, t.entitySetName,
         async () => unwrap(await send(row) as IOperationResult<unknown>, `${label} (${action})`), () => 1));
+    };
+    try {
+      const created = POLICY_BULK_TRANSPORT
+        ? await sendWithPolicy(action === "create" ? "create" : "patchAbsolute", attempt, { label: t.entitySetName })
+        : await attempt();
       if (action === "create") assertKeyHonoured(t, row, created, label);
       landed.add(row.id);
     } catch (cause) {
@@ -357,8 +366,11 @@ async function sendPerRow(
 async function readExisting(t: GeneratorsTable, ids: readonly string[], label: string): Promise<Set<string>> {
   const found = new Set<string>();
   await forEachLimit(chunk(ids), async (batch) => {
+    // T-11 (CA-01): a read made inside a write path, so a 429 or a transient failure on a page is tried again (query reads are not
+    // wrapped: TanStack retries those).
     const rows = await fetchAll<Record<string, unknown>>(
-      `check existing ${t.entitySetName} (${label})`, (o) => t.service.getAll(o as never) as never,
+      `check existing ${t.entitySetName} (${label})`,
+      readPolicyPage(t.entitySetName, (o) => t.service.getAll(o as never) as never, POLICY_VERIFY_READS),
       { select: [t.primaryKey], filter: idIn(t.primaryKey, batch) },
     );
     for (const row of rows) {

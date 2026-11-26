@@ -24,7 +24,9 @@ vi.mock("@microsoft/power-apps/data", () => {
   const wait = () => new Promise<void>((r) => setTimeout(r, sdk.LAT));
   const refused = () => ({
     success: false as const, data: undefined,
-    error: Object.assign(new Error("HTTP 500"), { status: 500 }),
+    // dvopt T-11: 400, not 500. A 500 on an update or a delete is now tried again (`POLICY_PLAN_WRITES`), which would let a "refused" request
+    // succeed on its retry and break the fail-fast order these tests pin. The retry itself is pinned in `data/executePlan.policy.test.ts`.
+    error: Object.assign(new Error("HTTP 400"), { status: 400 }),
   });
   const started = (): boolean => sdk.log.length === sdk.failRequest;
   const client = {

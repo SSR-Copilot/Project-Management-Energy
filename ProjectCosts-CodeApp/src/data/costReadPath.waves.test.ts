@@ -87,6 +87,8 @@ beforeEach(async () => {
   // The shared reads are remembered between loads on purpose; each test starts cold.
   (await import("./capexChart")).invalidateCapexChart();
   (await import("./currencies")).invalidateCurrencies();
+  // CA-08 (dvopt): the SPV/DevCo mapping is shared and remembered too; each test starts cold.
+  (await import("./costBook")).invalidatePayerDefaults();
 });
 
 /**
@@ -209,5 +211,57 @@ describe("Summary tab chart reads", () => {
     (await import("./capexChart")).invalidateCapexChart();
     const third = await wave.run(() => loadCostBook(P, 0));
     expect(count(third.calls, /^list CAPEX account/)).toBe(1);
+  });
+});
+
+/* ═══════════════════════════ dvopt CB-08 (`OPEX_BOOK_REUSES_CATALOGUE`): the OPEX book takes the sub-account names it is given ══ */
+
+describe("OPEX-only book with the screen's sub-account catalogue", () => {
+  const names = async () => [{ id: OM_SUB, name: "O&M" }, { id: OTHER_SUB, name: "Insurance" }];
+
+  it("UT-COSTWAVE-B2-001 given the names, the book does not read vsb_opexsubaccounts: 3 requests in 2 waves (was 4)", async () => {
+    const { calls, waves } = await wave.run(() => loadCostBook(P, undefined, { scope: "opex", opexSubaccountNames: names }));
+    expect(count(calls, /list OPEX subaccounts/)).toBe(0);
+    expect(calls).toHaveLength(3);
+    expect(waves).toBe(2);
+    expect(startedTogether(calls, ["list OPEX project costs", "list transaction currencies (Cost reads)"])).toBe(true);
+  });
+
+  it("UT-COSTWAVE-B2-002 differential: the periods are identical with the names given and with the table read", async () => {
+    const read = (await wave.run(() => loadCostBook(P, undefined, { scope: "opex" }))).value;
+    const given = (await wave.run(() => loadCostBook(P, undefined, { scope: "opex", opexSubaccountNames: names }))).value;
+    expect(given).toEqual(read);
+    expect(given.periods.find((p) => p.mode === "other")?.group).toBe("Insurance");
+  });
+
+  it("UT-COSTWAVE-B2-003 without the option the table is read as before", async () => {
+    const { calls } = await wave.run(() => loadCostBook(P, undefined, { scope: "opex" }));
+    expect(count(calls, /list OPEX subaccounts/)).toBe(1);
+  });
+
+  it("UT-COSTWAVE-B2-004 a name the catalogue lacks falls back to the unassigned group, exactly as a name the table lacked", async () => {
+    const some = async () => [{ id: OM_SUB, name: "O&M" }];
+    const given = (await wave.run(() => loadCostBook(P, undefined, { scope: "opex", opexSubaccountNames: some }))).value;
+    const original = ANSWERS["list OPEX subaccounts"]!;
+    ANSWERS["list OPEX subaccounts"] = [{ vsb_opexsubaccountid: OM_SUB, vsb_name: "O&M" }];
+    try {
+      const read = (await wave.run(() => loadCostBook(P, undefined, { scope: "opex" }))).value;
+      expect(given).toEqual(read);
+    } finally {
+      ANSWERS["list OPEX subaccounts"] = original;
+    }
+  });
+
+  it("UT-COSTWAVE-B2-005 a failing names loader fails the book where the names are awaited (a project with OPEX rows), and is ignored for one with none", async () => {
+    const down = async (): Promise<{ id: string; name: string }[]> => { throw new Error("catalogue down"); };
+    await expect(wave.run(() => loadCostBook(P, undefined, { scope: "opex", opexSubaccountNames: down }))).rejects.toThrow("catalogue down");
+    const original = ANSWERS["list OPEX project costs"];
+    ANSWERS["list OPEX project costs"] = [];
+    try {
+      const { value } = await wave.run(() => loadCostBook(P, undefined, { scope: "opex", opexSubaccountNames: down }));
+      expect(value.periods).toEqual([]);
+    } finally {
+      ANSWERS["list OPEX project costs"] = original!;
+    }
   });
 });

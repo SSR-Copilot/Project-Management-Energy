@@ -30,7 +30,8 @@ import {
 } from "@/features/pm/production/rules";
 import { CHOICE_PRODUCTION, OANDM_SUBACCOUNT_NAME } from "./dataverseNames";
 import { fetchAll, fetchPage } from "./client";
-import { listGeneratorTypes, listProjectTurbines, listPvTypes } from "./generators";
+import { listGeneratorTypeIds, listGeneratorTypes, listProjectTurbineNames, listProjectTurbines, listPvTypeIds, listPvTypes } from "./generators";
+import { generatorsPerf } from "./generatorsPerfFlags";
 import { mapLimit } from "./concurrency";
 import { loadCountryInflation } from "./countryInflation";
 import { and, chunk, dateOnlyOf as ymd, eq, guid, inList, lookupEq, lookupIn } from "./odata";
@@ -337,8 +338,13 @@ export async function listDeviceTypesOf(typeIds: readonly string[]): Promise<{ i
  * country inflation of COD + 1.
  */
 export async function loadGenerationInputs(project: ProductionProject): Promise<GenerationInputs> {
+  // PA-10 (`GENERATORS_PERF.typeReadsLean`): only the ids of the types and the id + name of the turbines are used below, so the reads select
+  // just those (the pre-write reads stay LIVE, OPT-24: nothing here is cached). OFF: the full lists, as before.
+  const lean = generatorsPerf().typeReadsLean;
   const [wtgTypes, pvTypes, oAndM] = await Promise.all([
-    listGeneratorTypes(project.id), listPvTypes(project.id), findOandMSubaccount(),
+    lean ? listGeneratorTypeIds(project.id) : listGeneratorTypes(project.id),
+    lean ? listPvTypeIds(project.id) : listPvTypes(project.id),
+    findOandMSubaccount(),
   ]);
   const typeIds = [...wtgTypes.map((t) => t.id), ...pvTypes.map((t) => t.id)];
   const year = inflationStartYear(project.cod);
@@ -346,7 +352,7 @@ export async function loadGenerationInputs(project: ProductionProject): Promise<
     project.countryId && project.technology !== null
       ? listGenerationAssumptions(project.countryId, project.technology) : Promise.resolve([]),
     countStandardContracts(project.id, oAndM?.id ?? null),
-    typeIds.length > 0 ? listProjectTurbines(typeIds) : Promise.resolve([]),
+    typeIds.length > 0 ? (lean ? listProjectTurbineNames(typeIds) : listProjectTurbines(typeIds)) : Promise.resolve([]),
     listDeviceTypesOf(typeIds),
     project.countryId ? loadCountryInflation(project.countryId) : Promise.resolve([]),
   ]);

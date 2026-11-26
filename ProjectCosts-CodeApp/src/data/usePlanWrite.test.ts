@@ -3,16 +3,20 @@
  * pinned as strings; the one addition is the "deleted by someone else" sentence for a gone row,
  * which only a guarded update (never set by a PM plan) can raise.
  */
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { DataError, RECORD_GONE_TEXT, RecordGoneError } from "@/platform/errors";
 import { BulkRowsGoneError } from "./bulkBackend";
 import { PlanError, PlanRefusedError } from "./executePlan";
-import { writeErrorMessage } from "./usePlanWrite";
+import { PARTLY_SAVED_NOTE, PartlySavedJobError, writeErrorMessage } from "./usePlanWrite";
+import { setPlanEngineFlags } from "./writePlan";
 
 const LQ = "“";
 const RQ = "”";
 
 describe("writeErrorMessage", () => {
+  // PLAN_PERMISSION_LOOKUP ships OFF at integration (WE-07, owner decision on the visible text); the tests of the lookup switch it ON.
+  afterEach(() => setPlanEngineFlags(null));
+
   it("UT-PLANWRITE-001 PM pin: a PlanError reads as the failed step plus how many changes were already saved", () => {
     const error = new PlanError(1, 3, "second", new DataError("save second", "boom"));
     expect(writeErrorMessage(error, "save")).toBe(
@@ -32,11 +36,46 @@ describe("writeErrorMessage", () => {
     expect(writeErrorMessage("text", "save")).toBe("text");
   });
 
-  it("UT-PLANWRITE-004 PM pin: permission is checked first on the error itself (a PlanError wrapper is not looked through)", () => {
+  it("UT-PLANWRITE-004 permission is checked first, on the error itself and (dvopt T-15, WE-07) inside a PlanError", () => {
+    setPlanEngineFlags({ permissionLookup: true });
     const forbidden = new DataError("save", "no", 403);
-    expect(writeErrorMessage(forbidden, "save the thing"))
-      .toBe("You do not have permission to save the thing. Ask your administrator if you believe you should.");
-    expect(writeErrorMessage(new PlanError(0, 1, "x", forbidden), "save the thing"))
+    const text = "You do not have permission to save the thing. Ask your administrator if you believe you should.";
+    expect(writeErrorMessage(forbidden, "save the thing")).toBe(text);
+    // WE-07: UT-PLANWRITE-004 used to pin that a PlanError wrapper was NOT looked through ("x" failed: save failed: no.).
+    expect(writeErrorMessage(new PlanError(0, 1, "x", forbidden), "save the thing")).toBe(text);
+  });
+
+  it("UT-PLANWRITE-033 a 403 inside a PlanError that had already saved changes says so after the permission sentence", () => {
+    setPlanEngineFlags({ permissionLookup: true });
+    const forbidden = new DataError("save", "no", 403);
+    const text = "You do not have permission to save the thing. Ask your administrator if you believe you should.";
+    expect(writeErrorMessage(new PlanError(2, 5, "x", forbidden), "save the thing"))
+      .toBe(`${text} 2 of 5 changes had already been saved.`);
+    expect(writeErrorMessage(new PartlySavedJobError(2, 5, "x", forbidden), "save the thing"))
+      .toBe(`${text} 2 of 5 changes had already been saved. ${PARTLY_SAVED_NOTE}`);
+  });
+
+  it("UT-PLANWRITE-034 the permission text is found a few causes deep, and a non-403 cause chain reads as before", () => {
+    setPlanEngineFlags({ permissionLookup: true });
+    const forbidden = new DataError("save", "no", 403);
+    const wrapped = new Error("outer", { cause: new Error("middle", { cause: forbidden }) });
+    expect(writeErrorMessage(new PlanError(0, 1, "x", wrapped), "save the thing")).toMatch(/^You do not have permission to save the thing/);
+    const notForbidden = new DataError("save", "boom", 500);
+    expect(writeErrorMessage(new PlanError(0, 1, "x", notForbidden), "save the thing")).toBe(`${LQ}x${RQ} failed: save failed: boom.`);
+  });
+
+  it("UT-PLANWRITE-035 with PLAN_PERMISSION_LOOKUP off the earlier text returns (the PlanError wrapper is not looked through)", () => {
+    setPlanEngineFlags({ permissionLookup: false });
+    try {
+      expect(writeErrorMessage(new PlanError(0, 1, "x", new DataError("save", "no", 403)), "save the thing"))
+        .toBe(`${LQ}x${RQ} failed: save failed: no.`);
+    } finally {
+      setPlanEngineFlags(null);
+    }
+  });
+
+  it("UT-PLANWRITE-036 PLAN_PERMISSION_LOOKUP ships OFF at integration until the owner approves the new text: the earlier text is the default", () => {
+    expect(writeErrorMessage(new PlanError(0, 1, "x", new DataError("save", "no", 403)), "save the thing"))
       .toBe(`${LQ}x${RQ} failed: save failed: no.`);
   });
 

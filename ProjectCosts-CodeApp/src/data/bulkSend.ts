@@ -35,6 +35,8 @@ import { UpdateMultipleService } from "@/generated/services/UpdateMultipleServic
 import { DataError, RecordGoneError, unwrap } from "@/platform/errors";
 import { logAction, logData, loggedCall } from "@/platform/requestLog";
 import { fetchAll } from "./client";
+import { POLICY_BULK_TRANSPORT, POLICY_VERIFY_READS } from "./requestFlags";
+import { readPolicyPage, sendWithPolicy } from "./requestPolicy";
 import { chunk, idIn } from "./odata";
 import { DELETE_CONCURRENCY, createGate, forEachLimit } from "./concurrency";
 import {
@@ -175,10 +177,10 @@ async function idRows(table: BulkTableInfo, batch: readonly string[]): Promise<r
   const options = { select: [table.primaryKey], filter: idIn(table.primaryKey, batch) };
   const label = `check existing ${table.entitySetName}`;
   if (table.entitySetName === CAPEX_CONTRACTS.entitySetName) {
-    return fetchAll(label, (o) => Vsb_capexprojectcontractsService.getAll(o), options);
+    return fetchAll(label, readPolicyPage(table.entitySetName, (o) => Vsb_capexprojectcontractsService.getAll(o), POLICY_VERIFY_READS), options);
   }
   if (table.entitySetName === CAPEX_COSTS.entitySetName) {
-    return fetchAll(label, (o) => Vsb_capexcostsService.getAll(o), options);
+    return fetchAll(label, readPolicyPage(table.entitySetName, (o) => Vsb_capexcostsService.getAll(o), POLICY_VERIFY_READS), options);
   }
   throw new Error(`existingIds: no reader for ${table.entitySetName}`);
 }
@@ -215,9 +217,15 @@ function bulkTransport(
   const send: BulkUpsertTransport = action === "create"
     ? (es, targets) => CreateMultipleService.CreateMultiple(es, [...targets])
     : (es, targets) => UpdateMultipleService.UpdateMultiple(es, [...targets]);
-  return (es, targets) => gated(
-    () => loggedBulkRequest(action, es, targets.length, () => send(es, targets)), onDuration, meter,
-  );
+  return (es, targets) => {
+    // Each ATTEMPT takes a slot of `saveGate` and logs its own DATA line; the policy sits OUTSIDE the gate, so the wait before a
+    // retry holds no slot (WE-05). T-11 (CA-01, `POLICY_BULK_TRANSPORT`): kind 'bulk', so only a 429 (not processed) is tried
+    // again; a 500 or a network failure may have landed and still reaches the caller's reconcile unchanged.
+    const attempt = () => gated(
+      () => loggedBulkRequest(action, es, targets.length, () => send(es, targets)), onDuration, meter,
+    );
+    return POLICY_BULK_TRANSPORT ? sendWithPolicy("bulk", attempt, { label: es }) : attempt();
+  };
 }
 
 /**
@@ -526,7 +534,11 @@ async function upsertEachRow(
     }
   }
   await forEachLimit(rows, async (row) => {
-    unwrap((await gated(() => send(row.id, row.fields), undefined, meter)) as Parameters<typeof unwrap>[0], label);
+    // T-11 (CA-01): the per-row PATCH carries the row's absolute values (and its stable id), so it is safe to send again on a 429,
+    // a 5xx or a network failure; the gate wraps one attempt.
+    const attempt = () => gated(() => send(row.id, row.fields), undefined, meter);
+    const answer = POLICY_BULK_TRANSPORT ? await sendWithPolicy("patchAbsolute", attempt, { label: table.entitySetName }) : await attempt();
+    unwrap(answer as Parameters<typeof unwrap>[0], label);
   }, ROW_WRITE_CONCURRENCY);
   return { requests: checks + rows.length };
 }
@@ -941,15 +953,20 @@ export async function deepInsertContracts(
   validateDeepInsert(groups, groupLabel);
   const track: GroupTrack = { path: "deep insert", durations: [] };
   const durations = track.durations as number[];
-  const settled = await Promise.allSettled(groups.map((group) => gated(
-    // One `[VSB] DATA create … (deep insert)` entry per POST: the contract and its nested rows (D78).
-    () => loggedCall(
-      "create", `${CAPEX_CONTRACTS.entitySetName} (deep insert)`,
-      async () => unwrap(await Vsb_capexprojectcontractsService.create(deepInsertBody(group) as never), groupLabel),
-      () => 1 + group.costs.length,
-    ),
-    (ms) => { durations.push(ms); }, opts.meter,
-  )));
+  const settled = await Promise.allSettled(groups.map((group) => {
+    const attempt = () => gated(
+      // One `[VSB] DATA create … (deep insert)` entry per POST: the contract and its nested rows (D78).
+      () => loggedCall(
+        "create", `${CAPEX_CONTRACTS.entitySetName} (deep insert)`,
+        async () => unwrap(await Vsb_capexprojectcontractsService.create(deepInsertBody(group) as never), groupLabel),
+        () => 1 + group.costs.length,
+      ),
+      (ms) => { durations.push(ms); }, opts.meter,
+    );
+    // T-11 (CA-01): a create is tried again only on a 429 (not processed). Never after a 500 or a network failure: the contract
+    // may exist, and the orchestrator's read-back / reconcile decides what to do.
+    return POLICY_BULK_TRANSPORT ? sendWithPolicy("create", attempt, { label: CAPEX_CONTRACTS.entitySetName }) : attempt();
+  }));
   const landed = groups.filter((_, i) => settled[i]?.status === "fulfilled");
   const failedIds = groups.filter((_, i) => settled[i]?.status !== "fulfilled").map((g) => g.contract.id);
   const causes: unknown[] = settled.flatMap((s) => (s.status === "rejected" ? [s.reason as unknown] : []));

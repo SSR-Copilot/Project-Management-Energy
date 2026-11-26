@@ -30,10 +30,13 @@ import type { Vsb_capexprojectcontracts } from "@/generated/models/Vsb_capexproj
 import { DataError, unwrap } from "@/platform/errors";
 import { logAction, loggedCall } from "@/platform/requestLog";
 import { trace } from "@/platform/telemetry";
-import { deleteRecord, fetchAll, updateRecordIfExists } from "./client";
+import type { IOperationResult } from "@microsoft/power-apps/data";
+import { createWithStableId } from "./stableCreateId";
+import { deleteIfExists, fetchAll, isAlreadyGone, updateRecordIfExists } from "./client";
 import { listActiveCapexAccounts, toAccountRow } from "./capexAccounts";
 import { DELETE_CONCURRENCY, WRITE_CONCURRENCY, mapLimit } from "./concurrency";
-import { ACTIVE, and, chunk, dateOnly, eq, lookupEq, lookupIn, numberOf } from "./odata";
+import { ACTIVE, and, chunk, dateOnly, eq, idIn, lookupEq, lookupIn, numberOf, or } from "./odata";
+import { costWrite } from "./costWritePolicy";
 import {
   COST_TYPE, CLOSING_DATE_TYPE, CONTRACT_TYPE, TOTAL_COSTS_TYPE, MARGIN_TYPE,
   type AccountRow, type BopContract, type CapexCostRow, type CapexProjectContract,
@@ -193,9 +196,11 @@ export async function listPaymentTargets(
  * Which CAPEX account each contract has claimed.
  * `Filter('BoP Contracts DevCo Costs', 'BoP Contract'.'BoP Projects Contracts' in …)`
  */
+export interface DevCoLinkRow { id: string; accountId: string; contractId: string }
+
 export async function listDevCoLinks(
   contractIds: readonly string[],
-): Promise<{ id: string; accountId: string; contractId: string }[]> {
+): Promise<DevCoLinkRow[]> {
   if (contractIds.length === 0) return [];
   const batches = await Promise.all(
     chunk(contractIds).map((ids) =>
@@ -345,7 +350,35 @@ export async function findBopStandardAssumption(args: {
   contractType: ContractType;
 }): Promise<Vsb_bopcontractsstandardassumptionses | undefined> {
   if (!args.countryId || args.technology === undefined) return undefined;
-  const rows = await fetchAll(
+  const rows = await readBopStandardAssumptions(args.countryId, args.technology, [args.contractType], 1);
+  return rows[0];
+}
+
+/**
+ * dvopt CB-13 (`BOP_ASSUMPTIONS_ONE_READ`): the Development AND the Construction standard assumption of one country and technology in ONE
+ * request (`vsb_contracttypes eq Development or eq Construction`, oldest first), where the screen made two `top 1` reads on every mount.
+ * The same rule per type as `findBopStandardAssumption` (TS-13: the OLDEST ACTIVE row of that type), taken on the client. The Map has no
+ * entry for a type with no row. Without a country or a technology: an empty Map and no request.
+ */
+export async function findBopStandardAssumptions(args: {
+  countryId: string | undefined;
+  technology: number | undefined;
+}): Promise<Map<number, Vsb_bopcontractsstandardassumptionses>> {
+  const out = new Map<number, Vsb_bopcontractsstandardassumptionses>();
+  if (!args.countryId || args.technology === undefined) return out;
+  const rows = await readBopStandardAssumptions(
+    args.countryId, args.technology, [CONTRACT_TYPE.Development, CONTRACT_TYPE.Construction],
+  );
+  for (const row of rows) {
+    const type = Number(row.vsb_contracttypes);
+    if (!out.has(type)) out.set(type, row); // oldest first: the first row of a type wins
+  }
+  return out;
+}
+
+/** The one read behind both: ACTIVE rows of the scope for one or more contract types, oldest first, optionally capped. */
+function readBopStandardAssumptions(countryId: string, technology: number, types: readonly ContractType[], top?: number) {
+  return fetchAll(
     "find BoP standard assumption",
     (o) => Vsb_bopcontractsstandardassumptionsesService.getAll(o),
     {
@@ -354,17 +387,16 @@ export async function findBopStandardAssumption(args: {
         "vsb_margintype", "vsb_marginpercentage", "vsb_marginfixedvalue",
       ],
       filter: and(
-        lookupEq("vsb_country", args.countryId),
-        eq("vsb_technology", args.technology),
-        eq("vsb_contracttypes", args.contractType),
+        lookupEq("vsb_country", countryId),
+        eq("vsb_technology", technology),
+        types.length === 1 ? eq("vsb_contracttypes", types[0] as ContractType) : or(...types.map((t) => eq("vsb_contracttypes", t))),
         ACTIVE,
       ),
       // Deterministic when two rows match (a data-quality slip): the OLDEST one, not whichever the server returns first.
       orderBy: ["createdon asc"],
-      top: 1,
+      ...(top !== undefined ? { top } : {}),
     },
   );
-  return rows[0];
 }
 
 /* ══════════════════════════════════════════════════════════════════ writes */
@@ -509,41 +541,41 @@ export async function saveContract(w: ContractWrite): Promise<BopContract> {
     // An UPDATE reads the row by primary key first (`updateRecordIfExists`): the SDK sends the PATCH without
     // `If-Match`, so against a contract another user deleted it would CREATE a new row holding only these columns,
     // without the owning business unit (rule 4). A deleted row now fails with `RecordGoneError`, nothing sent.
+    const id = w.id;
     return toContract(
-      await updateRecordIfExists<typeof payload, Vsb_bopprojectscontractses>(
-        "update BoP contract", ES.bopContracts, w.id, payload,
-      ),
+      await costWrite("patchAbsolute", ES.bopContracts, () => updateRecordIfExists<typeof payload, Vsb_bopprojectscontractses>(
+        "update BoP contract", ES.bopContracts, id, payload, { policy: false }, // QB-01: `costWrite` is the one retry layer
+      )),
     );
   }
-  const result = await loggedCall(
+  // dvopt CB-14 (`STABLE_CREATE_IDS`): the create carries a client id that a retry of the same save keeps, and a retried id is read
+  // back first, so a POST that landed but looked failed (network drop, gateway timeout) cannot create a second contract.
+  const created = await loggedCall(
     "create", ES.bopContracts,
-    async () => unwrap(await Vsb_bopprojectscontractsesService.create(payload as never), "create BoP contract"),
-    () => 1,
+    () => createWithStableId({
+      operation: "create BoP contract", entitySet: ES.bopContracts, idField: "vsb_bopprojectscontractsid", payload: payload as Record<string, unknown>,
+      create: (p) => costWrite("create", ES.bopContracts, () =>
+        Vsb_bopprojectscontractsesService.create(p as never) as unknown as Promise<IOperationResult<Record<string, unknown>>>),
+    }),
+    (r) => (r.reused ? 0 : 1),
   );
-  return toContract(result);
+  if (created.row) return toContract(created.row as unknown as Vsb_bopprojectscontractses);
+  // An earlier attempt of this save had landed: that row is the result.
+  const [existing] = await fetchAll(
+    "read back BoP contract",
+    (o) => Vsb_bopprojectscontractsesService.getAll(o),
+    { select: CONTRACT_SELECT, filter: idIn("vsb_bopprojectscontractsid", [created.id]) },
+  );
+  if (!existing) throw new DataError("create BoP contract", `the contract saved by the earlier attempt could not be read back`);
+  return toContract(existing);
 }
 
-/**
- * A row that is already gone is the outcome a delete wanted (another user deleted it, or the list was stale), so
- * HTTP 404 and Dataverse's `0x80040217` ("Does Not Exist") count as done, as `unwrapDeleteStrict` reads them. The
- * canvas `RemoveIf` on a missing row raised nothing either. Any other failure still throws.
- */
-export function isAlreadyGone(error: unknown): boolean {
-  return error instanceof DataError && (error.status === 404 || /0x80040217/i.test(error.message));
-}
-
-/** `deleteRecord` (rule 14) that treats an already-deleted row as deleted. */
-async function deleteIfExists(operation: string, entitySet: string, id: string): Promise<void> {
-  try {
-    await deleteRecord(operation, entitySet, id);
-  } catch (error) {
-    if (!isAlreadyGone(error)) throw error;
-  }
-}
+/** `isAlreadyGone` / `deleteIfExists` live in `./client` (dvopt CB-03); re-exported so existing imports keep working. */
+export { isAlreadyGone };
 
 /** Through `deleteRecord` (rule 14, CA-27): the generated `delete()` returns nothing, so a refusal looked like success. */
 export async function deleteContract(id: string): Promise<void> {
-  await deleteIfExists("delete BoP contract", ES.bopContracts, id);
+  await costWrite("delete", ES.bopContracts, () => deleteIfExists("delete BoP contract", ES.bopContracts, id, { policy: false }));
 }
 
 /**
@@ -589,27 +621,32 @@ export async function replaceDevCoLinks(args: {
   accounts: readonly { id: string; name: string }[];
   /** The level-3 accounts the picker showed; a stored link to any other account is left alone (D120 §2, N1). */
   visibleAccountIds?: readonly string[];
+  /**
+   * dvopt CB-11 (`CONTRACT_LINKS_WITH_PATCH`): the contract's stored links, ALREADY being read (started beside the contract save, which never
+   * changes them). Awaited here in place of the read this function would start itself. Ignored for a new contract.
+   */
+  existingLinks?: Promise<readonly DevCoLinkRow[]>;
 }): Promise<void> {
-  const existing = args.isNewContract ? [] : await listDevCoLinks([args.contractId]);
+  const existing = args.isNewContract ? [] : await (args.existingLinks ?? listDevCoLinks([args.contractId]));
   const { create, remove } = planDevCoLinks(existing, args.accounts, args.visibleAccountIds);
   if (create.length > 0 && !args.owningBusinessUnitId) warnNoOwningBusinessUnit(ES.devCoCosts);
   // The SDK never throws on a refusal: every create is checked (CONVENTIONS rule 3, CONTR-081), so
   // a refused link reaches the save's error banner like the canvas `IfError(... Notify(...))`.
   await mapLimit(create, (account) =>
     loggedCall("create", ES.devCoCosts, async () => unwrap(
-      await Vsb_bopcontractsdevcocostsesService.create({
+      await costWrite("create", ES.devCoCosts, () => Vsb_bopcontractsdevcocostsesService.create({
         vsb_name: account.name,
         "vsb_BoPContract@odata.bind": `/${ES.bopContracts}(${args.contractId})`,
         "vsb_Account@odata.bind": `/${ES.capexAccounts}(${account.id})`,
         ...(args.owningBusinessUnitId
           ? { "owningbusinessunit@odata.bind": `/${ES.businessUnits}(${args.owningBusinessUnitId})` }
           : {}),
-      } as never),
+      } as never)),
       "create DevCo cost link",
     ), () => 1), WRITE_CONCURRENCY);
   await mapLimit(
     remove,
-    (id) => deleteIfExists("delete a contract's DevCo-cost link", ES.devCoCosts, id),
+    (id) => costWrite("delete", ES.devCoCosts, () => deleteIfExists("delete a contract's DevCo-cost link", ES.devCoCosts, id, { policy: false })),
     DELETE_CONCURRENCY,
   );
 }
@@ -642,20 +679,24 @@ export async function savePaymentTarget(w: PaymentTargetWrite): Promise<PaymentT
   if (!w.id && !w.owningBusinessUnitId) warnNoOwningBusinessUnit(ES.paymentTargets);
   if (w.id) {
     // Same upsert guard as `saveContract`: never re-create a payment target another user deleted.
+    const id = w.id;
     return toPaymentTarget(
-      await updateRecordIfExists<typeof payload, Vsb_bopcontractspaymenttargetses>(
-        "update payment target", ES.paymentTargets, w.id, payload,
-      ),
+      await costWrite("patchAbsolute", ES.paymentTargets, () => updateRecordIfExists<typeof payload, Vsb_bopcontractspaymenttargetses>(
+        "update payment target", ES.paymentTargets, id, payload, { policy: false },
+      )),
     );
   }
   const result = await loggedCall(
     "create", ES.paymentTargets,
-    async () => unwrap(await Vsb_bopcontractspaymenttargetsesService.create(payload as never), "create payment target"),
+    async () => unwrap(
+      await costWrite("create", ES.paymentTargets, () => Vsb_bopcontractspaymenttargetsesService.create(payload as never)),
+      "create payment target",
+    ),
     () => 1,
   );
   return toPaymentTarget(result);
 }
 
 export async function deletePaymentTarget(id: string): Promise<void> {
-  await deleteIfExists("delete payment target", ES.paymentTargets, id);
+  await costWrite("delete", ES.paymentTargets, () => deleteIfExists("delete payment target", ES.paymentTargets, id, { policy: false }));
 }

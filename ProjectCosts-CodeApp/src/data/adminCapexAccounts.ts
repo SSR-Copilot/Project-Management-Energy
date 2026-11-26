@@ -17,8 +17,13 @@ import type { Vsb_capexaccountlists } from "@/generated/models/Vsb_capexaccountl
 import { RecordGoneError, unwrap } from "@/platform/errors";
 import { deleteRecord, fetchAll, fetchPage, updateRecordIfExists } from "./client";
 import { and, chunk, eq, gt, isNull, lookupEq, lookupIn, ne, or } from "./odata";
-import { updateRowsEach } from "./adminRowWrites";
-import { DELETE_CONCURRENCY, WRITE_CONCURRENCY, forEachLimit, mapLimit } from "./concurrency";
+import {
+  RowWriteError, deleteRowIfPresent, retrySleeper, settleEach, updateRecordJustCreated, updateRowsEach, updateRowsSettled,
+  type RowWriteClient, type SettledRows,
+} from "./adminRowWrites";
+import { ADMIN_OPT, HAS_CONTRACTS_POOL_WIDTH } from "./adminFlags";
+import { withDeleteRetry, type Sleeper } from "./retry";
+import { DELETE_CONCURRENCY, WRITE_CONCURRENCY, createGate, forEachLimit, mapLimit } from "./concurrency";
 import { nextOrder } from "@/domain/reorder";
 
 export const ACCOUNTS_TABLE = "vsb_capexaccountlists";
@@ -109,6 +114,18 @@ export async function hasContracts(accountId: string): Promise<boolean> {
     { select: ["vsb_capexprojectcontractid"], filter: lookupEq("vsb_account", accountId), maxPageSize: 1 },
   );
   return rows.length > 0;
+}
+
+/** One ceiling over every gated "has contracts" check of the CAPEX tree (AD-03). */
+const contractCheckGate = createGate(HAS_CONTRACTS_POOL_WIDTH);
+
+/**
+ * `hasContracts` for the tree's lazy per-subaccount checks (`useHasContracts`): at most `HAS_CONTRACTS_POOL_WIDTH` reads in flight at
+ * once across all of them, where every visible subaccount used to start its own read together (AD-03, `ADMIN_HAS_CONTRACTS_POOL`).
+ * Same read, same answer, same failure per id. The delete guards keep calling `hasContracts` directly (a fresh re-check).
+ */
+export function hasContractsPooled(accountId: string): Promise<boolean> {
+  return ADMIN_OPT.ADMIN_HAS_CONTRACTS_POOL ? contractCheckGate(() => hasContracts(accountId)) : hasContracts(accountId);
 }
 
 /**
@@ -259,7 +276,13 @@ export async function createCapexAccount(input: CreateInput): Promise<CreateResu
   const id = created.vsb_capexaccountlistid;
 
   try {
-    await updateExisting(id, STATE_INACTIVE, "set new CAPEX account inactive");
+    // AD-08 (`ADMIN_NO_REDUNDANT_EXISTS`): the row was created a few milliseconds ago, so its existence is not read again. A 404 still
+    // maps to `RecordGoneError`. OFF: the guarded update with its existence read.
+    if (ADMIN_OPT.ADMIN_NO_REDUNDANT_EXISTS) {
+      await updateRecordJustCreated("set new CAPEX account inactive", ACCOUNTS_TABLE, id, STATE_INACTIVE);
+    } else {
+      await updateExisting(id, STATE_INACTIVE, "set new CAPEX account inactive");
+    }
   } catch (inactiveError) {
     return { id, inactiveError };
   }
@@ -288,6 +311,13 @@ export async function saveCapexOrder(changes: readonly { id: string; order: numb
 
 /* ═══════════════════════════════════════════════════════════════════ deletes ══ */
 
+/**
+ * One row delete of this screen. AD-05 (`ADMIN_DELETE_ALREADY_GONE_OK`): a row that is already gone (404 / `0x80040217`) is done, not
+ * a failure; OFF it is `deleteRecord` as before.
+ */
+const deleteAdminRow = (operation: string, table: string, id: string): Promise<unknown> =>
+  ADMIN_OPT.ADMIN_DELETE_ALREADY_GONE_OK ? deleteRowIfPresent(operation, table, id) : deleteRecord(operation, table, id);
+
 export const DELETE_BLOCKED = {
   subaccountHasContracts:
     "This subaccount cannot be deleted because CAPEX contracts are booked on it. Deactivate it instead.",
@@ -300,7 +330,7 @@ export const DELETE_BLOCKED = {
 /** Re-check contracts server-side immediately before the DELETE. */
 export async function deleteCapexSubaccount(id: string): Promise<void> {
   if (await hasContracts(id)) throw new DeleteBlockedError(DELETE_BLOCKED.subaccountHasContracts);
-  await deleteRecord("delete CAPEX subaccount", ACCOUNTS_TABLE, id);
+  await deleteAdminRow("delete CAPEX subaccount", ACCOUNTS_TABLE, id);
 }
 
 /** No children (any status) AND no contracts on the account itself. */
@@ -312,7 +342,7 @@ export async function deleteCapexAccount(id: string): Promise<void> {
   if (children.value) throw new DeleteBlockedError(DELETE_BLOCKED.accountHasChildren);
   if (contracts.status === "rejected") throw contracts.reason;
   if (contracts.value) throw new DeleteBlockedError(DELETE_BLOCKED.accountHasContracts);
-  await deleteRecord("delete CAPEX account", ACCOUNTS_TABLE, id);
+  await deleteAdminRow("delete CAPEX account", ACCOUNTS_TABLE, id);
 }
 
 /* ═════════════════════════════════════════════════════ forecast cost clean-up ══ */
@@ -362,6 +392,18 @@ const rowsText = (n: number) => `${n} ${n === 1 ? "row" : "rows"}`;
 
 export interface CleanupResult { contracts: number; zeroed: number; deleted: number }
 
+/** Test seams of the clean-up: the sleeper its retries wait with and the SDK client of the zero PATCH. */
+export interface CleanupOptions { sleep?: Sleeper; client?: () => RowWriteClient }
+
+/**
+ * The in-step detail of a clean-up phase that left rows undone (AD-01): what landed, how many failed after their retries, and that
+ * a rerun is safe. NEW (dvopt): not a canvas string (the canvas had no clean-up message at all; this sits in the "Within this step"
+ * part of the CAPEX Accounts failure toast). No trailing full stop: the toast adds one.
+ */
+function cleanupDetail(what: string, settled: SettledRows, total: number, extra = ""): string {
+  return `${settled.landed} of ${total} ${what} (${settled.failures.length} failed after retries; running the clean-up again is safe, it skips the rows already done)${extra}`;
+}
+
 /** Id-list reads in flight at once (independent chunks of one filter; small, id-only pages). */
 const READ_FAN_OUT = 4;
 
@@ -379,7 +421,7 @@ const READ_FAN_OUT = 4;
  * as completed only when it had rows and landed.
  */
 export async function cleanUpForecastCosts(
-  accountIds: readonly string[], year: number, month: number,
+  accountIds: readonly string[], year: number, month: number, options: CleanupOptions = {},
 ): Promise<CleanupResult> {
   const contractPages = await mapLimit(chunk(accountIds), (ids) => fetchAll(
     "list CAPEX contracts for deactivated accounts",
@@ -406,10 +448,43 @@ export async function cleanUpForecastCosts(
 
   const zeroLabel = `Future-month costs set to 0 (${rowsText(toZero.length)})`;
   const deleteLabel = `Later-year costs deleted (${rowsText(toDelete.length)})`;
+  const zeroRows = toZero.map((id) => ({ vsb_capexcostid: id, vsb_cost: 0 }));
+
+  if (ADMIN_OPT.CLEANUP_RESILIENT) {
+    // AD-01 / T-04. Both phases are IDEMPOTENT and rerunnable (the zero filter selects only rows not yet at 0, the delete filter
+    // only what is left), so a throttled row is retried and a failed row does not stop the others. Same pool widths (8 and 16).
+    const sleep = retrySleeper(options.sleep);
+    const [zeroRes, deleteRes] = await Promise.all([
+      updateRowsSettled("zero future CAPEX cost", COSTS_TABLE, COST_KEY, zeroRows, { sleep, client: options.client }),
+      settleEach(
+        toDelete,
+        (id) => withDeleteRetry(() => deleteAdminRow("delete future CAPEX cost", COSTS_TABLE, id), { sleep }),
+        DELETE_CONCURRENCY,
+      ),
+    ]);
+    if (zeroRes.failures.length > 0) {
+      const deletesLanded = deleteRes.failures.length === 0 && toDelete.length > 0;
+      throw new PartialStepError(
+        zeroLabel, deletesLanded ? [deleteLabel] : [],
+        new RowWriteError(zeroRes.failures[0]!.error, zeroRes.landed > 0, zeroRes.landed, toZero.length),
+        cleanupDetail("future-month cost rows were set to 0", zeroRes, toZero.length, deleteRes.failures.length > 0
+          ? `; later-year costs: ${deleteRes.landed} of ${toDelete.length} rows were deleted` : ""),
+      );
+    }
+    if (deleteRes.failures.length > 0) {
+      throw new PartialStepError(
+        deleteLabel, toZero.length > 0 ? [zeroLabel] : [], deleteRes.failures[0]!.error,
+        cleanupDetail("later-year cost rows were deleted", deleteRes, toDelete.length),
+      );
+    }
+    return { contracts: contractIds.length, zeroed: toZero.length, deleted: toDelete.length };
+  }
+
+  // CLEANUP_RESILIENT off: the fail-fast pools of before, no retry.
   const [zeroed, deleted] = await Promise.allSettled([
-    updateRowsEach("zero future CAPEX cost", COSTS_TABLE, COST_KEY, toZero.map((id) => ({ vsb_capexcostid: id, vsb_cost: 0 }))),
+    updateRowsEach("zero future CAPEX cost", COSTS_TABLE, COST_KEY, zeroRows, { client: options.client }),
     countedForEach(
-      toDelete, (id) => deleteRecord("delete future CAPEX cost", COSTS_TABLE, id), DELETE_CONCURRENCY,
+      toDelete, (id) => deleteAdminRow("delete future CAPEX cost", COSTS_TABLE, id), DELETE_CONCURRENCY,
       (done, total, cause) => new PartialStepError(
         deleteLabel, [], cause, `${done} of ${total} later-year cost rows were deleted`,
       ),
