@@ -184,6 +184,9 @@ function formFromContract(c: BopContract, locale?: string): ContractForm {
       : c.totalCostsType === TOTAL_COSTS_TYPE.None
         ? TOTAL_COSTS_TYPE.Calculated : c.totalCostsType,
     totalCostsCalculated: s(c.totalCostsCalculated),
+    // The Development / Construction total box shows the STORED total until the first recalculation (`:6167`,
+    // BUG 15408); the Project Rights panel has no such box.
+    storedTotalCostOfContract: rights ? undefined : c.totalCostOfContract,
     // The Project Rights panel reads and writes `Total cost of contract [EUR]` (`:3590`, `:3757`).
     totalCostsOverwrite: rights ? s(c.totalCostOfContract) : s(c.totalCostsOverwrite),
     margin: c.margin,

@@ -812,6 +812,14 @@ export interface ContractForm {
    * (`:7705`), so it travels with the form. Absent on a form loaded from a stored contract.
    */
   totalCostsCalculatedRaw?: number;
+  /**
+   * The stored `Total cost of contract [EUR]` of the contract being edited. The canvas total box (`:6167`) shows
+   * `RoundUp(Coalesce(If(locContractDevCoCostsCahnged, <recomputed>), locSelectedContract.'Total cost of contract [EUR]', 0))`:
+   * the STORED total until the first recalculation (every recalculation sets that flag, `:7557`), the recomputed one
+   * after. Recomputing on open from the rounded stored Calculated figure instead showed 195,087 for a stored 195,086
+   * (BUG 15408, 26 Nov 2026). Absent on a new contract.
+   */
+  storedTotalCostOfContract?: number;
   totalCostsOverwrite: string;
   margin: boolean;
   marginType: MarginType;
@@ -1621,9 +1629,20 @@ export function recalculateForm(
 
 /**
  * The contract total as rendered, derived from whatever is currently in the form.
- * `txt_Contracts_RightPanel_NewEdit_TotalCosts_Contract.Default`.
+ * `txt_Contracts_RightPanel_NewEdit_TotalCosts_Contract.Value` (`:6167`).
+ *
+ * Until a recalculation has run (`totalCostsCalculatedRaw` is set by every one, as `locContractDevCoCostsCahnged` is on
+ * the canvas, `:7557`), an edited contract shows its STORED `Total cost of contract [EUR]`, rounded up — never a figure
+ * recomputed from the rounded stored Calculated value, which can be 1 above the stored total (BUG 15408). The Save
+ * writes the shown figure (`:7400`), so an untouched contract keeps its stored total.
+ *
+ * DIVERGENCE (display only): a recalculation without a closing date does not run here (`recalculateForm`), so the
+ * stored total stays on screen; the canvas would recompute from 0 Plan halves. Save needs a closing date either way.
  */
 export function contractTotalFromForm(form: ContractForm, locale?: string): number {
+  if (form.totalCostsCalculatedRaw === undefined && form.storedTotalCostOfContract !== undefined) {
+    return roundUpClean(form.storedTotalCostOfContract);
+  }
   const stored =
     form.totalCostsType === TOTAL_COSTS_TYPE.Calculated
       ? orZero(parseNumber(form.totalCostsCalculated, locale))

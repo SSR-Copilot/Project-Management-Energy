@@ -770,6 +770,23 @@ describe("contractTotalFromForm", () => {
     };
     expect(contractTotalFromForm(blank, "en-GB")).toBe(0);
   });
+
+  it("UT-CON-088 an edited contract shows its STORED total, rounded up, until a recalculation sets the raw total (BUG 15408)", () => {
+    // Stored Calculated 177,351 at 10 % recomputes to 195,086.1 -> 195,087, but the record holds 195,086 (computed at
+    // save time from the unrounded sum): the canvas shows the stored figure until `locContractDevCoCostsCahnged` (`:6167`).
+    const opened: ContractForm = {
+      ...validForm, totalCostsCalculated: "177351",
+      margin: true, marginType: MARGIN_TYPE.Percentage, marginPercentage: "10",
+      storedTotalCostOfContract: 195086,
+    };
+    expect(contractTotalFromForm(opened, "en-GB")).toBe(195086);
+    expect(contractTotalFromForm({ ...opened, storedTotalCostOfContract: 112500.5 }, "en-GB")).toBe(112501);
+    // After a recalculation the raw total is set and the stored figure no longer counts.
+    expect(contractTotalFromForm({ ...opened, totalCostsCalculatedRaw: 177350.5 }, "en-GB")).toBe(195086);
+    expect(contractTotalFromForm({ ...opened, totalCostsCalculatedRaw: 177351 }, "en-GB")).toBe(195087);
+    // A new contract has no stored total and recomputes as before.
+    expect(contractTotalFromForm({ ...opened, storedTotalCostOfContract: undefined }, "en-GB")).toBe(195087);
+  });
 });
 
 describe("contract card body (canvas parity)", () => {

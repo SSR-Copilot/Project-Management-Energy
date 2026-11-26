@@ -375,10 +375,23 @@ describe("Edit Contract panel (CONTR-054/055/056/076/077/078/079/082)", () => {
     expect(byId("txt_Contracts_RightPanel_NewEdit_MarginFixedValues")).toHaveValue("0");
   });
 
-  it("UT-CONTR-135 the contract total shows the RoundUp figure (CONTR-075)", async () => {
+  it("UT-CONTR-135 Edit opens on the STORED contract total, and shows the RoundUp of a recomputed one only after a recalculation (CONTR-075, BUG 15408)", async () => {
     await openEdit();
-    // 1,245 calculated at 2.5 % margin: 1,276.125 -> 1,277.
-    expect(byId("txt_Contracts_RightPanel_NewEdit_TotalCosts_Contract")).toHaveValue("1,277");
+    // `RoundUp(Coalesce(If(locContractDevCoCostsCahnged, …), 'Total cost of contract [EUR]', 0))` (`:6167`): the stored
+    // 112,500.5 as the card shows it — NOT 1,245 × 1.025 = 1,276.125 -> 1,277 recomputed from the rounded Calculated.
+    const total = byId("txt_Contracts_RightPanel_NewEdit_TotalCosts_Contract");
+    expect(total).toHaveValue("112,501");
+    // Margin No -> Yes is a recalculation (`:6022` ends in `Select(Recalculate)`): the margin is now 0, so the total
+    // is the RoundUp of the recomputed Calculated figure, which the Calculated box also shows.
+    fireEvent.click(screen.getByRole("radio", { name: "No" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Yes" }));
+    const calculated = Number(
+      (byId("txt_Contracts_RightPanel_NewEdit_TotalCosts_Calculated") as HTMLInputElement).value,
+    );
+    expect(Number.isFinite(calculated)).toBe(true);
+    expect(byId("txt_Contracts_RightPanel_NewEdit_TotalCosts_Contract"))
+      .toHaveValue(calculated.toLocaleString("en-US", { maximumFractionDigits: 0 }));
+    expect(byId("txt_Contracts_RightPanel_NewEdit_TotalCosts_Contract")).not.toHaveValue("112,501");
   });
 
   it("UT-CONTR-137 an invalid Plan figure shows its message under the read-only Plan box (CONTR-069)", async () => {
