@@ -139,11 +139,19 @@ export function formatInteger(value: number | null | undefined, language: Lang =
   return numberFormat(language, { maximumFractionDigits: 0 }).format(value);
 }
 
-/** `Round(x, places)` — Power Fx rounds half away from zero, unlike JS Math.round. */
+/**
+ * `Round(x, places)` — Power Fx rounds half away from zero, unlike JS Math.round.
+ *
+ * The scaled value is first snapped to 15 significant digits, as the canvas runtime does, so a
+ * binary representation error never turns a half into "just under a half": `0.1055 * 100` is
+ * 10.549999999999999 as a double, and `Round(…, 1)` must give 10.6 (the canvas value), not 10.5
+ * (user screenshot pair, Add Production WTG negative prices 2027, 25 Nov 2026). 15 digits is a
+ * double's exact decimal precision, so a value that is genuinely below the half is unchanged.
+ */
 export function pfxRound(x: number, places = 0): number {
   if (!Number.isFinite(x)) return NaN;
   const m = 10 ** places;
-  const v = x * m;
+  const v = Number((x * m).toPrecision(15));
   const r = v < 0 ? -Math.round(-v) : Math.round(v);
   return r / m;
 }
