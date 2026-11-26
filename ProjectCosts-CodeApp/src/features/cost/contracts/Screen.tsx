@@ -1187,9 +1187,9 @@ function ContractsScreenBody() {
             ) : null}
 
             {/*
-              * `con_Contracts_RightPanel_NewEdit_TotalCosts_Contract.Height: =If(rad_…_MarginType.Selected.Value = Percentage, 80, 0)`
-              * (`:6126`): the box is clipped away unless the type radio selects Percentage (`showTotalCostOfContract`). The
-              * total is computed and saved either way.
+              * `con_Contracts_RightPanel_NewEdit_TotalCosts_Contract` (`:6126`): the live canvas shows the box for both a
+              * Percentage and a Fixed Value margin; it is hidden only when the type radio selects nothing
+              * (`showTotalCostOfContract`). The total is computed and saved either way.
               */}
             {showTotalCostOfContract(form, editing ? selectedContract?.marginType : undefined, editing) ? (
               <CostField

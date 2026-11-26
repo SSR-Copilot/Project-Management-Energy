@@ -9,16 +9,16 @@ const pct = { margin: true, marginType: MARGIN_TYPE.Percentage };
 const fixed = { margin: true, marginType: MARGIN_TYPE.FixedValue };
 
 describe("showTotalCostOfContract", () => {
-  it("UT-CONTR-228 a new contract shows the box for Percentage and hides it for Fixed Value", () => {
+  it("UT-CONTR-228 a new contract shows the box for Percentage and for Fixed Value (as the live canvas does)", () => {
     expect(showTotalCostOfContract(pct, undefined, false)).toBe(true);
-    expect(showTotalCostOfContract(fixed, undefined, false)).toBe(false);
+    expect(showTotalCostOfContract(fixed, undefined, false)).toBe(true);
     expect(showTotalCostOfContract({ margin: false, marginType: MARGIN_TYPE.Percentage }, undefined, false)).toBe(true);
   });
 
-  it("UT-CONTR-229 an Edit with Margin = Yes follows the radio's type, stored or chosen", () => {
+  it("UT-CONTR-229 an Edit with Margin = Yes shows the box whatever the radio's type, stored or chosen", () => {
     expect(showTotalCostOfContract(pct, MARGIN_TYPE.Percentage, true)).toBe(true);
-    expect(showTotalCostOfContract(fixed, MARGIN_TYPE.Percentage, true)).toBe(false);
-    expect(showTotalCostOfContract(fixed, MARGIN_TYPE.FixedValue, true)).toBe(false);
+    expect(showTotalCostOfContract(fixed, MARGIN_TYPE.Percentage, true)).toBe(true);
+    expect(showTotalCostOfContract(fixed, MARGIN_TYPE.FixedValue, true)).toBe(true);
   });
 
   it("UT-CONTR-230 an Edit with Margin = No and a stored, non-blank type hides the box: the radio selects nothing", () => {

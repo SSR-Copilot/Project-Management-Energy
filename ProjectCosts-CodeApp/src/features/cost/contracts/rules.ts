@@ -1883,12 +1883,15 @@ export function marginChangePatch(
  *
  * Canvas `con_Contracts_RightPanel_NewEdit_TotalCosts_Contract.Height` (`:6126`):
  * `If(rad_…_MarginType.Selected.Value = 'Contract Margin Type'.Percentage, 80, 0)`; a zero height clips the box, there
- * is no `Visible`. What that radio has selected (`DefaultSelectedItems`, `:5890-5905`):
+ * is no `Visible`. The LIVE canvas app, however, shows the box for a Fixed Value margin as well (the Edit panel of a
+ * Development contract with Margin = Yes / Fixed Value renders "Total cost of contract [EUR]" = Calculated + Margin
+ * Fixed Value), so the extracted formula is stale and the box is shown for BOTH margin types.
+ * What the type radio has selected (`DefaultSelectedItems`, `:5890-5905`):
  *   - a contract whose stored Margin Type is blank, or a NEW contract: Percentage by default, then whatever the user
  *     picked (`form.marginType`; flipping Margin resets it to Percentage);
  *   - an EDIT of a contract with a stored, non-blank Margin Type and Margin = No: NOTHING (the formula's `If` has no
- *     else branch), so the box is hidden; with Margin = Yes: the stored (or chosen) type.
- * The total is still computed and saved when the box is hidden (a Fixed Value margin shows no total, as in the canvas).
+ *     else branch), so the box is hidden; with Margin = Yes: the stored (or chosen) type, and the box is shown.
+ * The total is still computed and saved when the box is hidden.
  */
 export function showTotalCostOfContract(
   form: Pick<ContractForm, "margin" | "marginType">,
@@ -1896,7 +1899,7 @@ export function showTotalCostOfContract(
   editing: boolean,
 ): boolean {
   if (editing && storedMarginType !== undefined && !form.margin) return false;
-  return form.marginType === MARGIN_TYPE.Percentage;
+  return form.marginType === MARGIN_TYPE.Percentage || form.marginType === MARGIN_TYPE.FixedValue;
 }
 
 /** `rad_…_MarginType.OnChange` (`:5911`): both boxes become 0 and the standard flag clears. */

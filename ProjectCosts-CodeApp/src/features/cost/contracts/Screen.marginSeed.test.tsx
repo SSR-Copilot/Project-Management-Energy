@@ -100,14 +100,14 @@ describe("the margin seed of a new contract", () => {
 describe("the Total cost of contract box (LD-1, canvas :6126)", () => {
   const TOTAL = "txt_Contracts_RightPanel_NewEdit_TotalCosts_Contract";
 
-  it("UT-CONTR-233 is hidden while the margin type is Fixed Value and back for Percentage; the box keeps its test id", async () => {
+  it("UT-CONTR-233 stays shown for both Fixed Value and Percentage margins; the box keeps its test id", async () => {
     render(makeTree());
     fireEvent.click(screen.getByTestId("command-newDevContarct"));
     expect(await screen.findByTestId(TOTAL)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("radio", { name: "Yes" }));
     expect(screen.getByTestId(TOTAL)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("radio", { name: "Fixed Value" }));
-    expect(screen.queryByTestId(TOTAL)).toBeNull();
+    expect(screen.getByTestId(TOTAL)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("radio", { name: "Percentage" }));
     expect(screen.getByTestId(TOTAL)).toBeInTheDocument();
   });
