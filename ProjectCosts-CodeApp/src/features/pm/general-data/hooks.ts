@@ -30,7 +30,7 @@
  *    but missing from the solution export; whether it fires on a project update is unknown (D25).
  */
 import { useCallback } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { ES, ES_ADMIN } from "@/data/dataverseNames";
 import { qk } from "@/data/keys";
 import type { ScreenData } from "@/data/notConnected";
@@ -38,6 +38,8 @@ import { usePlanWrite } from "@/data/usePlanWrite";
 import { useDebouncedValue } from "@/features/shared/useDebouncedValue";
 import { searchEntraPeople, getEntraPeople } from "@/data/adminGatesApprovals";
 import { listChecklistGates } from "@/data/checklist";
+import { checklistPerf } from "@/data/checklistPerfFlags";
+import { lookupPeopleAll, onePersonCache } from "@/data/personCache";
 import { loadMilestoneDurations } from "@/data/costBook";
 import { cancelGateApproval } from "@/data/flows";
 import { trace } from "@/platform/telemetry";
@@ -59,6 +61,7 @@ import {
   stateTrackingsQueryOptions, REFERENCE_STALE,
 } from "./queries";
 import { generalDataReloadKeys } from "./reload";
+import { gdCancelReusesCache } from "./gdPerfFlags";
 
 export type { AreaOption, MunicipalityRow, UtilizationOption } from "@/data/generalData";
 
@@ -161,7 +164,9 @@ export function useEntraPeople(ids: readonly (string | null)[]): ScreenData<Map<
   const wanted = ids.filter((i): i is string => Boolean(i));
   const q = useQuery({
     queryKey: qk.entraPeople(wanted),
-    queryFn: () => getEntraPeople(wanted),
+    // PB-16 (`ONE_PERSON_CACHE`): each person through the per-person Entra cache Team and the Check List share (same answers, same
+    // one-request-per-person lookups, same failure: the whole read rejects). OFF: `getEntraPeople`, uncached, as before.
+    queryFn: () => (onePersonCache() ? lookupPeopleAll(wanted, (id) => getEntraPeople([id])) : getEntraPeople(wanted)),
     enabled: wanted.length > 0,
     staleTime: REFERENCE_STALE,
   });
@@ -225,7 +230,9 @@ export function useGeneralDataWrites(projectId: string | undefined) {
   });
   /** OPT-13: the real reload of the screen's keys, for a first job that only marked them stale and then failed. */
   const reloadAll = () => Promise.all(keys.map((queryKey) => qc.invalidateQueries({ queryKey })));
-  return { ...writes, cancelDraftGateApprovalIfRunning, reloadAll };
+  // PB-15: the query client travels with the call so the step can read the Check List's cached gates.
+  const cancelWithCache: typeof cancelDraftGateApprovalIfRunning = (args) => cancelDraftGateApprovalIfRunning({ queryClient: qc, ...args });
+  return { ...writes, cancelDraftGateApprovalIfRunning: cancelWithCache, reloadAll };
 }
 
 /**
@@ -242,12 +249,22 @@ export async function cancelDraftGateApprovalIfRunning(args: {
   trackings: TrackingRow[];
   /** `gblProjectManagmentAppID` — the environment variable `vsb_ProjectManagementAppID`. */
   appId: string;
+  /** PB-15: where the Check List keeps the gates; without it (or with `GD_CANCEL_REUSES_CACHE` off) they are read. */
+  queryClient?: QueryClient;
 }): Promise<void> {
   if (!startClusterChanged(args.project, args.form)) return;
   const draftTracking = draftTrackingOf(args.trackings, args.projectStates);
   if (!draftTracking || !shouldCancelGateApproval(draftTracking)) return;
   try {
-    const gates = await listChecklistGates({ countryId: args.project.countryId, technology: args.project.technology ?? null });
+    const scope = { countryId: args.project.countryId, technology: args.project.technology ?? null };
+    // PB-15 (`GD_CANCEL_REUSES_CACHE`): the Check List's own gate query (same key and function, so its staleTime applies and a fresh
+    // entry is returned without a request); the step reads only when none is fresh. The key is the Check List's only with `scopedGates`.
+    const gates = args.queryClient && gdCancelReusesCache() && checklistPerf().scopedGates
+      ? await args.queryClient.fetchQuery({
+        queryKey: qk.checklistGates(scope.countryId ?? "", scope.technology ?? ""),
+        queryFn: () => listChecklistGates(scope),
+      })
+      : await listChecklistGates(scope);
     const payload = draftGateCancellationPayload({
       project: args.project, projectStates: args.projectStates,
       oldStartClusterNo: startClusterNo(args.project.startCluster), draftTracking, gates,

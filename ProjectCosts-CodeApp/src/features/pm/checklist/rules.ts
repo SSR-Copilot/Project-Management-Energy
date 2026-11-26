@@ -427,12 +427,20 @@ export function shouldBackfillSkippedClusters(args: {
  * The patch also blanks `Cluster Step State`, `Approval Due Date`, `FlowRunId` and
  * `FlowApprovalId`, exactly as the canvas does — those are the four columns a stale
  * approval would have left behind.
+ *
+ * PB-14 (`CHECKLIST_BACKFILL_GUARD`, `opts`): `existingTrackingIds` is the answer of one key-only read of the ids this plan would
+ * update (lower-case, as `existingTrackingIds` in `data/checklist.ts` returns them). An update of a tracking that is not in it is
+ * left out, with its log line: the row was deleted since the list was read, and the PATCH (an upsert, no `If-Match`) would bring it
+ * back as an orphan with no project and no owning business unit. Creates are never affected. `together` sends the writes as ONE
+ * concurrent group (`stopOnFailure`): the seven rows are independent, and only the Draft row is In Progress, the one value
+ * `SynchroniseProjectState` acts on, so no server automation depends on their order. Without `opts` the plan is the old one.
  */
 export function planSkippedClusterBackfill(
   states: ProjectStateRef[],
   trackings: TrackingRow[],
   startCluster: number,
   ctx: { projectId: string; owningBusinessUnitId: string | null },
+  opts?: { existingTrackingIds?: ReadonlySet<string>; together?: boolean },
 ): WritePlan {
   const plan = emptyPlan();
   const byCluster = new Map(
@@ -465,6 +473,8 @@ export function planSkippedClusterBackfill(
     };
 
     if (existing) {
+      // PB-14: the tracking was deleted since the list was read: no PATCH (it would re-create it as an orphan).
+      if (opts?.existingTrackingIds && !opts.existingTrackingIds.has(existing.id.toLowerCase())) continue;
       plan.writes.push({
         op: "update", entitySet: ES.projectStateTrackings, id: existing.id, data,
         reason: `${state.name} → ${approvalStateLabel(target)}`,
@@ -484,8 +494,13 @@ export function planSkippedClusterBackfill(
     }
     plan.log.push(`${state.name}: ${approvalStateLabel(target)}`);
   }
+  if (opts?.together && plan.writes.length > 0) plan.writes = together(plan.writes, { stopOnFailure: true });
   return plan;
 }
+
+/** PB-14: the ids of the tracking rows `plan` would PATCH (what the existence read asks about). */
+export const backfillUpdateIds = (plan: WritePlan): string[] =>
+  plan.writes.filter((w) => w.op === "update" && w.entitySet === ES.projectStateTrackings).map((w) => w.id as string);
 
 /**
  * The back-fill's source — `Filter('Project States', 'Is Visible On Checklist' = true && Name in
