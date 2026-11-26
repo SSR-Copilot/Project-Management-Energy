@@ -12,6 +12,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
+import { resetSeedOnce } from "./seedOnce";
 import type { AquisitionStatusRow, AquisitionTypeRow, PlanningProject, PlanningRecord } from "./rules";
 
 const s = vi.hoisted(() => ({
@@ -67,7 +68,7 @@ function screenReads() {
   }, { wrapper });
 }
 
-afterEach(() => { cleanup(); s.log.length = 0; s.gates = {}; s.seeds.length = 0; vi.clearAllMocks(); });
+afterEach(() => { cleanup(); resetSeedOnce(); s.log.length = 0; s.gates = {}; s.seeds.length = 0; vi.clearAllMocks(); });
 
 describe("Planning entry reads (OPT-16)", () => {
   it("UT-PLAN-OPT-101 the project, the planning row and the types all start before any answer; the permits wait for the row only", async () => {
@@ -105,9 +106,12 @@ describe("Planning entry reads (OPT-16)", () => {
     await release("statuses", []);
     expect(s.seeds).toEqual([]); // the project has not answered: no seed yet
     await release("project", PROJECT);
+    // PB-05 (`PLANNING_CREATE_ONCE`): the statuses are read again right before the create; the create follows that answer.
+    expect(s.seeds).toEqual([]);
+    await release("statuses", [], 1);
     expect(s.seeds).toEqual([1]);
     expect(s.gates.project).toHaveLength(1); // the seed joined the screen's in-flight read, no second request
-    expect(s.gates.statuses).toHaveLength(2); // the re-read after the seed
+    expect(s.gates.statuses).toHaveLength(3); // the first read, the re-check, the re-read after the seed
   });
 
   it("UT-PLAN-OPT-105 a missing planning row is created only after the project loaded, then read again; a project that does not exist seeds nothing", async () => {
@@ -116,8 +120,11 @@ describe("Planning entry reads (OPT-16)", () => {
     await release("row", null);
     expect(s.seeds).toEqual([]);
     await release("project", PROJECT);
+    // PB-05: the row is read again right before the create.
+    expect(s.seeds).toEqual([]);
+    await release("row", null, 1);
     expect(s.seeds).toEqual([1]);
-    await release("row", ROW, 1);
+    await release("row", ROW, 2);
     expect(result.current.planningQ.data).toEqual(ROW);
   });
 

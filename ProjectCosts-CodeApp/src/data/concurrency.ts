@@ -230,3 +230,95 @@ export function createGate(limit: number): Gate {
     inFlight: () => active,
   });
 }
+
+/* ═════════════════════════════════════════════════ global request gate (dvopt T-13) ══ */
+
+/**
+ * The total number of requests the shared helpers may have in flight at once, and the share of it writes may use (doc 21
+ * section 5). Initial values, to be calibrated from the DEV capture: Dataverse allows 52 concurrent requests per user and web
+ * server, 40 leaves room for what the gate does not see (a direct generated-service call), and 24 is today's Add Cost write gate.
+ */
+export const GLOBAL_REQUEST_CEILING = 40;
+export const GLOBAL_WRITE_LANE = 24;
+
+/**
+ * One ceiling across ALL pools (WE-03): `runRead` / `runWrite` start `task` once fewer than `ceiling` tasks are in flight in total
+ * AND (for a write) fewer than `writeLane` writes are. Reads may use the whole ceiling; a write never takes more than the lane,
+ * so a burst of writes leaves `ceiling - writeLane` slots for reads. A waiting task that cannot start (a write at the lane limit)
+ * does not block a later read that can. The slot is handed over at once when a task finishes, so `peak()` never exceeds the ceiling,
+ * even transiently.
+ *
+ * The gate wraps ONE ATTEMPT, never a retry loop: a caller that retries gates each attempt separately and sleeps OUTSIDE the gate,
+ * so a retry wait holds no slot (WE-05). Per-pool limits (`mapLimit`, `createGate`) stay as they are; this gate is the sum's ceiling.
+ * It sees only requests sent through it: not wired into any caller yet, behind `GLOBAL_GATE` (`data/requestFlags.ts`).
+ */
+export interface RequestGate {
+  runRead<T>(task: () => Promise<T>): Promise<T>;
+  runWrite<T>(task: () => Promise<T>): Promise<T>;
+  /** Highest total in flight since creation or the last `reset()`. */
+  peak(): number;
+  /** Highest writes in flight since creation or the last `reset()`. */
+  writePeak(): number;
+  /** Tasks holding a slot right now. */
+  inFlight(): number;
+  /** Writes holding a slot right now. */
+  writesInFlight(): number;
+  /** Tasks waiting for a slot right now. */
+  waiting(): number;
+  /** Restarts `peak()` / `writePeak()` from the current in-flight counts. */
+  reset(): void;
+}
+
+export function createRequestGate(o: { ceiling: number; writeLane: number }): RequestGate {
+  const ceiling = Math.max(1, Math.floor(o.ceiling));
+  const lane = Math.max(1, Math.min(ceiling, Math.floor(o.writeLane)));
+  let active = 0;
+  let writes = 0;
+  let peak = 0;
+  let writePeak = 0;
+  const queue: { write: boolean; start: () => void }[] = [];
+
+  const pump = (): void => {
+    for (let i = 0; i < queue.length && active < ceiling;) {
+      const next = queue[i] as { write: boolean; start: () => void };
+      if (next.write && writes >= lane) { i += 1; continue; }
+      queue.splice(i, 1);
+      active += 1;
+      if (next.write) writes += 1;
+      if (active > peak) peak = active;
+      if (writes > writePeak) writePeak = writes;
+      next.start();
+    }
+  };
+
+  const run = <T>(write: boolean, task: () => Promise<T>): Promise<T> => new Promise<T>((resolve, reject) => {
+    const start = (): void => {
+      const done = (): void => {
+        active -= 1;
+        if (write) writes -= 1;
+        pump();
+      };
+      // `new Promise` starts the task synchronously and turns a synchronous throw into a rejection, so `done` always runs later.
+      new Promise<T>((started) => { started(task()); }).then(
+        (value) => { done(); resolve(value); },
+        (error: unknown) => { done(); reject(error); },
+      );
+    };
+    queue.push({ write, start });
+    pump();
+  });
+
+  return {
+    runRead: (task) => run(false, task),
+    runWrite: (task) => run(true, task),
+    peak: () => peak,
+    writePeak: () => writePeak,
+    inFlight: () => active,
+    writesInFlight: () => writes,
+    waiting: () => queue.length,
+    reset: () => { peak = active; writePeak = writes; },
+  };
+}
+
+/** The app's one global gate (ceiling 40, write lane 24). Used by `sendWithPolicy` while `GLOBAL_GATE` is on. */
+export const requestGate: RequestGate = createRequestGate({ ceiling: GLOBAL_REQUEST_CEILING, writeLane: GLOBAL_WRITE_LANE });

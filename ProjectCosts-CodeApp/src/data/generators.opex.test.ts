@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const opexGetAll = vi.fn();
 const bridgeGetAll = vi.fn();
@@ -7,6 +7,7 @@ vi.mock("@/generated/services/Vsb_devicetypesinprojectsService", () => ({ Vsb_de
 
 import { listOpexCostIds, listOpexCostIdsForBridges, loadOpexDependency } from "./generators";
 import { ACTIVE, and, lookupEq, lookupIn } from "./odata";
+import { setGeneratorsPerfFlags } from "./generatorsPerfFlags";
 
 const PROJECT = "11111111-1111-1111-1111-111111111111";
 const guidOf = (n: number): string => `00000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
@@ -109,6 +110,9 @@ describe("listOpexCostIdsForBridges (DEL-3)", () => {
 });
 
 describe("loadOpexDependency (DEL-3: any active bridge)", () => {
+  // dvopt PA-15 (omGuardOneRead) is pinned by generators.omGuard.test.ts; these cases pin the two-read path, which stays behind the switch.
+  beforeEach(() => setGeneratorsPerfFlags({ omGuardOneRead: false }));
+  afterEach(() => setGeneratorsPerfFlags(null));
   const bridges = (rows: { id: string; state: number }[]) =>
     bridgeGetAll.mockResolvedValueOnce(ok(rows.map((r) => ({ vsb_devicetypesinprojectid: r.id, statecode: r.state }))));
 

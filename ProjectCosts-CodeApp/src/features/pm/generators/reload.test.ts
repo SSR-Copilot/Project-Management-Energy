@@ -36,7 +36,7 @@ const PID = "11111111-1111-1111-1111-111111111111";
 const ON = GENERATORS_PERF;
 
 describe("GENERATORS_PERF — the switches (D141)", () => {
-  it("UT-GENPERF-001 the shipped defaults: phase A switches and parallelChunks ON, the three risky ones OFF", () => {
+  it("UT-GENPERF-001 the shipped defaults: phase A switches and parallelChunks ON, the three risky ones OFF, and flowBesideReads OFF at integration until the owner approves (PA-05)", () => {
     expect(GENERATORS_PERF).toEqual({
       targetedReload: true, gateByList: true, prefetch: true, parallelChunks: true,
       readsByProject: false, optimisticToggle: false, persistCatalogue: false,
@@ -46,6 +46,8 @@ describe("GENERATORS_PERF — the switches (D141)", () => {
       deleteReadWaves: true,
       // OPT-07a S4-05 (B6): the project's country from the shared 30-minute countries list, ON.
       countryFromSharedList: true,
+      // dvopt T-22 (PA-05, PA-08, PA-09, PA-10, PA-15): five network trims, four ON; flowBesideReads ships OFF at integration (PA-05).
+      flowBesideReads: false, productionLeanReload: true, turbinesRefetchOnce: true, typeReadsLean: true, omGuardOneRead: true,
     });
     expect(generatorsPerf()).toEqual(GENERATORS_PERF);
   });

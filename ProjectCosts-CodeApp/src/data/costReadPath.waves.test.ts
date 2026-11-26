@@ -87,6 +87,8 @@ beforeEach(async () => {
   // The shared reads are remembered between loads on purpose; each test starts cold.
   (await import("./capexChart")).invalidateCapexChart();
   (await import("./currencies")).invalidateCurrencies();
+  // CA-08 (dvopt): the SPV/DevCo mapping is shared and remembered too; each test starts cold.
+  (await import("./costBook")).invalidatePayerDefaults();
 });
 
 /**

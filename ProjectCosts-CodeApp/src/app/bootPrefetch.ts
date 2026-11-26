@@ -17,6 +17,7 @@ import { localeInfo } from "@/domain/locale";
 import { ensureInitialized } from "@/platform/powerClient";
 import { trace } from "@/platform/telemetry";
 import { bootTarget, needsLaunchParams, type BootTarget } from "./bootPlan";
+import { bootDvopt } from "@/data/bootDvoptFlags";
 import { generatorsPerf } from "@/data/generatorsPerfFlags";
 import {
   COST_SCREEN_LOADERS, PM_SCREEN_LOADERS, loadGeneralDataScreen, loadGeneratorsScreen, loadProjectOverviewScreen,
@@ -42,7 +43,17 @@ export async function prefetchTarget(qc: QueryClient, target: BootTarget): Promi
    * only General Data did. It is a prefetch like the rest: the same key, a failure is traced and the gate's own read retries.
    */
   if (target.kind === "pm-screen" || target.kind === "cost") {
-    await quietly("session project", () => qc.prefetchQuery(sessionProjectQueryOptions(target.projectId, target.kind === "cost" ? "full" : "pm")));
+    const session = quietly("session project", () => qc.prefetchQuery(sessionProjectQueryOptions(target.projectId, target.kind === "cost" ? "full" : "pm")));
+    // PB-03 (`BOOT_PREFETCH_SCREEN_READS`): the PM screen's own first reads start beside the session project, not after the gate.
+    if (target.kind === "pm-screen" && bootDvopt().prefetchScreenReads) {
+      const { slug, projectId } = target;
+      await Promise.all([session, quietly(`${slug} screen reads`, async () => {
+        const { prefetchPmScreenReads } = await import("./pmScreenPrefetch");
+        await prefetchPmScreenReads(qc, slug, projectId);
+      })]);
+      return;
+    }
+    await session;
     return;
   }
 

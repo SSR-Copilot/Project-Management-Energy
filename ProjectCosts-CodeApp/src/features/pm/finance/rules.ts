@@ -3022,12 +3022,19 @@ export interface StoredRepaymentRow {
   financingInputId: string;
   year: number;
   amount: number;
+  /**
+   * The amount as stored, `null` when the column is blank (`amount` reads a blank as 0). Set by the reader; `planTrancheSave` skips an
+   * unchanged row only when this is present (PA-03, `changedRowsOnly`), so a stored blank is never mistaken for a 0.
+   */
+  storedAmount?: number | null;
 }
 
 /** One `Financing Input Step-Up margins` row, with its parent tranche. */
 export interface StoredStepUpMarginRow extends StoredStepUpRow {
   id: string;
   financingInputId: string;
+  /** True when a numeric column of the stored row is blank (the reader reads a blank as 0). Only `false` lets `changedRowsOnly` skip the row. */
+  hasBlank?: boolean;
 }
 
 /** `FinancingInputStatus` of a row (the cascade and the toggles read it). */
@@ -3549,10 +3556,16 @@ export function planTrancheSave(input: {
   project: FinanceProject | null;
   seniorDebtCategoryId: string | null;
   duplicateIds: readonly string[];
-  storedRepayments: readonly { id: string; year: number; financingInputId: string }[];
+  storedRepayments: readonly { id: string; year: number; financingInputId: string; storedAmount?: number | null }[];
   storedStepUps: readonly StoredStepUpMarginRow[];
   language?: Lang;
   stepUpCanvasParity?: boolean;
+  /**
+   * PA-03 (`FinancePerfFlags.changedRowsOnly`, dvopt T-32; the caller passes the switch). true: an existing repayment or step-up row
+   * whose stored values equal the ones this Save would write is NOT written again; new rows, changed rows and the deletes are as ever.
+   * false / absent: every row is written, as the canvas `ForAll(Patch)` (the canvas-parity path).
+   */
+  changedRowsOnly?: boolean;
 }): WritePlan {
   const { form, project } = input;
   const lang = input.language ?? "en-US";
@@ -3575,9 +3588,15 @@ export function planTrancheSave(input: {
   writes.push(...repay.toDelete.map((id): PlannedWrite =>
     ({ op: "delete", entitySet: ES_FINANCE.financingInputsRepaymentAmounts, id, reason: "delete a repayment amount" })));
   for (const r of repay.toUpsert) {
+    const amount = valueOrNull(form.repaymentRows.find((x) => x.year === r.year)?.value ?? "", lang);
+    if (input.changedRowsOnly && r.recordId) {
+      // PA-03: the row is matched by year, so its name and year column are what this Save would write; only the amount can differ.
+      const stored = ownRepayments.find((x) => x.id === r.recordId);
+      if (stored && stored.storedAmount !== undefined && stored.storedAmount === amount) continue;
+    }
     const data = {
       [REPAYMENT_COL.name]: r.name,
-      [REPAYMENT_COL.amount]: valueOrNull(form.repaymentRows.find((x) => x.year === r.year)?.value ?? "", lang),
+      [REPAYMENT_COL.amount]: amount,
       [REPAYMENT_COL.year]: String(r.year),
       ...children,
     };
@@ -3588,6 +3607,12 @@ export function planTrancheSave(input: {
   const ownStepUps = form.trancheId ? input.storedStepUps.filter((s) => s.financingInputId === form.trancheId) : [];
   const steps = (input.stepUpCanvasParity ? stepUpWritesCanvasParity : stepUpWrites)(form.stepUpEnabled, form.stepUpRows, ownStepUps, lang);
   for (const s of steps.toUpsert) {
+    if (input.changedRowsOnly && s.id) {
+      // PA-03: the name is `<DurationYY> - Value` and DurationYY = start year + duration, so the four numbers decide it.
+      const stored = ownStepUps.find((x) => x.id === s.id);
+      if (stored && stored.hasBlank === false && stored.order === s.order && stored.startYear === s.startYear
+        && stored.duration === s.duration && stored.margin === s.margin) continue;
+    }
     const row = form.stepUpRows.find((x) => x.id === s.order);
     const data = {
       [STEPUP_COL.name]: `${row?.durationYY ?? ""} - Value`,

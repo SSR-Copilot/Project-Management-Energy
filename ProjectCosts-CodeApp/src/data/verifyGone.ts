@@ -13,6 +13,8 @@ import { guardedCall, primaryKeyOf, type GuardedUpdateClient } from "./client";
 import { forEachLimit } from "./concurrency";
 import { chunk, idIn } from "./odata";
 import { loggedCall } from "@/platform/requestLog";
+import { POLICY_VERIFY_READS } from "./requestFlags";
+import { sendWithPolicy } from "./requestPolicy";
 
 /** The one read `verifyGone` needs from the SDK client (the real `getClient` result has it; tests stub it). */
 export type VerifyClient = Pick<GuardedUpdateClient, "retrieveMultipleRecordsAsync">;
@@ -60,10 +62,14 @@ export async function verifyGone(
     const filter = idIn(primaryKey, batch);
     const rows = await loggedCall(
       "read", `verify deleted ${entitySet}`,
-      () => guardedCall(`verify deleted ${entitySet}`, () =>
-        client.retrieveMultipleRecordsAsync<Record<string, unknown>>(entitySet, {
+      () => guardedCall(`verify deleted ${entitySet}`, () => {
+        const read = () => client.retrieveMultipleRecordsAsync<Record<string, unknown>>(entitySet, {
           select: [primaryKey], ...(filter ? { filter } : {}), maxPageSize: batch.length,
-        })),
+        });
+        // T-11 (CA-01, CA-17): a read made inside a write path (a mutation, never retried by TanStack). A 429 or a transient
+        // failure is tried again; a read that keeps failing still THROWS, never "gone". POLICY_VERIFY_READS off = one attempt.
+        return POLICY_VERIFY_READS ? sendWithPolicy("read", read, { label: entitySet }) : read();
+      }),
       (found) => found.length,
     );
     for (const row of rows) {

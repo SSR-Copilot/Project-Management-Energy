@@ -683,6 +683,26 @@ async function loadDataset(
   return { templates, checklistHeaderId, checklists, approvals, people, checklistError, peopleError };
 }
 
+/**
+ * AD-06 (`ADMIN_GATES_NARROW_RELOAD`): re-reads ONE slice of a loaded dataset after an Active-pill write: the gate templates for a
+ * gate toggle, the task approvals for a task toggle. The header, the checklist tasks and the other half are reused from `current`;
+ * only Portfolio Managers not yet resolved are asked of the directory. Throws on any failed read (the caller then falls back to the full
+ * reload). DIVERGENCE (freshness only): another user's edit in the half this click did not touch shows at the next full load.
+ */
+async function reloadSlice(
+  kind: "gate" | "task", countryId: string, techCode: number, current: GatesDataset,
+): Promise<GatesDataset> {
+  const known = GATES_REUSE_PEOPLE ? current.people : undefined;
+  if (kind === "gate") {
+    const templates = await listGateTemplates(countryId, techCode);
+    const asked = await resolveUnknownPeople(templates.map((t) => t.pmId ?? ""), known);
+    return { ...current, templates, people: { ...current.people, ...asked } };
+  }
+  const approvals = current.checklists.length ? await listGateTaskApprovals(current.checklists.map((c) => c.id)) : [];
+  const asked = await resolveUnknownPeople(approvals.map((a) => a.pmId ?? ""), known);
+  return { ...current, approvals, people: { ...current.people, ...asked } };
+}
+
 /** Names the unavailable table when the error came from one of the missing ones. */
 export function describeTableFailure(error: unknown): string {
   const operation = error instanceof DataError ? error.operation : "";
@@ -710,6 +730,7 @@ export type Payload = Record<string, string | number | boolean | null>;
  */
 export const projectGatesRepository = {
   loadDataset,
+  reloadSlice,
   searchPeople,
   resolvePeople,
 };

@@ -42,6 +42,7 @@ import {
   type CatalogModel, type GeneratorTypeRow, type GeneratorsProject, type LandLeaseCostRow, type PlantSupplierOption, type ProjectPlanning,
   type PvModuleOption, type SimpleTypeRow, type TurbineRow,
 } from "@/features/pm/generators/rules";
+import { logAction } from "@/platform/requestLog";
 import { registerDefaultBulkBackend } from "./bulkBackend";
 import { fetchAll, fetchPage } from "./client";
 import { mapLimit } from "./concurrency";
@@ -268,6 +269,30 @@ export async function listGeneratorTypes(projectId: string): Promise<GeneratorTy
   }));
 }
 
+/**
+ * PA-10 (dvopt T-22, `GENERATORS_PERF.typeReadsLean`): the project's WTG type ids, oldest first, for a caller that uses nothing else
+ * (Production's pre-write reads, Finance's turbine count). The same filter and order as `listGeneratorTypes`, with the `$select` of the
+ * id alone (the full read carries 12 columns and the formatted-value annotation of the generator lookup).
+ */
+export async function listGeneratorTypeIds(projectId: string): Promise<{ id: string }[]> {
+  const rows = raw(await fetchAll(
+    "load the project's generator type ids",
+    (o) => Vsb_generatortypeinprojectsService.getAll(o),
+    { select: [GEN_TYPE_COL.id], filter: lookupEq("vsb_project", projectId), orderBy: ["createdon asc"] },
+  ));
+  return rows.map((r) => ({ id: String(r[GEN_TYPE_COL.id]) }));
+}
+
+/** PA-10: `listPvTypes` for its ids only (same filter and order; the `$select` is the id). */
+export async function listPvTypeIds(projectId: string): Promise<{ id: string }[]> {
+  const rows = raw(await fetchAll(
+    "load the project's PV module type ids",
+    (o) => Vsb_pvmoduletypeinprojectsService.getAll(o),
+    { select: ["vsb_pvmoduletypeinprojectid"], filter: lookupEq("vsb_project", projectId), orderBy: ["createdon asc", "vsb_name asc"] },
+  ));
+  return rows.map((r) => ({ id: String(r.vsb_pvmoduletypeinprojectid) }));
+}
+
 const TURBINE_SELECT = [
   GEN_INSTANCE_COL.id, GEN_INSTANCE_COL.name, GEN_INSTANCE_COL.moduleTypeInProject,
   GEN_INSTANCE_COL.effectiveCapacity, GEN_INSTANCE_COL.effectiveHubHeight,
@@ -286,6 +311,15 @@ export async function listProjectTurbines(typeIds: readonly string[]): Promise<T
     (o) => Vsb_generatorinprojectsService.getAll(o),
     { select: TURBINE_SELECT, filter: lookupIn("vsb_moduletypeinprojectid", part) },
   )).map(toTurbine));
+}
+
+/** PA-10: `listProjectTurbines` for the id and the name only (same filter, chunking and order; 2 columns instead of 10). */
+export async function listProjectTurbineNames(typeIds: readonly string[]): Promise<{ id: string; name: string | null }[]> {
+  return readChunks(typeIds, async (part) => raw(await fetchAll(
+    "load the project's turbines",
+    (o) => Vsb_generatorinprojectsService.getAll(o),
+    { select: [GEN_INSTANCE_COL.id, GEN_INSTANCE_COL.name], filter: lookupIn("vsb_moduletypeinprojectid", part) },
+  )).map((r) => ({ id: String(r[GEN_INSTANCE_COL.id]), name: str(r[GEN_INSTANCE_COL.name]) })));
 }
 
 const toTurbine = (r: Raw): TurbineRow => ({
@@ -682,6 +716,35 @@ export async function listOpexCostIdsForBridges(projectId: string, bridgeIds: re
   return [...new Set([...headIds, ...members.map((r) => String(r.vsb_opexprojectcostid))])];
 }
 
+/**
+ * The navigation property of an O&M cost's `DeviceTypeInProject` lookup (SchemaName; `customizations.xml`,
+ * relationship `vsb_opexprojectcost_DeviceTypeInProject_vsb_d`). The repo already filters through single-valued navigation
+ * properties (`TURBINES_BY_PROJECT_NAVIGATION`, `adminContract.ts`); here only plain `_x_value` / `statecode` columns of the bridge row
+ * are compared, never the polymorphic navigation of the bridge's own `TypeInProjectId`.
+ */
+export const OPEX_DEVICE_TYPE_NAVIGATION = "vsb_DeviceTypeInProject";
+
+/** The one-read O&M guard's filter (exported for the tests and the DEV probe). */
+export const opexOfTypeFilter = (projectId: string, typeId: string): string => and(
+  lookupEq("vsb_project", projectId), ACTIVE,
+  `${OPEX_DEVICE_TYPE_NAVIGATION}/${lookupEq("vsb_typeinprojectid", typeId)}`,
+  `${OPEX_DEVICE_TYPE_NAVIGATION}/${ACTIVE}`,
+) as string;
+
+/**
+ * PA-15 (`GENERATORS_PERF.omGuardOneRead`): is there an ACTIVE O&M cost of the project on an ACTIVE device-type row of this type?
+ * One request (`top: 1`, stops at the first hit) instead of the device-type read and then the O&M read. Same question as the two
+ * reads: `hasActiveOpexCostOn(projectId, activeBridgeIdsOf(type))`.
+ */
+async function hasActiveOpexCostOfType(projectId: string, typeId: string): Promise<boolean> {
+  const rows = raw(await fetchPage(
+    "check the type's O&M costs",
+    (o) => Vsb_opexprojectcostsService.getAll(o),
+    { select: ["vsb_opexprojectcostid"], filter: opexOfTypeFilter(projectId, typeId), top: 1 },
+  ));
+  return rows.length > 0;
+}
+
 /** Does any ACTIVE O&M cost of the project point at one of these bridge rows? (`top: 1`, stops at the first hit.) */
 async function hasActiveOpexCostOn(projectId: string, bridgeIds: readonly string[]): Promise<boolean> {
   for (const part of chunk(bridgeIds)) {
@@ -710,6 +773,18 @@ async function hasActiveOpexCostOn(projectId: string, bridgeIds: readonly string
 export async function loadOpexDependency(
   projectId: string, typeId: string,
 ): Promise<{ hasActiveDeviceType: boolean; hasActiveOpexCost: boolean }> {
+  if (generatorsPerf().omGuardOneRead) {
+    try {
+      const hit = await hasActiveOpexCostOfType(projectId, typeId);
+      // The guard (`capacityGuardReason`) uses the two flags only as `hasActiveDeviceType && hasActiveOpexCost`: an active O&M cost on an
+      // active device-type row of the type is exactly both being true. With no such cost both are reported false (the two-read form
+      // reported an active device-type row without a cost as `{ true, false }`; the guard's answer is the same).
+      return { hasActiveDeviceType: hit, hasActiveOpexCost: hit };
+    } catch (error) {
+      // The server refused the one-read filter (it has not been run against every environment): the two reads decide, as before.
+      logAction(`O&M guard: the single read was refused (${error instanceof Error ? error.message.slice(0, 120) : "unknown"}); using the two reads`, "warn");
+    }
+  }
   const active = (await listDeviceTypes(typeId)).filter((d) => d.active);
   if (active.length === 0) return { hasActiveDeviceType: false, hasActiveOpexCost: false };
   return { hasActiveDeviceType: true, hasActiveOpexCost: await hasActiveOpexCostOn(projectId, active.map((d) => d.id)) };

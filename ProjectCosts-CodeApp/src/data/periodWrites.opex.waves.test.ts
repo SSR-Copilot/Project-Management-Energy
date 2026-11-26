@@ -67,7 +67,13 @@ vi.mock("./client", () => ({
     await fake.hold("delete", "opex", id);
     if (fake.state.failing.has(id)) throw new Error(`refused ${id}`);
   },
+  // dvopt CB-03: the app's deletes go through `deleteIfExists`; with no 404 in this double it is `deleteRecord`.
+  deleteIfExists: async (_operation: string, _entitySet: string, id: string) => {
+    await fake.hold("delete", "opex", id);
+    if (fake.state.failing.has(id)) throw new Error(`refused ${id}`);
+  },
 }));
+vi.mock("./costUpdateGuard", () => ({ assertRowsExist: async () => undefined, rowExists: async () => false }));
 vi.mock("@/generated/services/Vsb_opexprojectcostsService", () => ({
   Vsb_opexprojectcostsService: fake.service("opex", "vsb_opexprojectcostid"),
 }));

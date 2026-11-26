@@ -53,7 +53,7 @@ import { costLabel, currencyCode } from "../contracts/rules";
 import { PcfGrid } from "./PcfGrid";
 import { CommentsPanel } from "./CommentsPanel";
 import {
-  buildStandardOptions, checkStandardContractClick, standardAssumptionAmount, standardContractRefusal,
+  buildStandardOptions, checkStandardContractClick, isPerWtgUnit, standardAssumptionAmount, standardContractRefusal,
 } from "./standardContracts";
 import {
   clusterPayments as clusterMoneyPayments, contractTotalToStore, EDITED_FROM_SPREADSHEET_WARNING, individualSaveError, showEditedFromSpreadsheetWarning,
@@ -632,7 +632,7 @@ export default function CapexCostsScreen() {
     id: o.assumption.id, subaccountId: o.assumption.subaccountId, name: o.assumption.description,
   }));
 
-  const addStandardContract = (subaccountId: string, assumptionId: string) => {
+  const addStandardContract = (subaccountId: string, assumptionId: string, wtgCount?: number) => {
     const option = standardOptions.find(o => o.assumption.id === assumptionId);
     const check = checkStandardContractClick({
       subaccountSelected: Boolean(subaccountId),
@@ -649,8 +649,17 @@ export default function CapexCostsScreen() {
     // (`:18609-18634`). The menu offers the assumption by start cluster only (`isOfferedByStartCluster`).
     const refusal = standardContractRefusal(eligible);
     if (refusal) { notify.info(refusal); return; }
+    // CA-16: the active-WTG count is read lazily (only a category that offers a per-WTG standard contract reads it). A click that
+    // beats that read waits for it (one read, or the cache) and then runs again with the count, instead of booking 0.
+    if (wtgCount === undefined && isPerWtgUnit(assumption.unit) && !std.activeWtgCountReady) {
+      void std.ensureActiveWtgCount().then(
+        (count) => addStandardContract(subaccountId, assumptionId, count),
+        () => addStandardContract(subaccountId, assumptionId, 0), // the query's failure left 0, as before
+      );
+      return;
+    }
     const amt = standardAssumptionAmount(assumption.unit, assumption.costAmount, {
-      totalCapacity: std.totalCapacity, activeWtgCount: std.activeWtgCount,
+      totalCapacity: std.totalCapacity, activeWtgCount: wtgCount ?? std.activeWtgCount,
     });
     // The SYNTHESISED boundaries, matching `eligible` — which came from `standardClusters`.
     // Distributing over the raw `boundaries` would skip exactly the clusters the synthesis
@@ -948,6 +957,8 @@ export default function CapexCostsScreen() {
         resetPaidAndPaymentDateComments: relinkResetNeeded,
         // Lets the bulk path skip a month whose amount did not change (D56 §3).
         storedPayments: stored,
+        // CA-12: the contract as it was opened, so an Edit sends only the columns that changed.
+        ...(storedLine ? { storedLine } : {}),
       });
     } catch {
       // Swallowed on purpose: `writes.saveLine.error` is already rendered as the screen's error

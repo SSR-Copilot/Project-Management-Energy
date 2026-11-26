@@ -60,8 +60,11 @@ describe("Planning reload (OPT-13)", () => {
   });
 
   it("UT-PLAN-OPT-204 every query hooks.ts defines is mapped to a table; the permit key is a prefix of the planning-id key", () => {
-    const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "hooks.ts"), "utf8");
-    const parts = [...src.matchAll(/queryKey:\s*qk\.planning\([^,]+,\s*"(\w+)"/g)].map((m) => m[1]);
+    // PB-03 / PB-10: the keys now live in `queries.ts` (row, acquisition), `data/planningProjectKey.ts` (project) and `hooks.ts` (permits).
+    const here = dirname(fileURLToPath(import.meta.url));
+    const src = ["hooks.ts", "queries.ts", join("..", "..", "..", "data", "planningProjectKey.ts")]
+      .map((f) => readFileSync(join(here, f), "utf8")).join("\n");
+    const parts = [...src.matchAll(/qk\.planning\([^,]+,\s*"(\w+)"/g)].map((m) => m[1]);
     const mapped = Object.values(PLANNING_TABLE_READERS).flatMap((f) => f(PID).map((k) => (k as readonly unknown[])[2]));
     expect(parts.sort()).toEqual(["aquisition", "permits", "project", "row"]);
     for (const p of parts) expect(mapped).toContain(p);

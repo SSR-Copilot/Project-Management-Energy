@@ -77,6 +77,8 @@ import type {
 import { loadLeaseBook } from "./landLease";
 import { fetchAll } from "./client";
 import { loadCapexChartRows } from "./capexChart";
+import { sharedRead } from "./sharedRead";
+import { CAPEX_OPT } from "./capexOptFlags";
 import { loadAllCurrencies } from "./currencies";
 import { ACTIVE, and, chunk, eq, idIn, lookupEq, lookupIn, money, numberOf } from "./odata";
 import { CHOICE_COST } from "./dataverseNames";
@@ -154,7 +156,29 @@ const PAYER_BY_OPTION: Record<number, "DevCo" | "SPV"> = {
  * Without it, every contract with no `Cost Type` silently reads as SPV — including in the
  * grid's `[SPV]` sub-label and in the payer filter.
  */
-export async function loadPayerDefaults(): Promise<Map<string, "DevCo" | "SPV">> {
+export function loadPayerDefaults(): Promise<Map<string, "DevCo" | "SPV">> {
+  return CAPEX_OPT.SPV_MAPPING_SHARED ? payerMapping.get() : readPayerDefaults();
+}
+
+/*
+ * CA-08 (dvopt, `SPV_MAPPING_SHARED` in `./capexOptFlags.ts`): the SPV/DevCo mapping is global master data (3 columns, the whole active
+ * table) that every category-tab switch, post-save refetch, focus refetch and Add Cost sheet open read again. With the switch on,
+ * the read is shared while it runs and remembered for `PAYER_MAPPING_MEMO_MS` (`data/sharedRead.ts`, the pattern of `capexChart.ts`);
+ * a failed read is never remembered. No screen of this app writes the table (only `adminCost.ts` reads it), so nothing calls
+ * `invalidatePayerDefaults()` yet: a write path added later must call it, as the chart's writers call `invalidateCapexChart()`.
+ * Another user's edit shows within the memo, which only changes the payer a blank-Cost-Type contract DISPLAYS. The returned map
+ * is shared: callers must not mutate it (none does). Off: the table is read on every call, as before.
+ */
+/** How long a mapping read is reused (ms). */
+const PAYER_MAPPING_MEMO_MS = 5 * 60_000;
+const payerMapping = sharedRead(() => readPayerDefaults(), PAYER_MAPPING_MEMO_MS);
+
+/** Call after ANY write to `vsb_spvdevcomappingcapexdevexes`; the next read goes to Dataverse. */
+export function invalidatePayerDefaults(): void {
+  payerMapping.invalidate();
+}
+
+async function readPayerDefaults(): Promise<Map<string, "DevCo" | "SPV">> {
   const rows = await fetchAll(
     "list SPV/DevCo sub-account mapping",
     (o) => Vsb_spvdevcomappingcapexdevexesService.getAll(o),
@@ -908,6 +932,12 @@ export async function loadCostLines(
    * in the same `Order`), so a warm cache costs no request at all.
    */
   loadStates: () => Promise<ProjectState[]> = loadProjectStates,
+  /**
+   * CA-09 (`COMMENTS_WITH_PAYMENTS`): called with the contract ids as soon as the contract list is in, BEFORE the payments are
+   * read, so the caller can start the comment threads in the same wave as the payments instead of one wave after the book.
+   * Never awaited; a throwing callback is ignored.
+   */
+  onContracts?: (contractIds: string[]) => void,
 ): Promise<CostLine[]> {
   if (accountIds.length === 0) return [];
   const contractBatches = await Promise.all(
@@ -936,6 +966,9 @@ export async function loadCostLines(
   );
   const contracts = contractBatches.flat();
   if (contracts.length === 0) return [];
+  if (onContracts) {
+    try { onContracts(contracts.map((c) => c.vsb_capexprojectcontractid)); } catch { /* a warm-up must never fail the book */ }
+  }
 
   // The `Project States` lookup is only worth a round trip when something actually references
   // it. Across VSBCloud_Dev only 31 contracts carry one and none of them are on Wirmighausen, so
@@ -1132,6 +1165,8 @@ export interface LoadCostBookOptions {
   scope?: CostBookScope;
   /** See `loadCostLines`: the `Project States` source (OPT-07d). */
   loadStates?: () => Promise<ProjectState[]>;
+  /** See `loadCostLines`: CA-09, called with the category's contract ids once they are known (a CAPEX tab only). */
+  onContracts?: (contractIds: string[]) => void;
 }
 
 export async function loadCostBook(
@@ -1168,7 +1203,7 @@ export async function loadCostBook(
   const wantDefaults = scoped.length > 0 && payerRead;
   // `loadCostLines` takes the payer read as a promise and awaits it after the contracts and payments, so it overlaps the chain.
   const lines = await loadCostLines(
-    projectId, scoped.map((a) => a.id), wantDefaults ? payerRead : noDefaults, options.loadStates,
+    projectId, scoped.map((a) => a.id), wantDefaults ? payerRead : noDefaults, options.loadStates, options.onContracts,
   );
   const payerDefaults = wantDefaults ? await payerRead : noDefaults;
   // The mapping default rides on the sub-account, for a NEW contract's Cost Paid By (CAPEX-064).

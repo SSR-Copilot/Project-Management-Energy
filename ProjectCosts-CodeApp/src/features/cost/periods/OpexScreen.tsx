@@ -51,6 +51,7 @@ import {
   useOpexAssumptionScopes, useOpexCatalog, useOpexDeviceTypes,
 } from "@/features/cost/costing/useCostBook";
 import type { CostPeriod } from "@/features/cost/costing/model";
+import { RECORD_GONE_TEXT, isRecordGone } from "@/platform/errors";
 import { palette, space } from "@/theme/tokens";
 import {
   DELETE_DIALOG, DURATION_BADGE_TEXT, DURATION_MONTH_OPTIONS, DURATION_YEAR_OPTIONS,
@@ -1247,7 +1248,8 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
       for (const warning of result?.warnings ?? []) reportFailure(warning, setBanner);
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
-      reportFailure(OPEX_MSG.saveFailed("Save", message), setBanner);
+      // dvopt CB-01: a row another user deleted refuses the save with nothing written; the one plain sentence, not the table and row id.
+      reportFailure(isRecordGone(e) ? RECORD_GONE_TEXT : OPEX_MSG.saveFailed("Save", message), setBanner);
     } finally {
       setBusyLabel(null);
       // The canvas ends every Save with `locSelectedOpexCost`, `locSelectedOpexCostParent` and

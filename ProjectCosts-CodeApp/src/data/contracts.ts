@@ -30,10 +30,12 @@ import type { Vsb_capexprojectcontracts } from "@/generated/models/Vsb_capexproj
 import { DataError, unwrap } from "@/platform/errors";
 import { logAction, loggedCall } from "@/platform/requestLog";
 import { trace } from "@/platform/telemetry";
-import { deleteRecord, fetchAll, updateRecordIfExists } from "./client";
+import type { IOperationResult } from "@microsoft/power-apps/data";
+import { createWithStableId } from "./stableCreateId";
+import { deleteIfExists, fetchAll, isAlreadyGone, updateRecordIfExists } from "./client";
 import { listActiveCapexAccounts, toAccountRow } from "./capexAccounts";
 import { DELETE_CONCURRENCY, WRITE_CONCURRENCY, mapLimit } from "./concurrency";
-import { ACTIVE, and, chunk, dateOnly, eq, lookupEq, lookupIn, numberOf } from "./odata";
+import { ACTIVE, and, chunk, dateOnly, eq, idIn, lookupEq, lookupIn, numberOf } from "./odata";
 import {
   COST_TYPE, CLOSING_DATE_TYPE, CONTRACT_TYPE, TOTAL_COSTS_TYPE, MARGIN_TYPE,
   type AccountRow, type BopContract, type CapexCostRow, type CapexProjectContract,
@@ -515,31 +517,29 @@ export async function saveContract(w: ContractWrite): Promise<BopContract> {
       ),
     );
   }
-  const result = await loggedCall(
+  // dvopt CB-14 (`STABLE_CREATE_IDS`): the create carries a client id that a retry of the same save keeps, and a retried id is read
+  // back first, so a POST that landed but looked failed (network drop, gateway timeout) cannot create a second contract.
+  const created = await loggedCall(
     "create", ES.bopContracts,
-    async () => unwrap(await Vsb_bopprojectscontractsesService.create(payload as never), "create BoP contract"),
-    () => 1,
+    () => createWithStableId({
+      operation: "create BoP contract", entitySet: ES.bopContracts, idField: "vsb_bopprojectscontractsid", payload: payload as Record<string, unknown>,
+      create: (p) => Vsb_bopprojectscontractsesService.create(p as never) as unknown as Promise<IOperationResult<Record<string, unknown>>>,
+    }),
+    (r) => (r.reused ? 0 : 1),
   );
-  return toContract(result);
+  if (created.row) return toContract(created.row as unknown as Vsb_bopprojectscontractses);
+  // An earlier attempt of this save had landed: that row is the result.
+  const [existing] = await fetchAll(
+    "read back BoP contract",
+    (o) => Vsb_bopprojectscontractsesService.getAll(o),
+    { select: CONTRACT_SELECT, filter: idIn("vsb_bopprojectscontractsid", [created.id]) },
+  );
+  if (!existing) throw new DataError("create BoP contract", `the contract saved by the earlier attempt could not be read back`);
+  return toContract(existing);
 }
 
-/**
- * A row that is already gone is the outcome a delete wanted (another user deleted it, or the list was stale), so
- * HTTP 404 and Dataverse's `0x80040217` ("Does Not Exist") count as done, as `unwrapDeleteStrict` reads them. The
- * canvas `RemoveIf` on a missing row raised nothing either. Any other failure still throws.
- */
-export function isAlreadyGone(error: unknown): boolean {
-  return error instanceof DataError && (error.status === 404 || /0x80040217/i.test(error.message));
-}
-
-/** `deleteRecord` (rule 14) that treats an already-deleted row as deleted. */
-async function deleteIfExists(operation: string, entitySet: string, id: string): Promise<void> {
-  try {
-    await deleteRecord(operation, entitySet, id);
-  } catch (error) {
-    if (!isAlreadyGone(error)) throw error;
-  }
-}
+/** `isAlreadyGone` / `deleteIfExists` live in `./client` (dvopt CB-03); re-exported so existing imports keep working. */
+export { isAlreadyGone };
 
 /** Through `deleteRecord` (rule 14, CA-27): the generated `delete()` returns nothing, so a refusal looked like success. */
 export async function deleteContract(id: string): Promise<void> {

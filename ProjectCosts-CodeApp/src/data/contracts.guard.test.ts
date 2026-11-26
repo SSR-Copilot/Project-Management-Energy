@@ -13,6 +13,13 @@ const client = vi.hoisted(() => ({
   deleteRecordAsync: vi.fn(),
 }));
 vi.mock("@microsoft/power-apps/data", () => ({ getClient: () => client }));
+// STABLE_CREATE_IDS ships OFF at integration (CB-14, owner decision). The tests of the feature switch it ON for their own duration
+// (`stableIds.on = true`); the file's beforeEach puts it back OFF.
+const stableIds = vi.hoisted(() => ({ on: false }));
+vi.mock("./leaseOpexFlags", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./leaseOpexFlags")>()),
+  get STABLE_CREATE_IDS() { return stableIds.on; },
+}));
 
 import { RecordGoneError } from "@/platform/errors";
 import { CLOSING_DATE_TYPE, CONTRACT_TYPE, TOTAL_COSTS_TYPE } from "@/features/cost/contracts/rules";
@@ -45,6 +52,7 @@ const target: PaymentTargetWrite = {
 const row = (key: string, id: string) => ({ success: true, data: { [key]: id } });
 
 beforeEach(() => {
+  stableIds.on = false;
   Object.values(client).forEach((fn) => fn.mockReset());
   client.createRecordAsync.mockImplementation(async () => row("vsb_bopprojectscontractsid", "new"));
 });
@@ -100,5 +108,49 @@ describe("the BoP standard assumption lookup", () => {
     const options = client.retrieveMultipleRecordsAsync.mock.calls[0]![1] as { orderBy?: string[]; top?: number };
     expect(options.orderBy).toEqual(["createdon asc"]);
     expect(options.top).toBe(1);
+  });
+});
+describe("dvopt — a contract create that landed but looked failed (CB-14)", () => {
+  const sentIds = () => client.createRecordAsync.mock.calls.map((c) => (c[1] as Record<string, unknown>)["vsb_bopprojectscontractsid"]);
+
+  it("UT-CONTRDVOPT-001 the create carries a client id that a retry of the same save keeps", async () => {
+    stableIds.on = true;
+    const { resetStableCreateIds } = await import("./stableCreateId");
+    resetStableCreateIds();
+    client.createRecordAsync.mockResolvedValueOnce({ success: false, error: { message: "gateway timeout", status: 504 } });
+    client.retrieveMultipleRecordsAsync.mockResolvedValue({ success: true, data: [] }); // the read-back: not there
+    await expect(saveContract(write)).rejects.toThrow();
+    const saved = await saveContract(write);
+    expect(sentIds()).toHaveLength(2);
+    expect(sentIds()[0]).toMatch(/^[0-9a-f-]{36}$/);
+    expect(sentIds()[1]).toBe(sentIds()[0]);
+    expect(saved.id).toBe("new"); // the mock's own answer wins when the server issues another id
+  });
+
+  it("UT-CONTRDVOPT-002 when the first POST had landed, the retry reads the contract back and creates NO second one", async () => {
+    stableIds.on = true;
+    const { resetStableCreateIds } = await import("./stableCreateId");
+    resetStableCreateIds();
+    client.createRecordAsync.mockResolvedValueOnce({ success: false, error: { message: "gateway timeout", status: 504 } });
+    client.retrieveMultipleRecordsAsync.mockResolvedValue({ success: true, data: [] });
+    await expect(saveContract(write)).rejects.toThrow();
+    const landed = String(sentIds()[0]);
+    // The row exists after all: the existence read-back and the row read both find it.
+    client.retrieveMultipleRecordsAsync.mockResolvedValue({
+      success: true, data: [{ vsb_bopprojectscontractsid: landed, vsb_name: "BoP-P-1-Grid" }],
+    });
+    const saved = await saveContract(write);
+    expect(client.createRecordAsync).toHaveBeenCalledTimes(1);
+    expect(saved.id).toBe(landed);
+    expect(saved.name).toBe("BoP-P-1-Grid");
+  });
+
+  it("UT-CONTRDVOPT-003 a first attempt reads nothing, and an update is untouched by the stable id (UT-CONTR-181/182 still hold)", async () => {
+    const { resetStableCreateIds } = await import("./stableCreateId");
+    resetStableCreateIds();
+    await saveContract(write);
+    expect(client.retrieveMultipleRecordsAsync).not.toHaveBeenCalled();
+    const payload = client.createRecordAsync.mock.calls[0]![1] as Record<string, unknown>;
+    expect(payload["owningbusinessunit@odata.bind"]).toBe(`/businessunits(${BU})`);
   });
 });

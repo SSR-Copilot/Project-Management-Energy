@@ -21,12 +21,14 @@ beforeEach(() => {
   invalidated.length = 0;
 });
 import {
-  CreatedIdMissingError, executePlan, PlanError, PlanRefusedError, type PlanClient,
+  CreatedIdMissingError, executePlan, PlanError, PlanRefusedError, PlanShapeError, type PlanClient,
 } from "./executePlan";
 import { CREATED_ROW_ID, createdRowRef, emptyPlan, guardedUpdate, refusePlan } from "./writePlan";
 
 const ok = <T,>(data: T) => ({ success: true as const, data });
-const fail = (message: string) => ({ success: false as const, data: undefined, error: { message, status: 500 } });
+// T-11: status 400, not 500. A 500 on an update is now tried again (`sendWithPolicy("patchAbsolute")`, `POLICY_PLAN_WRITES`), which would let these
+// "a failure stops the run" tests succeed on the retry; the retry itself is pinned in executePlan.policy.test.ts.
+const fail = (message: string) => ({ success: false as const, data: undefined, error: { message, status: 400 } });
 
 function stubClient() {
   const calls: string[] = [];
@@ -94,7 +96,8 @@ describe("executePlan", () => {
     const { client, calls } = stubClient();
     const plan = emptyPlan();
     plan.writes.push({ op: "update", entitySet: "vsb_notatable", id: "x", data: {}, reason: "x" });
-    await expect(executePlan(plan, "test", client)).rejects.toBeInstanceOf(PlanError);
+    // dvopt T-15 (WE-06): was a PlanError raised at send time; now a PlanShapeError raised before the plan starts.
+    await expect(executePlan(plan, "test", client)).rejects.toBeInstanceOf(PlanShapeError);
     expect(calls).toEqual([]);
   });
 
@@ -126,7 +129,8 @@ describe("executePlan", () => {
       op: "create", entitySet: "vsb_capexaccountlists",
       data: { "x@odata.bind": `/vsb_capexaccountlists(${createdRowRef(0)})` }, reason: "orphan",
     });
-    await expect(executePlan(plan, "test", client)).rejects.toBeInstanceOf(PlanError);
+    // dvopt T-15 (WE-06): was a PlanError raised at send time; now a PlanShapeError raised before the plan starts.
+    await expect(executePlan(plan, "test", client)).rejects.toBeInstanceOf(PlanShapeError);
     expect(calls).toEqual([]);
   });
 });
@@ -242,7 +246,8 @@ describe("executePlan: guarded updates", () => {
       const { client, log } = guardedStub();
       const plan = planOf({ op, entitySet: SET, id: ROW, data: {}, reason: op, guarded: true });
       const err = (await executePlan(plan, "test", client).catch((e: unknown) => e)) as PlanError;
-      expect(err).toBeInstanceOf(PlanError);
+      // dvopt T-15 (WE-06): a PlanShapeError before the plan starts (was a PlanError at send time).
+      expect(err).toBeInstanceOf(PlanShapeError);
       expect(err.message).toMatch(/only an update can be guarded/);
       expect(log).toEqual([]);
     }
@@ -266,7 +271,7 @@ describe("executePlan: guarded updates", () => {
 
   it("UT-PLAN-016 a table that is not registered fails a guarded update before any request", async () => {
     const { client, log } = guardedStub();
-    await expect(executePlan(planOf(guardedUpdate("vsb_notatable", ROW, {}, "x")), "test", client)).rejects.toBeInstanceOf(PlanError);
+    await expect(executePlan(planOf(guardedUpdate("vsb_notatable", ROW, {}, "x")), "test", client)).rejects.toBeInstanceOf(PlanShapeError);
     expect(log).toEqual([]);
   });
 
@@ -381,7 +386,7 @@ describe("executePlan: page-token invalidation", () => {
     const plan = planOf(
       { op: "update", entitySet: "vsb_projects", id: "p-1", data: {}, reason: "first" },
       { op: "delete", entitySet: "vsb_capexcosts", id: "c-9", reason: "second" },
-      { op: "update", entitySet: "vsb_opexcosts", id: "o-1", data: {}, reason: "third" },
+      { op: "update", entitySet: "vsb_opexprojectcosts", id: "o-1", data: {}, reason: "third" },
     );
     const err = (await executePlan(plan, "test", client).catch((e: unknown) => e)) as PlanError;
     expect(err.done).toBe(1);

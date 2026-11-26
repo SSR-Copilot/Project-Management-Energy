@@ -8,6 +8,12 @@
  * validation, the splitter, the executor, the gate and the logger all run for real.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+// dvopt integration: these tests describe the LEGACY retry rules (3 tries, 1 s then 2 s, a bare 503 is not retried). The new rules (RETRY_POLICY_V2) are pinned in retry.v2.test.ts; retry.legacyEquality.test.ts proves the two paths.
+// T-11: the policy switches are off here too, so this file keeps pinning the code as it was before the write paths adopted `sendWithPolicy`.
+vi.mock("./requestFlags", () => ({
+  RETRY_POLICY_V2: false, REQUEST_DEADLINES: false, GLOBAL_GATE: false,
+  POLICY_CLIENT_WRITES: false, POLICY_PLAN_WRITES: false, POLICY_BULK_TRANSPORT: false, POLICY_VERIFY_READS: false, POLICY_ADMIN_WRITES: false,
+}));
 
 type Action = "create" | "update";
 type Outcome = { ok: true } | { ok: false; status: number; message?: string; headers?: Record<string, string> } | { throws: Error };

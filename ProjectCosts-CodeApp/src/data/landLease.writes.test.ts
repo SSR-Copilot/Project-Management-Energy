@@ -79,6 +79,18 @@ vi.mock("./client", () => ({
     await fake.request("delete", table, id, undefined);
     if (fake.state.fails(table, "delete", id, undefined)) throw new Error(`${operation} failed: refused ${id}`);
   },
+  // dvopt CB-03: the app's deletes go through `deleteIfExists`; with no 404 in this double it is `deleteRecord`.
+  deleteIfExists: async (operation: string, entitySet: string, id: string) => {
+    const table = fake.DELETE_TABLE[entitySet] ?? entitySet;
+    await fake.request("delete", table, id, undefined);
+    if (fake.state.fails(table, "delete", id, undefined)) throw new Error(`${operation} failed: refused ${id}`);
+  },
+}));
+// dvopt CB-01 / CB-14: this file is the OPT-10 differential (tiered vs sequential). The guard is a no-op here and the header create keeps
+// the server-issued id (the stable client id is random, so the two runs would differ); both are tested in landLease.dvopt.test.ts.
+vi.mock("./costUpdateGuard", () => ({ assertRowsExist: async () => undefined, rowExists: async () => false }));
+vi.mock("./leaseOpexFlags", () => ({
+  GONE_AS_DONE_LEASE_OPEX: true, LEASE_GUARD: true, OPEX_GUARD: true, COST_REFRESH_ON_FAILURE: true, STABLE_CREATE_IDS: false,
 }));
 vi.mock("@/generated/services/Vsb_landleaseprojectcostsService", () => ({
   Vsb_landleaseprojectcostsService: fake.service("cost", "vsb_landleaseprojectcostid"),
