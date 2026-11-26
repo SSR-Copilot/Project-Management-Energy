@@ -31,17 +31,19 @@
  * PERMISSIONS: the canvas `DataSourceInfo` / `RecordInfo` checks have no SDK equivalent (D1); they
  * pass and Dataverse refuses what the user may not do (`PLANNING_CAN_EDIT`).
  */
-import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ES } from "@/data/dataverseNames";
 import { qk } from "@/data/keys";
 import type { ScreenData } from "@/data/notConnected";
 import { usePlanWrite } from "@/data/usePlanWrite";
 import { executePlan } from "@/data/executePlan";
 import { trace } from "@/platform/telemetry";
+import { bootDvopt } from "@/data/bootDvoptFlags";
 import {
-  listAquisitionStatuses, listAquisitionTypes, listCustomChoiceValues, listPermits, loadPlanningProject,
-  loadProjectPlanning,
+  listAquisitionStatuses, listCustomChoiceValues, listPermits, loadProjectPlanning,
 } from "@/data/planning";
+import { aquisitionTypesQuery, planningAquisitionKey, planningProjectQuery, planningRowKey } from "./queries";
+import { seedOnce, type SeedStepResult } from "./seedOnce";
 import {
   NOTIFY, planAquisitionSeed, planEnsurePlanning,
   type AquisitionStatusRow, type AquisitionTypeRow, type CustomChoiceOption, type PermitRow, type PlanningProject,
@@ -68,20 +70,20 @@ const NONE: never[] = [];
 
 /** Runs an `OnVisible` seed; a refusal is traced, not thrown (the canvas `Patch` has no `IfError`). */
 async function seed(plan: ReturnType<typeof planEnsurePlanning>): Promise<boolean> {
-  if (plan.writes.length === 0) return false;
+  return (await seedChecked(plan)) !== "none";
+}
+
+/** `seed`, telling a refusal from a create (the once-guard remembers only a create). */
+async function seedChecked(plan: ReturnType<typeof planEnsurePlanning>): Promise<SeedStepResult> {
+  if (plan.writes.length === 0) return "none";
   try {
     await executePlan(plan, NOTIFY.loading);
   } catch (e) {
     trace("warning", "Project Planning: the OnVisible seed was refused", e);
+    return "refused";
   }
-  return true;
+  return "created";
 }
-
-/** The project read, shared by the screen's query and by the seed paths that need the project's business unit. */
-const planningProjectQuery = (projectId: string) => queryOptions({
-  queryKey: qk.planning(projectId, "project"),
-  queryFn: () => loadPlanningProject(projectId),
-});
 
 /** `gblRecordSelectedProject`, re-read on every visit as `OnVisible` does. */
 export function usePlanningProject(projectId: string | undefined): ScreenData<PlanningProject | null> {
@@ -100,12 +102,18 @@ export function usePlanningProject(projectId: string | undefined): ScreenData<Pl
 export function useProjectPlanning(projectId: string | undefined): ScreenData<PlanningRecord | null> {
   const qc = useQueryClient();
   const q = useQuery({
-    queryKey: qk.planning(projectId ?? "", "row"),
+    queryKey: planningRowKey(projectId ?? ""),
     queryFn: async () => {
       const row = await loadProjectPlanning(projectId!);
       if (row) return row;
       const project = await qc.fetchQuery(planningProjectQuery(projectId!));
-      return (await seed(planEnsurePlanning(project, null))) ? loadProjectPlanning(projectId!) : null;
+      const plan = planEnsurePlanning(project, null);
+      if (!bootDvopt().planningCreateOnce) return (await seed(plan)) ? loadProjectPlanning(projectId!) : null;
+      // PB-05: the create runs once per project; right before it the row is read again (another tab, a retry, a second run).
+      if (plan.writes.length === 0) return null;
+      const result = await seedOnce(`planning:${projectId}`, async () =>
+        (await loadProjectPlanning(projectId!)) ? "none" : seedChecked(plan));
+      return result === "done" ? null : loadProjectPlanning(projectId!);
     },
     enabled: Boolean(projectId),
   });
@@ -124,7 +132,7 @@ export function usePermits(projectId: string | undefined, planningId: string | u
 
 /** `colAquisitionStatusesUnderLawTypes` / `…InRemTypes`. */
 export function useAquisitionTypes(): ScreenData<AquisitionTypeRow[]> {
-  const q = useQuery({ queryKey: qk.aquisitionTypes, queryFn: listAquisitionTypes, staleTime: 5 * 60 * 1000 });
+  const q = useQuery(aquisitionTypesQuery());
   return out(q, NONE as AquisitionTypeRow[]);
 }
 
@@ -134,14 +142,20 @@ export function useAquisitionStatuses(
 ): ScreenData<AquisitionStatusRow[]> {
   const qc = useQueryClient();
   const q = useQuery({
-    queryKey: qk.planning(projectId ?? "", "aquisition"),
+    queryKey: planningAquisitionKey(projectId ?? ""),
     queryFn: async () => {
       const rows = await listAquisitionStatuses(projectId!, types);
       // OPT-16: keyed on the project id (the read waits for the types, not for the project). The project is fetched only when
       // a type has no row yet (the seed's Owning Business Unit); with every row present no project is needed.
       if (planAquisitionSeed(types, rows, { id: projectId! } as PlanningProject).writes.length === 0) return rows;
       const project = await qc.fetchQuery(planningProjectQuery(projectId!));
-      return (await seed(planAquisitionSeed(types, rows, project))) ? listAquisitionStatuses(projectId!, types) : rows;
+      if (!bootDvopt().planningCreateOnce) {
+        return (await seed(planAquisitionSeed(types, rows, project))) ? listAquisitionStatuses(projectId!, types) : rows;
+      }
+      // PB-05: once per project; the statuses are read again right before the create, and only the types still missing are created.
+      const result = await seedOnce(`aquisition:${projectId}`, async () =>
+        seedChecked(planAquisitionSeed(types, await listAquisitionStatuses(projectId!, types), project)));
+      return result === "done" ? rows : listAquisitionStatuses(projectId!, types);
     },
     enabled: Boolean(projectId) && typesReady,
   });

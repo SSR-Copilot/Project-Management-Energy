@@ -12,11 +12,13 @@
 import type { QueryKey } from "@tanstack/react-query";
 import { ES } from "@/data/dataverseNames";
 import { qk } from "@/data/keys";
+import { planningProjectRowKey } from "@/data/planningProjectKey";
 
 /** The queries that read each table the screen touches. */
 export const GRID_OPERATOR_TABLE_READERS: Readonly<Record<string, (projectId: string) => readonly QueryKey[]>> = {
   [ES.gridOperators]: (id) => [qk.gridOperator(id, "row")],
-  [ES.projects]: (id) => [qk.gridOperator(id, "project")],
+  // PB-10: the project row's key is Planning's while `PM_PROJECT_ROW_SHARED` is on (`planningProjectRowKey`).
+  [ES.projects]: (id) => [planningProjectRowKey(id, "gridOperator")],
 };
 
 /** The tables the Save writes (the plan's own `entitySet`). */

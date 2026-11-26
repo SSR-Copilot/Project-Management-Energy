@@ -18,6 +18,7 @@ import { applyEnvironmentName } from "@/platform/consoleGate";
 import { unwrap } from "@/platform/errors";
 import { trace } from "@/platform/telemetry";
 import { fetchAll } from "./client";
+import { bootDvopt } from "./bootDvoptFlags";
 import { ACTIVE, and, or, eq, guid } from "./odata";
 import type { ProjectContext } from "@/features/cost/contracts/rules";
 
@@ -51,6 +52,19 @@ export const ENV_VAR_NAMES = [
 export type EnvVarName = (typeof ENV_VAR_NAMES)[number];
 export type EnvVars = Partial<Record<EnvVarName, string>>;
 
+const VALUE_SELECT = ["environmentvariablevalueid", "value", "_environmentvariabledefinitionid_value"];
+type EnvironmentVariableValueRow = { value?: string | null; _environmentvariabledefinitionid_value?: string | null };
+
+/** PB-08: the values of the variables in `ENV_VAR_NAMES`, filtered through their definition's schema name (no definition ids needed). */
+const readEnvironmentVariableValuesByName = (): Promise<EnvironmentVariableValueRow[]> => fetchAll(
+  "list environment variable values",
+  (o) => EnvironmentvariablevaluesService.getAll(o),
+  {
+    select: VALUE_SELECT,
+    filter: or(...ENV_VAR_NAMES.map((n) => eq("EnvironmentVariableDefinitionId/schemaname", n))),
+  },
+);
+
 /**
  * Reads all five in two queries instead of five.
  *
@@ -60,6 +74,20 @@ export type EnvVars = Partial<Record<EnvVarName, string>>;
  * `environmentvariablevalue` at all — hence the fallback to `defaultvalue`.
  */
 export async function loadEnvironmentVariables(): Promise<EnvVars> {
+  /*
+   * PB-08 (`ENV_VARS_TOGETHER`): the values read does not need the definition ids when it filters through the definition's schema
+   * name (a single-valued navigation path, the same names the definitions read asks for), so both reads start together and the
+   * join below is unchanged. A values read the server refuses (the path unproven on a system table) is not an error: the
+   * sequential read by definition id runs instead, so the result is the same. A failed definitions read still fails the load
+   * as before, and the console gate (D164) still hears nothing until a read has succeeded.
+   */
+  const together = bootDvopt().envVarsTogether
+    ? readEnvironmentVariableValuesByName().then(
+      (rows) => ({ ok: true as const, rows }),
+      (error: unknown) => ({ ok: false as const, error }),
+    )
+    : undefined;
+
   const definitions = await fetchAll(
     "list environment variable definitions",
     (o) => EnvironmentvariabledefinitionsService.getAll(o),
@@ -82,16 +110,22 @@ export async function loadEnvironmentVariables(): Promise<EnvVars> {
     return out;
   }
 
-  const values = await fetchAll(
-    "list environment variable values",
-    (o) => EnvironmentvariablevaluesService.getAll(o),
-    {
-      select: ["environmentvariablevalueid", "value", "_environmentvariabledefinitionid_value"],
-      filter: or(
-        ...[...byId.keys()].map((id) => `_environmentvariabledefinitionid_value eq ${guid(id)}`),
-      ),
-    },
-  );
+  let values: EnvironmentVariableValueRow[];
+  const answer = together ? await together : undefined;
+  if (answer?.ok) values = answer.rows;
+  else {
+    if (answer) trace("warning", "environment variable values: the read by definition name was refused; reading them by definition id", { error: answer.error });
+    values = await fetchAll(
+      "list environment variable values",
+      (o) => EnvironmentvariablevaluesService.getAll(o),
+      {
+        select: VALUE_SELECT,
+        filter: or(
+          ...[...byId.keys()].map((id) => `_environmentvariabledefinitionid_value eq ${guid(id)}`),
+        ),
+      },
+    );
+  }
   for (const v of values) {
     const name = v._environmentvariabledefinitionid_value
       ? byId.get(v._environmentvariabledefinitionid_value)
