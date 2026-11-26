@@ -4,6 +4,10 @@
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DataError } from "@/platform/errors";
+
+// dvopt T-10: this file pins the PREVIOUS retry rules (1 s x attempt waits, 3 tries, a bare 503 not retried), which are now the
+// `RETRY_POLICY_V2 = false` rollback path. The new rules are pinned in `retry.v2.test.ts`; `retry.legacyEquality.test.ts` proves the two paths.
+vi.mock("./requestFlags", () => ({ RETRY_POLICY_V2: false, REQUEST_DEADLINES: false, GLOBAL_GATE: false }));
 import * as bulk from "./generatorsBulk";
 import {
   deleteRetryDelay, MAX_BULK_TRIES, MAX_NO_STATUS_TRIES, MAX_RETRY_WAIT_MS, retryAfterMs, retryDelay, setDeleteSleeper, withDeleteRetry,

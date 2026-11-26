@@ -15,13 +15,24 @@ export class DataError extends Error {
   readonly operation: string;
   /** `Error.cause` exists on the base type, hence the modifier. */
   override readonly cause?: unknown;
+  /**
+   * Set (to `true`) only on a failure that can never succeed on a second try, e.g. the `fetchAll` page cap (dvopt WE-01).
+   * `isRetryable` and `classifyError` honour it, whatever the status. Left undefined on every other error.
+   */
+  readonly deterministic?: true;
 
-  constructor(operation: string, cause?: unknown, status?: number) {
+  constructor(operation: string, cause?: unknown, status?: number, options?: { deterministic?: boolean }) {
     super(`${operation} failed: ${describe(cause)}`);
     this.name = "DataError";
     this.operation = operation;
     this.status = status;
     this.cause = cause;
+    if (options?.deterministic) this.deterministic = true;
+  }
+
+  /** A failure that a second try cannot change (dvopt WE-01): not retried by react-query, `classifyError` says `unknown`. */
+  static deterministic(operation: string, cause?: unknown, status?: number): DataError {
+    return new DataError(operation, cause, status, { deterministic: true });
   }
 
   /** 403 from Dataverse means the row-level security said no, not that the app is broken. */
@@ -117,6 +128,7 @@ export function unwrapOrForbidden<T>(
 /** True when retrying could plausibly help. react-query's `retry` predicate uses this. */
 export function isRetryable(error: unknown): boolean {
   if (!(error instanceof DataError)) return false;
+  if (error.deterministic) return false; // dvopt WE-01: a deterministic failure (the fetchAll page cap) is not re-walked
   if (error.isForbidden) return false;
   if (error.status === undefined) return true; // network-shaped
   return error.status >= 500 || error.status === 429;
@@ -183,4 +195,77 @@ export function asRecordGone(error: unknown, operation: string, table: string, i
   if (error instanceof RecordGoneError) return error;
   if (error instanceof DataError && error.status === 404) return new RecordGoneError(operation, table, id);
   return error;
+}
+
+/* ═════════════════════════════════════════════════ classification (dvopt T-10, T-12) ══ */
+
+/**
+ * NEW (dvopt): not a canvas string. The plain sentence for a write whose outcome is not known (it did not answer in time).
+ * The screens that adopt `UnknownOutcomeError` show it as it is.
+ */
+export const UNKNOWN_OUTCOME_TEXT = "The save did not answer in time. It may or may not have been saved. Refresh the screen to check before you try again.";
+
+/**
+ * A write that exceeded its deadline: the request was sent, nothing answered, and it may have landed. Never retryable here
+ * (`isRetryable` is false for it, `classifyError` says `unknown`): a create or a flow is never repeated automatically; the caller
+ * reads the row back (doc 21 section 6). Raised by `withDeadline` (`data/requestPolicy.ts`).
+ */
+export class UnknownOutcomeError extends DataError {
+  constructor(operation: string, deadlineMs?: number) {
+    super(operation, UNKNOWN_OUTCOME_TEXT, undefined, { deterministic: true });
+    this.name = "UnknownOutcomeError";
+    this.deadlineMs = deadlineMs;
+  }
+
+  readonly deadlineMs?: number;
+}
+
+/**
+ * The classes of a failed request (doc 21 section 1), from the HTTP `status` only: the SDK error carries no headers.
+ *  - validation 400; auth 401; permission 403; notFound 404 or `0x80040217`; conflict 409, 412;
+ *  - throttled 429 (NOT processed, safe to repeat after a wait);
+ *  - transient 500, 502, 503, 504, 408 and an error with no status (network): the server may or may not have processed it;
+ *  - unknown: a deadline-exceeded write, a deterministic failure, and every status not listed (e.g. 501, which has its own fallback).
+ */
+export type ErrorClass = "validation" | "auth" | "permission" | "notFound" | "conflict" | "throttled" | "transient" | "unknown";
+
+/** The error and its `cause` chain (the SDK error sits under a `DataError`), at most 5 deep. */
+export function errorChain(error: unknown): unknown[] {
+  const out: unknown[] = [];
+  let current: unknown = error;
+  for (let depth = 0; depth < 5 && current; depth += 1) {
+    out.push(current);
+    current = typeof current === "object" ? (current as { cause?: unknown }).cause : undefined;
+  }
+  return out;
+}
+
+/** The first HTTP status found on the error or its `cause` chain. */
+export function statusOfChain(error: unknown): number | undefined {
+  for (const link of errorChain(error)) {
+    const status = statusOf(link);
+    if (status !== undefined) return status;
+  }
+  return undefined;
+}
+
+/** Classifies a failed request. Pure; reads `status` through the `DataError` / `cause` chain. */
+export function classifyError(error: unknown): ErrorClass {
+  const chain = errorChain(error);
+  if (chain.some((e) => e instanceof UnknownOutcomeError || (e instanceof DataError && e.deterministic))) return "unknown";
+  const status = statusOfChain(error);
+  switch (status) {
+    case 400: return "validation";
+    case 401: return "auth";
+    case 403: return "permission";
+    case 404: return "notFound";
+    case 409: case 412: return "conflict";
+    case 429: return "throttled";
+    case 408: case 500: case 502: case 503: case 504: return "transient";
+    case undefined: {
+      const text = chain.map((e) => (e instanceof Error ? e.message : typeof e === "string" ? e : "")).join(" ");
+      return /0x80040217/i.test(text) ? "notFound" : "transient";
+    }
+    default: return "unknown";
+  }
 }

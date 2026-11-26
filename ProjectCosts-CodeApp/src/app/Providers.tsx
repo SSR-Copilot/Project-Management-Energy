@@ -5,6 +5,7 @@ import { useState, type ReactNode } from "react";
 import { AppToaster, ErrorBoundary } from "@/components";
 import { vsbTheme } from "@/theme/fluent";
 import { isRetryable } from "@/platform/errors";
+import { queryRetryDelay } from "@/data/retry";
 import { installE2EHook } from "@/platform/e2eHook";
 import { attachQueryLog } from "./queryLog";
 import { structuralSharingWithDates } from "./queryStructuralSharing";
@@ -21,6 +22,8 @@ export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: (attempt, error) => attempt < 2 && isRetryable(error),
+      // dvopt T-10 (OR-01): a jittered wait (`data/retry.ts`), so reads that failed together do not retry in step. Still 2 retries.
+      retryDelay: queryRetryDelay,
       staleTime: 30 * 1000,
       // The Cost app is opened per project from a deep link and left open; refetching on
       // window focus is what keeps a second user's changes from being overwritten blindly.
