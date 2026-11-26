@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tansta
 import { useSession } from "@/app/SessionContext";
 import { qk } from "@/data/keys";
 import { costRepository } from "@/data/costRepository";
+import { COST_REFRESH_ON_FAILURE } from "@/data/leaseOpexFlags";
 import { NO_FOCUS_REFETCH } from "@/data/adminQueryPresets";
 import { loadActiveWtgCount, loadStandardAssumptions } from "@/data/standardContracts";
 import { deleteComment, loadComments, saveComment } from "@/data/comments";
@@ -174,6 +175,12 @@ export function useCostBook(category?: number, options?: { everyVisit?: boolean;
         void queryClient.invalidateQueries({ queryKey });
       }
     },
+    // dvopt CB-02 (`COST_REFRESH_ON_FAILURE`): a save is several requests (the row, the cascade, the re-chain, the delete of a chain). One that
+    // fails part-way has still written the ones before it, and the cached book would not show them, so a retry (re-adding the period)
+    // ran from stale data and created a duplicate. Refresh on failure too; nothing is patched into the cache (only success knows the book).
+    onError: () => {
+      if (COST_REFRESH_ON_FAILURE) void queryClient.invalidateQueries({ queryKey });
+    },
   });
   return { ...query, save, projectId };
 }
@@ -229,6 +236,15 @@ export function useAddStandardContract() {
       // The O&M import ends with `Refresh(DeviceTypesInProjects)` and rebuilds `colDeviceTypesInProject`
       // (`:3327-3407`), so the device cards are re-read as well (D123). B2 (OPT-26): only O&M reads them; an Other OPEX or Land
       // Lease import leaves the device cards alone.
+      if (args.mode === "om") {
+        void queryClient.invalidateQueries({ queryKey: ["opex-device-types", projectId ?? "none"] });
+      }
+    },
+    // dvopt CB-02 (`COST_REFRESH_ON_FAILURE`): an import is a chain of creates; one that fails part-way leaves the rows before it, and the
+    // cached book (and so the next click) must see them. Same keys as success.
+    onError: (_error, args) => {
+      if (!COST_REFRESH_ON_FAILURE) return;
+      void queryClient.invalidateQueries({ queryKey: ["cost-book", projectId, "none"] });
       if (args.mode === "om") {
         void queryClient.invalidateQueries({ queryKey: ["opex-device-types", projectId ?? "none"] });
       }
@@ -327,8 +343,12 @@ export function useLeaseWrites(projectId: string | undefined) {
       ]);
     },
     // A partly failed save has still written the steps that passed (the canvas reloads either way).
+    // dvopt CB-02 (`COST_REFRESH_ON_FAILURE`): ANY failure refreshes, not only a `LeaseStepsError`. A delete or an import is not run with
+    // `independentSteps`, so its failure is a plain error, yet the writes before the failed one have landed (an import's header, a
+    // delete's allocations). The stale book then let a second import create a second standard header and made a retried delete
+    // start at a row that was already gone.
     onError: async (error) => {
-      if (!(error instanceof LeaseStepsError)) return;
+      if (!COST_REFRESH_ON_FAILURE && !(error instanceof LeaseStepsError)) return;
       await Promise.all([
         client.invalidateQueries({ queryKey: leaseBookKey(projectId) }),
         client.invalidateQueries({ queryKey: ["cost-book", projectId, "none"] }),

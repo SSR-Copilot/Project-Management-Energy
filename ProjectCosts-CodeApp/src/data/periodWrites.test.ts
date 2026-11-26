@@ -60,7 +60,32 @@ vi.mock("./client", () => ({
     if (refusedDeletes.has(id)) throw new Error(`${operation} failed: refused`);
     writes.push({ op: "delete", table: DELETE_TABLE[entitySet] ?? entitySet, id });
   },
+  // dvopt CB-03: the app's deletes go through `deleteIfExists`; with no 404 in this double it is `deleteRecord`.
+  deleteIfExists: async (operation: string, entitySet: string, id: string) => {
+    if (refusedDeletes.has(id)) throw new Error(`${operation} failed: refused`);
+    writes.push({ op: "delete", table: DELETE_TABLE[entitySet] ?? entitySet, id });
+  },
 }));
+// dvopt CB-01 / CB-14: the existence guard and the stable-id read-back are tested in costUpdateGuard.test.ts / periodWrites.dvopt.test.ts.
+const guard = vi.hoisted(() => ({
+  /** Every existence read: [operation, entitySet, ids]. */
+  reads: [] as [string, string, string[]][],
+  /** Ids the double reports as deleted by someone else. */
+  missing: new Set<string>(),
+  /** Ids whose retried create the read-back finds already there. */
+  landed: new Set<string>(),
+}));
+vi.mock("./costUpdateGuard", async () => {
+  const { RecordGoneError } = await import("@/platform/errors");
+  return {
+    assertRowsExist: async (operation: string, entitySet: string, ids: string[]) => {
+      guard.reads.push([operation, entitySet, [...ids]]);
+      const gone = ids.find((id) => guard.missing.has(id));
+      if (gone) throw new RecordGoneError(operation, entitySet, gone);
+    },
+    rowExists: async (_operation: string, _entitySet: string, id: string) => guard.landed.has(id),
+  };
+});
 
 /** A generated service double that records what it was asked to write. */
 function service(table: string, idColumn: string) {
@@ -130,6 +155,8 @@ const {
 const { standardCostName } = await import("@/features/cost/periods/opexRules");
 const { mapOpexRow } = await import("./costBook");
 const { invalidateCurrencies } = await import("./currencies");
+const { resetStableCreateIds } = await import("./stableCreateId");
+const { RecordGoneError } = await import("@/platform/errors");
 
 /* ══════════════════════════════════════════════════════════════ fixtures ══ */
 
@@ -215,6 +242,10 @@ beforeEach(() => {
   queriedBy = {};
   writes = [];
   failingUpdates.clear();
+  guard.reads.length = 0;
+  guard.missing.clear();
+  guard.landed.clear();
+  resetStableCreateIds();
   for (const key of Object.keys(NEW_ID)) delete NEW_ID[key];
 });
 
@@ -913,5 +944,101 @@ describe("period round trip", () => {
       inflationPercent: null, inflationYear: 0,
       align: false,
     });
+  });
+});
+
+/* ═══════════════════════════ dvopt: upsert guard (CB-01), 404 as done (CB-03), stable create id (CB-14) ══ */
+
+describe("dvopt — OPEX guard, gone-as-done and stable ids", () => {
+  const HEAD = "9d3168e6-2b7c-ef11-ac20-6045bda08851";
+  const chain = (id: string, startDate: string, parentId?: string): CostPeriod =>
+    ({ ...OM_PERIOD, id, startDate, years: 1, months: 0, parentId, contractId: HEAD });
+  const chainBook = [chain(HEAD, "2027-01-01"), chain("p2", "2028-01-01", HEAD), chain("p3", "2029-01-01", HEAD)];
+  beforeEach(() => { rowsByLabel = { ...opexReferenceRows() }; });
+
+  it("UT-OPEXDVOPT-001 an Edit reads the row and the followers it re-chains in ONE read before any write", async () => {
+    const before = chainBook[0]!;
+    await savePeriod(CTX, { ...before, years: 2 }, false, { before, bookPeriods: chainBook });
+    expect(guard.reads).toEqual([["update OPEX period", "vsb_opexprojectcosts", [HEAD, "p2", "p3"]]]);
+    expect(writes.some((w) => w.op === "update" && w.id === HEAD)).toBe(true);
+  });
+
+  it("UT-OPEXDVOPT-002 a row another user deleted refuses the Edit with RecordGoneError and NOTHING is written", async () => {
+    guard.missing.add(HEAD);
+    await expect(savePeriod(CTX, { ...OM_PERIOD, id: HEAD }, false)).rejects.toBeInstanceOf(RecordGoneError);
+    expect(writes).toEqual([]);
+  });
+
+  it("UT-OPEXDVOPT-003 a deleted FOLLOWER refuses the whole Edit before the row itself is patched", async () => {
+    guard.missing.add("p3");
+    const before = chainBook[0]!;
+    await expect(savePeriod(CTX, { ...before, years: 2 }, false, { before, bookPeriods: chainBook }))
+      .rejects.toBeInstanceOf(RecordGoneError);
+    expect(writes).toEqual([]);
+  });
+
+  it("UT-OPEXDVOPT-004 an Add reads nothing to guard (a create is not an upsert)", async () => {
+    NEW_ID.opex = ["7db92415-8111-e7ee-bd6c-032eeb14100b"];
+    await savePeriod(CTX, OM_PERIOD, true);
+    expect(guard.reads).toEqual([]);
+    expect(writes.filter((w) => w.op === "create")).toHaveLength(1);
+  });
+
+  it("UT-OPEXDVOPT-005 the Edit writes are the same with the guard on as with the flags off (oracle = the old code path)", async () => {
+    const before = chainBook[0]!;
+    await savePeriod(CTX, { ...before, years: 2 }, false, { before, bookPeriods: chainBook });
+    const guarded = writes.map((w) => [w.op, w.table, w.id, w.fields]);
+    writes = [];
+    guard.reads.length = 0;
+    vi.resetModules();
+    vi.doMock("./leaseOpexFlags", () => ({
+      GONE_AS_DONE_LEASE_OPEX: false, LEASE_GUARD: false, OPEX_GUARD: false, COST_REFRESH_ON_FAILURE: false, STABLE_CREATE_IDS: false,
+    }));
+    const legacy = await import("./periodWrites");
+    await legacy.savePeriod(CTX, { ...before, years: 2 }, false, { before, bookPeriods: chainBook });
+    vi.doUnmock("./leaseOpexFlags");
+    vi.resetModules();
+    expect(guard.reads).toEqual([]); // OPEX_GUARD off: no read
+    expect(writes.map((w) => [w.op, w.table, w.id, w.fields])).toEqual(guarded);
+  });
+
+  it("UT-OPEXDVOPT-006 a create carries a client id; the SAME save retried keeps it, and a landed create is read back, not repeated", async () => {
+    const sent: string[] = [];
+    const svc = (await import("@/generated/services/Vsb_opexprojectcostsService")).Vsb_opexprojectcostsService as unknown as {
+      create: (f: Record<string, unknown>) => Promise<unknown>;
+    };
+    const realCreate = svc.create;
+    let fail = true;
+    svc.create = async (f) => {
+      sent.push(String(f.vsb_opexprojectcostid));
+      if (fail) return { success: false, error: new Error("gateway timeout") };
+      return realCreate(f);
+    };
+    try {
+      await expect(savePeriod(CTX, OM_PERIOD, true)).rejects.toThrow();
+      expect(sent[0]).toMatch(/^[0-9a-f-]{36}$/);
+      // The retry, the row did NOT land (the read-back finds nothing): the same id is sent again.
+      await expect(savePeriod(CTX, OM_PERIOD, true)).rejects.toThrow();
+      expect(sent[1]).toBe(sent[0]);
+      // The retry where the earlier POST had landed: the read-back finds it and NOTHING is created again.
+      guard.landed.add(sent[0]!);
+      fail = false;
+      const count = sent.length;
+      const saved = await savePeriod(CTX, OM_PERIOD, true);
+      expect(sent.length).toBe(count);
+      expect(saved.id).toBe(sent[0]);
+      expect(writes.filter((w) => w.op === "create")).toEqual([]);
+    } finally {
+      svc.create = realCreate;
+    }
+  });
+
+  it("UT-OPEXDVOPT-007 deleting a chain goes through the gone-as-done delete: children, then the head", async () => {
+    rowsByLabel["list OPEX chain children"] = [
+      { vsb_opexprojectcostid: "child-b", vsb_name: "…- 3" },
+      { vsb_opexprojectcostid: "child-a", vsb_name: "…- 2" },
+    ];
+    await deletePeriod({ ...OM_PERIOD, id: HEAD, contractId: HEAD, periodIndex: 1 });
+    expect(writes.map((w) => `${w.op}:${w.id}`)).toEqual(["delete:child-a", "delete:child-b", `delete:${HEAD}`]);
   });
 });

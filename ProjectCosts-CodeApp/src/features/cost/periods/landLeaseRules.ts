@@ -3448,8 +3448,11 @@ export function planStandardImport(args: {
   subaccountName: string;
   /** Sorted by `description` ascending, as the canvas sorts them. */
   assumptions: readonly LeaseAssumptionRow[];
-  /** Every `Land Lease Project Costs` row already in this sub-account for this project. */
-  existingCostsInSubaccount: readonly LeaseCostRow[];
+  /**
+   * Every `Land Lease Project Costs` row already in this sub-account for this project. Only `isStandardContract` is read. Since dvopt
+   * CB-02 the screen passes a FRESH server read of the standard ones, not the cached book (the rule stays pure).
+   */
+  existingCostsInSubaccount: readonly Pick<LeaseCostRow, "id" | "subaccountId" | "isStandardContract">[];
   generators: readonly GeneratorOption[];
   /** The `Country Inflation Profiles` value for (country, COD year + 1), or null. */
   countryInflationProfile: number | null;

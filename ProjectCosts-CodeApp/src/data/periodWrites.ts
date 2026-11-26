@@ -59,7 +59,11 @@ import { unwrap } from "@/platform/errors";
 import { loggedCall } from "@/platform/requestLog";
 import { OPEX_MSG, planFollowingPeriodStarts, type ChainPeriod, type OpexAccount, type OpexSubaccount } from "@/features/cost/periods/opexRules";
 import type { CostPeriod, PeriodMode } from "@/features/cost/costing/model";
-import { deleteRecord, fetchAll } from "./client";
+import type { IOperationResult } from "@microsoft/power-apps/data";
+import { deleteIfExists, deleteRecord, fetchAll } from "./client";
+import { assertRowsExist } from "./costUpdateGuard";
+import { GONE_AS_DONE_LEASE_OPEX, OPEX_GUARD } from "./leaseOpexFlags";
+import { createWithStableId } from "./stableCreateId";
 import { mapLimit, mapLimitFirstFailure, WRITE_CONCURRENCY } from "./concurrency";
 import { loadActiveCurrencies } from "./currencies";
 import { ES_PLANT } from "./dataverseNames";
@@ -427,6 +431,18 @@ async function firstFailureOf<T>(items: readonly T[], task: (item: T) => Promise
   return null;
 }
 
+/** The periods of one chain: its head and the rows that point at it (shared by the re-chain plan and its guard, dvopt CB-01). */
+const inChainOf = (rootId: string) => (p: CostPeriod): boolean => p.id === rootId || p.parentId === rootId;
+const toChainPeriod = (p: CostPeriod): ChainPeriod => ({
+  id: p.id, startDate: p.startDate || null, durationYears: p.years, durationMonths: p.months,
+});
+
+/** dvopt CB-01, `OPEX_GUARD`: one existence read of the row an edit updates and the followers it re-chains; `RecordGoneError`, nothing sent. */
+async function guardOpexUpdates(rowId: string, followerIds: readonly string[], enabled: boolean = OPEX_GUARD): Promise<void> {
+  if (!enabled) return;
+  await assertRowsExist("update OPEX period", ES_PLANT.opexProjectCosts, [rowId, ...followerIds]);
+}
+
 export async function saveOpexPeriod(
   ctx: PeriodWriteContext,
   period: CostPeriod,
@@ -460,10 +476,25 @@ export async function saveOpexPeriod(
       ? { "owningbusinessunit@odata.bind": bind("businessunits", ctx.owningBusinessUnitId) } : {}),
   };
 
+  // dvopt CB-01: the periods that follow the edited one are re-chained further down. The plan is pure (it reads `extras` and `period`
+  // only), so it is worked out HERE, so that the row, its followers and nothing else are checked in ONE read before the first write.
+  const rechainPlan = extras && !isNew && extras.before
+    ? planFollowingPeriodStarts({
+      chain: extras.bookPeriods.filter(inChainOf(period.parentId ?? period.id)).map(toChainPeriod),
+      saved: toChainPeriod(period),
+      previous: toChainPeriod(extras.before),
+    })
+    : [];
+  // An UPDATE is a PATCH with no If-Match (an upsert): on a row another user deleted it would create a project-less row. Refused first.
+  if (!isNew) await guardOpexUpdates(period.id, rechainPlan.map((step) => step.id));
+
   let savedId = period.id;
   if (isNew) {
-    const created = unwrap(
-      await Vsb_opexprojectcostsService.create({
+    const created = await createWithStableId({
+      operation: "create OPEX period",
+      entitySet: ES_PLANT.opexProjectCosts,
+      idField: "vsb_opexprojectcostid",
+      payload: {
         ...fields,
         ...bindings,
         "vsb_Project@odata.bind": bind("vsb_projects", ctx.projectId),
@@ -474,10 +505,10 @@ export async function saveOpexPeriod(
         ...(period.parentId
           ? { "vsb_ParentCost@odata.bind": bind("vsb_opexprojectcosts", period.parentId) }
           : {}),
-      } as never),
-      "create OPEX period",
-    );
-    savedId = created.vsb_opexprojectcostid;
+      },
+      create: (p) => Vsb_opexprojectcostsService.create(p as never) as unknown as Promise<IOperationResult<Record<string, unknown>>>,
+    });
+    savedId = created.id;
   } else {
     unwrap(
       await Vsb_opexprojectcostsService.update(period.id, { ...fields, ...bindings } as never),
@@ -516,16 +547,7 @@ export async function saveOpexPeriod(
   // Edited canvas: when an EXISTING period's Start Date or total months changed, re-chain the
   // periods that follow it (`planFollowingPeriodStarts`), one PATCH per period (side by side, OPT-11).
   if (extras && !isNew && extras.before) {
-    const rootId = period.parentId ?? savedId;
-    const inChain = (p: CostPeriod) => p.id === rootId || p.parentId === rootId;
-    const toChain = (p: CostPeriod): ChainPeriod => ({
-      id: p.id, startDate: p.startDate || null, durationYears: p.years, durationMonths: p.months,
-    });
-    const plan = planFollowingPeriodStarts({
-      chain: extras.bookPeriods.filter(inChain).map(toChain),
-      saved: toChain({ ...period, id: savedId }),
-      previous: toChain(extras.before),
-    });
+    const plan = rechainPlan;
     const rechainFailure = await firstFailureOf(plan, (step) => loggedCall(
       "update", `${ES_PLANT.opexProjectCosts} (re-chain start date)`,
       async () => unwrap(
@@ -572,12 +594,14 @@ export async function deleteOpexPeriod(period: CostPeriod): Promise<void> {
   // Through `deleteRecord` (rule 14, CA-27): the generated `delete()` returns nothing, so a refusal looked like success.
   // OPT-11: the children go side by side (`WRITE_CONCURRENCY`), the head only after every one has settled, so the head is never gone
   // while a child still points at it. A failing child stops the rest from starting and the error is the first one IN ORDER, as the loop's.
+  // dvopt CB-03, `GONE_AS_DONE_LEASE_OPEX`: a row already gone (a 404) is a delete that is done, so a retry after a partial delete finishes.
+  const remove = GONE_AS_DONE_LEASE_OPEX ? deleteIfExists : deleteRecord;
   await mapLimitFirstFailure(
     children,
-    (child) => deleteRecord("delete OPEX period", ES_PLANT.opexProjectCosts, child.id),
+    (child) => remove("delete OPEX period", ES_PLANT.opexProjectCosts, child.id),
     WRITE_CONCURRENCY,
   );
-  await deleteRecord("delete OPEX period", ES_PLANT.opexProjectCosts, period.id);
+  await remove("delete OPEX period", ES_PLANT.opexProjectCosts, period.id);
 }
 
 /* ══════════════════════════════════════════════ Add Standard Contract ══ */
