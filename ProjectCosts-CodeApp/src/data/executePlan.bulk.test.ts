@@ -273,8 +273,9 @@ describe("bulk steps in a plan", () => {
     setBulkBackend(fake.backend);
     const plan = emptyPlan();
     plan.writes.push(createMany(SET, [row("a", { b: createdRowRef(4) })], "bad ref"));
-    const err = (await executePlan(plan, "test", client).catch((e: unknown) => e)) as PlanError;
-    expect(err).toBeInstanceOf(PlanError);
+    const err = (await executePlan(plan, "test", client).catch((e: unknown) => e)) as Error;
+    // dvopt T-15 (WE-06): refused before the plan starts (a PlanShapeError; was a PlanError at send time), same wording.
+    expect(err.name).toBe("PlanShapeError");
     expect(err.message).toMatch(/refers to created row 4/);
     expect(fake.calls).toEqual([]);
   });

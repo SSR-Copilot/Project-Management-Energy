@@ -30,9 +30,9 @@ import { isRecordGone, RECORD_GONE_TEXT } from "@/platform/errors";
 import { permissionMessage } from "@/platform/privileges";
 import { BulkRowsGoneError } from "./bulkBackend";
 import {
-  executePlan, PlanError, PlanRefusedError, type LandedRow, type PlanFailure, type PlanResult,
+  executePlan, PlanError, PlanRefusedError, PlanShapeError, type LandedRow, type PlanFailure, type PlanResult,
 } from "./executePlan";
-import { changeCount, type WritePlan } from "./writePlan";
+import { changeCount, planEngineFlags, type WritePlan } from "./writePlan";
 
 /** One write: a ready plan, or a function that reads what it needs and returns the plan. */
 export interface PlanJob {
@@ -109,6 +109,20 @@ export const PARTLY_SAVED_NOTE =
 export function writeErrorMessage(error: unknown, action: string, prefix?: (detail: string) => string): string {
   const denied = permissionMessage(error, action);
   if (denied) return denied;
+  // WE-07 (`PLAN_PERMISSION_LOOKUP`): `executePlan` wraps a refused (403) write in a `PlanError`, so look through its cause chain
+  // (as `isRecordGone` does). Changes that stayed are still reported: the permission sentence alone would say "nothing happened".
+  if (error instanceof PlanError && planEngineFlags().permissionLookup) {
+    let current: unknown = error.cause;
+    for (let depth = 0; depth < 5 && current; depth += 1) {
+      const text = permissionMessage(current, action);
+      if (text) {
+        const sent = error.done > 0 ? ` ${error.done} of ${error.total} changes had already been saved.` : "";
+        const note = error instanceof PartlySavedJobError ? ` ${PARTLY_SAVED_NOTE}` : "";
+        return `${text}${sent}${note}`;
+      }
+      current = (current as { cause?: unknown }).cause;
+    }
+  }
   // Only a guarded update can raise this (no PM plan sets `guarded`), so PM texts are unchanged.
   if (isRecordGone(error)) return prefix ? prefix(RECORD_GONE_TEXT) : RECORD_GONE_TEXT;
   // A bulk update found rows gone (Generators bulk programme): its own message, like the gone row above.
@@ -245,7 +259,7 @@ export function usePlanWrite(opts: {
       } catch (e) {
         // A fail-closed refusal of the SECOND plan sent nothing, but the first plan's writes stay: report them
         // like any part-way stop ("N of M changes had already been saved") instead of "nothing was saved".
-        if (e instanceof PlanRefusedError && first.done > 0) {
+        if ((e instanceof PlanRefusedError || e instanceof PlanShapeError) && first.done > 0) {
           carriesFirstPlan = true;
           throw new PartlySavedJobError(
             first.done, first.done + next.writes.reduce((n, w) => n + changeCount(w), 0), job.progress, e,

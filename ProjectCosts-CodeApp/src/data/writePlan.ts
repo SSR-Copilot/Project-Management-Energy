@@ -77,6 +77,33 @@ export interface PlannedWrite extends WriteOp {
   stopOnFailure?: boolean;
 }
 
+/**
+ * Switches of the write engine (dvopt T-15, WE-06 / WE-07). Both default ON; `false` restores the earlier behaviour exactly.
+ *  - `PLAN_SHAPE_CHECKS`: `executePlan` rejects a malformed plan (an update or delete without an id, an unknown op, a reference to
+ *    a create that has not run, an unregistered table, a bad concurrency limit, a guarded non-update) BEFORE anything is sent,
+ *    with a `PlanShapeError`. Off = those shapes fail one step at a time while the plan runs, as before.
+ *  - `PLAN_PERMISSION_LOOKUP`: `writeErrorMessage` finds a 403 inside a `PlanError`'s cause chain and shows the permission
+ *    sentence. Off = a `PlanError` reads as "failed: ..." with the technical text, as before.
+ */
+export const PLAN_SHAPE_CHECKS = true;
+export const PLAN_PERMISSION_LOOKUP = true;
+
+export interface PlanEngineFlags {
+  shapeChecks: boolean;
+  permissionLookup: boolean;
+}
+
+let flagOverride: Partial<PlanEngineFlags> | null = null;
+
+/** The switches in force: the shipped values, then the override a test installed. */
+export const planEngineFlags = (): Readonly<PlanEngineFlags> =>
+  ({ shapeChecks: PLAN_SHAPE_CHECKS, permissionLookup: PLAN_PERMISSION_LOOKUP, ...flagOverride });
+
+/** Test seam: replaces switches for the rest of the run; `null` restores the shipped values. */
+export function setPlanEngineFlags(next: Partial<PlanEngineFlags> | null): void {
+  flagOverride = next;
+}
+
 let groupCounter = 0;
 
 /** True for a `createMany` / `updateMany` step (one bulk request sequence, counted per row). */

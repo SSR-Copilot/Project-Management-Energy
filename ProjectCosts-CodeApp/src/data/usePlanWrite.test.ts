@@ -7,7 +7,8 @@ import { describe, expect, it } from "vitest";
 import { DataError, RECORD_GONE_TEXT, RecordGoneError } from "@/platform/errors";
 import { BulkRowsGoneError } from "./bulkBackend";
 import { PlanError, PlanRefusedError } from "./executePlan";
-import { writeErrorMessage } from "./usePlanWrite";
+import { PARTLY_SAVED_NOTE, PartlySavedJobError, writeErrorMessage } from "./usePlanWrite";
+import { setPlanEngineFlags } from "./writePlan";
 
 const LQ = "“";
 const RQ = "”";
@@ -32,12 +33,39 @@ describe("writeErrorMessage", () => {
     expect(writeErrorMessage("text", "save")).toBe("text");
   });
 
-  it("UT-PLANWRITE-004 PM pin: permission is checked first on the error itself (a PlanError wrapper is not looked through)", () => {
+  it("UT-PLANWRITE-004 permission is checked first, on the error itself and (dvopt T-15, WE-07) inside a PlanError", () => {
     const forbidden = new DataError("save", "no", 403);
-    expect(writeErrorMessage(forbidden, "save the thing"))
-      .toBe("You do not have permission to save the thing. Ask your administrator if you believe you should.");
-    expect(writeErrorMessage(new PlanError(0, 1, "x", forbidden), "save the thing"))
-      .toBe(`${LQ}x${RQ} failed: save failed: no.`);
+    const text = "You do not have permission to save the thing. Ask your administrator if you believe you should.";
+    expect(writeErrorMessage(forbidden, "save the thing")).toBe(text);
+    // WE-07: UT-PLANWRITE-004 used to pin that a PlanError wrapper was NOT looked through ("x" failed: save failed: no.).
+    expect(writeErrorMessage(new PlanError(0, 1, "x", forbidden), "save the thing")).toBe(text);
+  });
+
+  it("UT-PLANWRITE-033 a 403 inside a PlanError that had already saved changes says so after the permission sentence", () => {
+    const forbidden = new DataError("save", "no", 403);
+    const text = "You do not have permission to save the thing. Ask your administrator if you believe you should.";
+    expect(writeErrorMessage(new PlanError(2, 5, "x", forbidden), "save the thing"))
+      .toBe(`${text} 2 of 5 changes had already been saved.`);
+    expect(writeErrorMessage(new PartlySavedJobError(2, 5, "x", forbidden), "save the thing"))
+      .toBe(`${text} 2 of 5 changes had already been saved. ${PARTLY_SAVED_NOTE}`);
+  });
+
+  it("UT-PLANWRITE-034 the permission text is found a few causes deep, and a non-403 cause chain reads as before", () => {
+    const forbidden = new DataError("save", "no", 403);
+    const wrapped = new Error("outer", { cause: new Error("middle", { cause: forbidden }) });
+    expect(writeErrorMessage(new PlanError(0, 1, "x", wrapped), "save the thing")).toMatch(/^You do not have permission to save the thing/);
+    const notForbidden = new DataError("save", "boom", 500);
+    expect(writeErrorMessage(new PlanError(0, 1, "x", notForbidden), "save the thing")).toBe(`${LQ}x${RQ} failed: save failed: boom.`);
+  });
+
+  it("UT-PLANWRITE-035 with PLAN_PERMISSION_LOOKUP off the earlier text returns (the PlanError wrapper is not looked through)", () => {
+    setPlanEngineFlags({ permissionLookup: false });
+    try {
+      expect(writeErrorMessage(new PlanError(0, 1, "x", new DataError("save", "no", 403)), "save the thing"))
+        .toBe(`${LQ}x${RQ} failed: save failed: no.`);
+    } finally {
+      setPlanEngineFlags(null);
+    }
   });
 
   it("UT-PLANWRITE-005 a gone row (directly or inside a PlanError) shows the record-gone sentence, wrapped by the prefix when given", () => {
