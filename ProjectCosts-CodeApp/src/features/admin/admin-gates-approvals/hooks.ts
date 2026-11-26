@@ -14,10 +14,11 @@
  *
  * Technologies are the `vsb_technology` choice CODE everywhere.
  */
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { qk } from "@/data/keys";
 import { adminStates, projectStatesQueryOptions } from "@/data/projectStates";
 import { invalidateAfterGatesWrite } from "@/data/adminInvalidation";
+import { ADMIN_OPT } from "@/data/adminFlags";
 import { projectGatesRepository as repo, type GatesDataset, type Payload } from "@/data/adminGatesApprovals";
 import { CreatedIdMissingError } from "@/data/executePlan";
 import { runPlan } from "@/data/runPlan";
@@ -64,6 +65,71 @@ export function usePeopleSearch(term: string) {
   });
 }
 
+/** Active-pill toggles in flight per dataset (a settling toggle must know whether it is the last one; TanStack still counts it as pending inside `onSettled`). */
+const togglesInFlight = new Map<string, number>();
+const bumpToggles = (id: string, by: 1 | -1): number => {
+  const next = Math.max(0, (togglesInFlight.get(id) ?? 0) + by);
+  if (next === 0) togglesInFlight.delete(id);
+  else togglesInFlight.set(id, next);
+  return next;
+};
+
+/** Per dataset key: the slices a settled toggle asked to reload, and the reload loop that is running, if any. */
+const sliceReloads = new Map<string, { kinds: Set<"gate" | "task">; running: Promise<void> | null }>();
+
+/**
+ * AD-06 (`ADMIN_GATES_NARROW_RELOAD`): after an Active-pill write, reload only the slice that changed (templates for a gate toggle,
+ * approvals for a task toggle), reusing the cached header, tasks and the other half. Overlapping clicks do not stack reloads:
+ *  - while another toggle is still in flight, a settling one only records its slice; the LAST one to settle reloads, so N quick clicks
+ *    give one reload;
+ *  - a reload already running is awaited, not started again; slices recorded meanwhile are reloaded once it finishes.
+ * Anything unexpected (no cached dataset, a failed read) falls back to the full invalidation of before.
+ */
+export function reloadGatesSlice(
+  qc: QueryClient, countryId: string, technology: number, kind: "gate" | "task", otherTogglesPending: boolean,
+): Promise<void> {
+  const key = qk.adminGateDataset(countryId, technology);
+  const id = JSON.stringify(key);
+  const state = sliceReloads.get(id) ?? { kinds: new Set<"gate" | "task">(), running: null };
+  sliceReloads.set(id, state);
+  state.kinds.add(kind);
+  if (state.running) return state.running;
+  if (otherTogglesPending) return Promise.resolve();
+  const full = () => invalidateAfterGatesWrite(qc, { countryId, technology });
+  state.running = (async () => {
+    try {
+      // The settings screens' locks are keyed apart from the dataset and are only marked stale (no read while the screen is unmounted).
+      void qc.invalidateQueries({ queryKey: qk.adminChecklistLocks });
+      while (state.kinds.size > 0) {
+        const kinds = [...state.kinds];
+        state.kinds.clear();
+        const current = qc.getQueryData<GatesDataset>(key);
+        if (!current) { await full(); continue; }
+        try {
+          const next = await Promise.all(kinds.map((k) => repo.reloadSlice(k, countryId, technology, current)));
+          qc.setQueryData<GatesDataset>(key, (latest) => {
+            if (!latest) return latest;
+            let merged = latest;
+            kinds.forEach((k, i) => {
+              const fresh = next[i] as GatesDataset;
+              merged = k === "gate"
+                ? { ...merged, templates: fresh.templates, people: { ...merged.people, ...fresh.people } }
+                : { ...merged, approvals: fresh.approvals, people: { ...merged.people, ...fresh.people } };
+            });
+            return merged;
+          });
+        } catch {
+          await full();
+        }
+      }
+    } finally {
+      state.running = null;
+      if (state.kinds.size === 0) sliceReloads.delete(id);
+    }
+  })();
+  return state.running;
+}
+
 /**
  * Inline Active toggles (the grid's status pills): optimistic flip, revert on failure, refetch after.
  * DIVERGENCE: optimistic; the canvas `Patch` updates the pill only after the server answers (doc 09 §2).
@@ -81,6 +147,7 @@ export function useToggleActive(countryId: string, technology: number, canEdit: 
       );
     },
     onMutate: async (v) => {
+      bumpToggles(JSON.stringify(key), 1);
       await qc.cancelQueries({ queryKey: key });
       const previous = qc.getQueryData<GatesDataset>(key);
       if (previous) {
@@ -99,7 +166,12 @@ export function useToggleActive(countryId: string, technology: number, canEdit: 
     onError: (_error, _v, context) => {
       if (context?.previous) qc.setQueryData(key, context.previous);
     },
-    onSettled: () => invalidateAfterGatesWrite(qc, { countryId, technology }),
+    onSettled: (_data, _error, v) => {
+      const othersPending = bumpToggles(JSON.stringify(key), -1) > 0;
+      return ADMIN_OPT.ADMIN_GATES_NARROW_RELOAD
+        ? reloadGatesSlice(qc, countryId, technology, v.kind, othersPending)
+        : invalidateAfterGatesWrite(qc, { countryId, technology });
+    },
   });
 }
 

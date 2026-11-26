@@ -16,6 +16,7 @@
  */
 import type { SharedProjectState } from "./generalData";
 import { RowWriteError } from "./adminRowWrites";
+import { ADMIN_OPT } from "./adminFlags";
 import { forEachLimit } from "./concurrency";
 import {
   checklistTables, isLockingApproval, LOCK_COLUMNS, taskBinds, type ChecklistApproval, type ChecklistTablesRepository,
@@ -101,6 +102,8 @@ export interface ChecklistRepository {
   /** Returns the new row's id. */
   createTask(record: ChecklistTaskWrite): Promise<string>;
   updateTask(id: string, changed: ChecklistTaskWrite): Promise<void>;
+  /** AD-08: `updateTask` for a row created a moment ago, without its existence read. Optional (a fake repository may omit it). */
+  updateCreatedTask?(id: string, changed: ChecklistTaskWrite): Promise<void>;
 }
 
 /**
@@ -170,6 +173,10 @@ export function createChecklistRepository(tables: ChecklistTablesRepository = ch
     },
 
     updateTask: (id, changed) => tables.updateDefaultChecklist(id, { ...changed }, OPERATION.update),
+
+    updateCreatedTask: (id, changed) => (tables.updateJustCreatedDefaultChecklist
+      ? tables.updateJustCreatedDefaultChecklist(id, { ...changed }, OPERATION.update)
+      : tables.updateDefaultChecklist(id, { ...changed }, OPERATION.update)),
   };
 }
 
@@ -291,7 +298,9 @@ export async function createTask(
 ): Promise<string> {
   const id = await repo.createTask(buildCreatePayload(args.tab, args.clusterId, args.form, args.order));
   try {
-    await repo.updateTask(id, statusPayload(args.form.isActive));
+    // AD-08 (`ADMIN_NO_REDUNDANT_EXISTS`): the row was created a few milliseconds ago, so its existence is not read again.
+    const followUp = ADMIN_OPT.ADMIN_NO_REDUNDANT_EXISTS && repo.updateCreatedTask ? repo.updateCreatedTask : repo.updateTask;
+    await followUp.call(repo, id, statusPayload(args.form.isActive));
   } catch (error) {
     throw new TaskStatusNotSetError(id, error);
   }

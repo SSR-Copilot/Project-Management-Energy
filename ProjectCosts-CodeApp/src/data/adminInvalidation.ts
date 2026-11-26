@@ -19,6 +19,7 @@
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
 import { qk, type SettingsScope } from "@/data/keys";
 import { invalidateCapexChart } from "@/data/capexChart";
+import { ADMIN_OPT } from "@/data/adminFlags";
 
 async function invalidateAll(client: QueryClient, keys: readonly QueryKey[]): Promise<void> {
   await Promise.allSettled(keys.map((queryKey) => client.invalidateQueries({ queryKey })));
@@ -83,6 +84,14 @@ export function invalidateAfterMilestonesWrite(client: QueryClient): Promise<voi
 
 /* ════════════════════════════════════════════════════════════════ Costs ══ */
 
+/**
+ * AD-11 (`ADMIN_CASCADE_INVALIDATE`): a DELETE of a standard DEVEX cost or of a standard BoP contract fires a server plug-in that
+ * deletes the project rows built from it. A caller passes `{ cascade: true }` for those two deletes only; the other writes keep
+ * their key lists. Unmounted queries are only marked stale, so it costs no request until a project screen is opened.
+ */
+export interface CascadeOption { cascade?: boolean }
+const cascadeOn = (o: CascadeOption): boolean => ADMIN_OPT.ADMIN_CASCADE_INVALIDATE && o.cascade === true;
+
 /** Which Costs settings table group was written. */
 export type StandardCostKind = "devex" | "opex";
 
@@ -91,11 +100,14 @@ export type StandardCostKind = "devex" | "opex";
  * ("opex", which also backs Land Lease). Read by: the Costs settings lists for the scope, and the
  * project screens' standard-assumption caches. Without a scope every scope's list is refreshed.
  */
-export function costsWriteKeys(kind: StandardCostKind, scope?: SettingsScope): QueryKey[] {
+export function costsWriteKeys(kind: StandardCostKind, scope?: SettingsScope, options: CascadeOption = {}): QueryKey[] {
   if (kind === "devex") {
     return [
       scope ? qk.adminCostDevex(scope) : qk.adminCostDevexAll,
       qk.capexStandardAssumptionsAll,
+      // AD-11: deleting a standard DEVEX cost makes `VSB_CapexAssumptionDeletion` (server, synchronous) delete every project CAPEX
+      // contract and cost built from it, so the project cost caches change too (the same list as `capexAccountsWriteKeys`).
+      ...(cascadeOn(options) ? [qk.costBookAll, qk.capexTotalsAll, qk.addCostSheetAll, [qk.devCoCapexCosts("")[0]], [qk.devCoCapexContracts("")[0]]] : []),
     ];
   }
   return [
@@ -109,8 +121,9 @@ export function invalidateAfterCostsWrite(
   client: QueryClient,
   kind: StandardCostKind,
   scope?: SettingsScope,
+  options: CascadeOption = {},
 ): Promise<void> {
-  return invalidateAll(client, costsWriteKeys(kind, scope));
+  return invalidateAll(client, costsWriteKeys(kind, scope, options));
 }
 
 /* ════════════════════════════════════════════════════════════ Contracts ══ */
@@ -121,13 +134,19 @@ export function invalidateAfterCostsWrite(
  * (`useBopStandardAssumption`, keyed `[...qk.bopStandardAssumptions(c, t), contractType]`, so the
  * (c, t) key is a prefix of every contract type's entry). Without a scope everything is refreshed.
  */
-export function contractsWriteKeys(scope?: SettingsScope): QueryKey[] {
+export function contractsWriteKeys(scope?: SettingsScope, options: CascadeOption = {}): QueryKey[] {
+  // AD-11: deleting a standard BoP contract makes `VSB.BoPContractAssumptionDeletion` (server) delete the project BoP contracts, their DevCo
+  // costs and (through them) their payment targets, so the project Contracts caches change too (prefixes of `contractInvalidations`).
+  const cascade: QueryKey[] = cascadeOn(options)
+    ? [[qk.contracts("")[0]], [qk.paymentTargets("")[0]], [qk.devCoLinks("")[0]]]
+    : [];
   if (!scope) {
     return [
       qk.adminContractListAll,
       qk.adminContractDevCoAll,
       qk.adminContractRecordAll,
       qk.bopStandardAssumptionsAll,
+      ...cascade,
     ];
   }
   return [
@@ -135,11 +154,12 @@ export function contractsWriteKeys(scope?: SettingsScope): QueryKey[] {
     qk.adminContractDevCo(scope.countryId, scope.technology),
     qk.adminContractRecordAll,
     qk.bopStandardAssumptions(scope.countryId, scope.technology),
+    ...cascade,
   ];
 }
 
-export function invalidateAfterContractsWrite(client: QueryClient, scope?: SettingsScope): Promise<void> {
-  return invalidateAll(client, contractsWriteKeys(scope));
+export function invalidateAfterContractsWrite(client: QueryClient, scope?: SettingsScope, options: CascadeOption = {}): Promise<void> {
+  return invalidateAll(client, contractsWriteKeys(scope, options));
 }
 
 /* ════════════════════════════════════════════════════════ Project Gates ══ */

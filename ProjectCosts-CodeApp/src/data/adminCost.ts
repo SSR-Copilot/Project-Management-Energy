@@ -40,7 +40,9 @@ import { RecordGoneError, unwrap } from "@/platform/errors";
 import { deleteRecord, fetchAll, updateRecordIfExists } from "./client";
 import { CAPEX_ROOT_NUMBER, OVERLEVERAGING } from "./dataverseNames";
 import { ACTIVE, and, eq, lookupEq, ne } from "./odata";
-import { updateRowsEach } from "./adminRowWrites";
+import { deleteRowIfPresent, updateRowsEach } from "./adminRowWrites";
+import { ADMIN_OPT } from "./adminFlags";
+import { loadCapexChartRows } from "./capexChart";
 
 /* ════════════════════════════════════════════════════════════════ contract ══ */
 
@@ -257,7 +259,22 @@ export function buildCapexHierarchy(rows: readonly CapexListRow[]): CapexHierarc
   return { categories, accounts, subaccounts };
 }
 
+/**
+ * AD-12 (`ADMIN_SCOPE_READS_ONCE`): the hierarchy is built from the shared CAPEX chart read (`data/capexChart.ts`: the same ACTIVE rows
+ * and columns, shared with the Cost screens and kept 30 s, dropped by every CAPEX account write) instead of a read of its own.
+ * `buildCapexHierarchy` sorts by order, number and name itself, so the chart's `vsb_number` order changes nothing. OFF: the own read.
+ */
 export async function loadCapexHierarchy(): Promise<CapexHierarchy> {
+  if (ADMIN_OPT.ADMIN_SCOPE_READS_ONCE) {
+    const chart = await loadCapexChartRows();
+    return buildCapexHierarchy(chart.map((r) => ({
+      id: str(r.vsb_capexaccountlistid),
+      name: str(r.vsb_name),
+      number: str(r.vsb_number),
+      order: num(r.vsb_order) ?? 0,
+      parentId: optStr(r._vsb_parentaccount_value),
+    })));
+  }
   const rows = await fetchAll<Raw>(
     "list CAPEX account hierarchy",
     (o) => Vsb_capexaccountlistsService.getAll(o) as never,
@@ -494,6 +511,38 @@ export async function listInactiveOpexRows(scope: CostScope): Promise<InactiveCo
     landLeaseSubaccountId: optStr(r["_vsb_landleasesubaccount_value"]),
     opexSubaccountId: optStr(r["_vsb_opexsubaccount_value"]),
   }));
+}
+
+/** The active and the not-active OPEX / Land Lease rows of one scope, from ONE read (AD-09). */
+export interface OpexScopeRows { active: OpexPeriod[]; inactive: InactiveContractRow[] }
+
+/**
+ * AD-09 (`ADMIN_SCOPE_READS_ONCE`): one read of the scope's rows in every state, split on `statecode` here. It replaces
+ * `listOpexPeriods` + `listInactiveOpexRows` (two reads of the same table and scope). The columns are `OPEX_SELECT` plus `statecode`;
+ * the active rows map exactly as before and the inactive ones keep only the minimal columns. DIVERGENCE (failure coupling only): a failed
+ * read now fails both halves together, where the inactive read used to fail alone (the screen then showed the active rows).
+ */
+export async function listOpexScopeRows(scope: CostScope): Promise<OpexScopeRows> {
+  const rows = await fetchAll<Raw>(
+    "list OPEX & Land Lease standard assumptions",
+    (o) => Vsb_opexlandleasestandardassumptionsesService.getAll(o) as never,
+    { select: [...OPEX_SELECT, "statecode"], filter: scopeFilter(scope) },
+  );
+  const active: OpexPeriod[] = [];
+  const inactive: InactiveContractRow[] = [];
+  for (const r of rows) {
+    if (num(r["statecode"]) === 0) active.push(toOpexPeriod(r));
+    else {
+      inactive.push({
+        id: str(r[OPEX_PRIMARY_KEY]),
+        type: num(r["vsb_typeofcontract"]),
+        period: periodNumber(r["vsb_period"]),
+        landLeaseSubaccountId: optStr(r["_vsb_landleasesubaccount_value"]),
+        opexSubaccountId: optStr(r["_vsb_opexsubaccount_value"]),
+      });
+    }
+  }
+  return { active, inactive };
 }
 
 /** Every row of one contract, ANY state, fully paged — the integrity source for writes. */
@@ -858,6 +907,13 @@ export async function saveOpexPeriod(w: OpexWrite): Promise<{ id: string; propag
 }
 
 /**
+ * One OPEX row delete. AD-05 (`ADMIN_DELETE_ALREADY_GONE_OK`): a row another admin already deleted (404 / `0x80040217`) is done, not a
+ * failure; OFF it is `deleteRecord` as before.
+ */
+const deleteOpexRow = (operation: string, id: string): Promise<unknown> =>
+  ADMIN_OPT.ADMIN_DELETE_ALREADY_GONE_OK ? deleteRowIfPresent(operation, OPEX_ENTITY_SET, id) : deleteRecord(operation, OPEX_ENTITY_SET, id);
+
+/**
  * Every row of the contract (any state, fully paged), later periods first and
  * Period 1 last, so a partial failure never leaves periods without their head.
  * After a partial failure the surviving rows are re-flagged so exactly one is last.
@@ -874,11 +930,11 @@ export async function deleteOpexContract(scope: ContractScope): Promise<{ delete
   let deleted = 0;
   try {
     for (const r of later) {
-      await deleteRecord("delete contract period", OPEX_ENTITY_SET, r.id);
+      await deleteOpexRow("delete contract period", r.id);
       deleted += 1;
     }
     for (const r of heads) {
-      await deleteRecord("delete contract", OPEX_ENTITY_SET, r.id);
+      await deleteOpexRow("delete contract", r.id);
       deleted += 1;
     }
   } catch (error) {
@@ -903,7 +959,7 @@ export async function deleteOpexPeriod(id: string, scope: ContractScope): Promis
   if (target.period === undefined || target.period !== highestPeriod(before)) {
     throw new OpexRuleError("This contract was changed since it was loaded: the period is no longer the last period. Reload the screen and try again.");
   }
-  await deleteRecord("delete period", OPEX_ENTITY_SET, id);
+  await deleteOpexRow("delete period", id);
   let remaining: ContractRow[];
   try {
     remaining = (await listContractRows(scope)).filter((r) => r.id !== id);

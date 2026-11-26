@@ -33,6 +33,7 @@ import { Vsb_checklistdefaultapprovalsesService } from "@/generated/services/Vsb
 import { Vsb_projectdefaultchecklistsesService } from "@/generated/services/Vsb_projectdefaultchecklistsesService";
 import { fetchAll, guardedCall, guardedResult, updateRecordIfExists, type FetchAllOptions } from "./client";
 import { mapLimit } from "./concurrency";
+import { updateRecordJustCreated } from "./adminRowWrites";
 import { CHECKLIST_ENTITY_SETS } from "./dataverseNames";
 import { and, bindPath, chunk, eq, isNull, lookupEq, lookupIn, ne, or } from "./odata";
 
@@ -218,6 +219,11 @@ export interface ChecklistTablesRepository {
   createDefaultChecklist(payload: ChecklistPayload, operation?: string): Promise<string | undefined>;
   /** E9: `operation` names the write in a `DataError` (default "update checklist item"). */
   updateDefaultChecklist(id: string, changed: ChecklistPayload, operation?: string): Promise<void>;
+  /**
+   * AD-08: the follow-up write of a create-then-update pair, a plain PATCH with no existence read (the row was created a few
+   * milliseconds ago). Optional: a repository without it falls back to `updateDefaultChecklist`.
+   */
+  updateJustCreatedDefaultChecklist?(id: string, changed: ChecklistPayload, operation?: string): Promise<void>;
   // Approval writes (create / update / delete) run as WritePlans through `data/runPlan.ts`
   // (`admin-gates-approvals/writes.test.ts`), so the repository only reads that table.
 }
@@ -313,6 +319,10 @@ export function createChecklistTablesRepository(): ChecklistTablesRepository {
 
     async updateDefaultChecklist(id, changed, operation = "update checklist item") {
       await updateRecordIfExists(operation, CHECKLIST_ENTITY_SETS.tasks, id, changed);
+    },
+
+    async updateJustCreatedDefaultChecklist(id, changed, operation = "update checklist item") {
+      await updateRecordJustCreated(operation, CHECKLIST_ENTITY_SETS.tasks, id, changed);
     },
   };
 }
