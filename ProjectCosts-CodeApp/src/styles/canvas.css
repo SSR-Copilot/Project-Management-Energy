@@ -419,8 +419,6 @@
 /* The card samples a hair lighter than the panel: #f5f5f5 against #f4f4f4 (measured at
    x 251-570, y 203-234 on the expanded-contract screenshot). */
 .canvas-contract-body .canvas-field > input:disabled { background: #f5f5f5; }
-/* A panel caption the canvas leaves at normal weight (Contracts: Margin Fixed Value). The wrapper takes no layout. */
-.canvas-label-regular { display: contents; }
 /* Contracts panels (Development/Construction, Project Rights, Payment Target): the captions are classic `Label`s at
    `gblAppSizes.Font.Medium` (11 pt), and each `*_Required` star is its own `AutoHeight` label placed just LEFT of the
    caption (`X: =caption.X - Self.Width`) at its top — not an inline "* " prefix (screenshots 12 Nov 2026). */
@@ -471,7 +469,6 @@
 .capex-canvas-panel .canvas-radio-group input { margin: 0 0 0 3px; }
 .canvas-contract-comment { margin-top: 20px; }
 .canvas-contract-comment textarea { resize: none; }
-.canvas-label-regular .canvas-field > span:first-child { font-weight: 400; }
 /* Cost Settings DEVEX/CAPEX Add Cost panel (`con_AdminCost_RightPanel_Form_AddStandardCost`): every caption is a
    `Text@0.0.51` with `Weight: Semibold` at X 20 and its `*_Asterisk` label (`Color: gblAppColors.Error` = #d20532,
    X 5) sits BEFORE it. Fluent's `Field` drew the captions regular with the star after (user screenshot pair,

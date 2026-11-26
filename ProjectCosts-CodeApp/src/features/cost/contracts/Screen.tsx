@@ -1030,8 +1030,8 @@ function ContractsScreenBody() {
                 firstDayOfWeek={MONDAY}
                 initialPickerDate={project?.startDate}
                 // The canvas DatePicker shows its date as "Tue, Nov 24, 2026" (LongAbbreviated).
-            formatDate={formatClosingDate}
-            value={form.closingDate ?? null}
+                formatDate={formatClosingDate}
+                value={form.closingDate ?? null}
                 onSelectDate={(date: Date | null | undefined) => updateForm({ closingDate: date ?? undefined }, true)}
               />
               {errorFor("closingDate") ? (
@@ -1164,9 +1164,9 @@ function ContractsScreenBody() {
                     onBlur={() => touch("marginPercentage")}
                   />
                 ) : (
-                  // `lbl_Contracts_RightPanel_NewEdit_MarginFixedValues` has no `FontWeight` (normal), unlike Margin [%] and the
-                  // other captions of this panel, which are Semibold.
-                  <div className="canvas-label-regular">
+                  // The extracted `lbl_Contracts_RightPanel_NewEdit_MarginFixedValues` has no `FontWeight`, but the LIVE
+                  // canvas shows it Semibold like Margin [%] and every other caption of this panel (user screenshot,
+                  // 26 Nov 2026), so it takes the panel's caption weight.
                   <CostField
                     label={costLabel(MSG.marginFixedValue, project ?? {})}
                     labelTitle={costLabel(MSG.marginFixedValue, project ?? {})}
@@ -1181,7 +1181,6 @@ function ContractsScreenBody() {
                     )}
                     onBlur={() => touch("marginFixedValue")}
                   />
-                  </div>
                 )}
               </>
             ) : null}
@@ -1224,21 +1223,21 @@ function ContractsScreenBody() {
             {/* `lbl_…_NewEdit_Comment` sits at `Y: =20` in its container: 20 px more space above Comment than between fields;
                 `txt_…_Comment` is a canvas multiline TextInput, which cannot be resized by the user. */}
             <div className="canvas-contract-comment">
-            <CostField
-              label={MSG.comment}
-              name="txt_Contracts_RightPanel_NewEdit_Comment"
-              counter={commentCounter(form.comment)}
-              labelTitle={MSG.comment}
-            >
-              <textarea
-                value={form.comment}
-                maxLength={COMMENT_MAX_LENGTH}
-                aria-label={MSG.comment}
-                // `txt_…_Comment.OnChange` also sets `locContractDevCoCostsDirty: true` (`:7129`).
-                onChange={(e) => { updateForm({ comment: e.target.value }); setRecalculated(true); }}
-                data-testid="contract-comment"
-              />
-            </CostField>
+              <CostField
+                label={MSG.comment}
+                name="txt_Contracts_RightPanel_NewEdit_Comment"
+                counter={commentCounter(form.comment)}
+                labelTitle={MSG.comment}
+              >
+                <textarea
+                  value={form.comment}
+                  maxLength={COMMENT_MAX_LENGTH}
+                  aria-label={MSG.comment}
+                  // `txt_…_Comment.OnChange` also sets `locContractDevCoCostsDirty: true` (`:7129`).
+                  onChange={(e) => { updateForm({ comment: e.target.value }); setRecalculated(true); }}
+                  data-testid="contract-comment"
+                />
+              </CostField>
             </div>
           </div>
         </div>
@@ -1694,8 +1693,7 @@ const DevCoAccountPicker = memo(function DevCoAccountPicker({
                       data-testid={`chb_Contracts_RightPanel_NewEdit_CostssRow-${leaf.id}`}
                       checked={leaf.selected || leaf.used}
                       disabled={!leafSelectable(leaf)}
-                      aria-label={`${leaf.number} ${leaf.name}${
-                        leaf.used ? MSG.usedByAnotherContractSuffix : ""}`}
+                      aria-label={`${leaf.number} ${leaf.name}${leaf.used ? MSG.usedByAnotherContractSuffix : ""}`}
                       title={leaf.used
                         ? usedInContractTooltip(contractDescriptionById.get(leaf.usedByContractId ?? ""))
                         : undefined}
