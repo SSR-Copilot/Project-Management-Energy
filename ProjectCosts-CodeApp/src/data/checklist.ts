@@ -31,7 +31,8 @@ import { fetchAll, fetchPage } from "./client";
 import { listProjectStates } from "./generalData";
 import { findScopeCountryTechId, getEntraPeople, listChecklistApprovals, listGateApprovals } from "./adminGatesApprovals";
 import type { Persona } from "./adminGatesApprovals";
-import { ACTIVE, and, eq, guid, lookupEq } from "./odata";
+import { ACTIVE, and, chunk, eq, guid, idIn, lookupEq } from "./odata";
+import { mapLimit } from "./concurrency";
 import { rowStr as str, formattedColumn as formatted } from "./rowValues";
 import { ES } from "./dataverseNames";
 import { lookupPersonOnce, lookupScopeOnce } from "./checklistPeople";
@@ -206,6 +207,24 @@ export async function listChecklistTrackings(projectId: string): Promise<Trackin
     { select: TRACKING_SELECT, filter: lookupEq("vsb_project", projectId) },
   );
   return rows.map((r) => toTrackingRow(r as unknown as Raw));
+}
+
+/**
+ * PB-14 (`CHECKLIST_BACKFILL_GUARD`): which of these tracking ids still exist. One KEY-ONLY read per chunk of ids (`idIn`, the shared
+ * chunk size), side by side. No state filter: an inactive tracking still exists, and a PATCH to it is not a re-creation. The back-fill
+ * writes only the ids this returns, so a tracking deleted between the fresh list and the write is not brought back as an orphan
+ * (no project, no owning business unit; CONVENTIONS rule 4). A failed read fails the job, like the list read before it.
+ */
+export async function existingTrackingIds(ids: readonly string[]): Promise<Set<string>> {
+  const unique = [...new Set(ids)];
+  const found = new Set<string>();
+  const pages = await mapLimit(chunk(unique), (part) => fetchAll(
+    "check which state trackings still exist",
+    (o) => Vsb_projectstatetrackingsService.getAll(o),
+    { select: [TRACKING_COL.id], filter: idIn(TRACKING_COL.id, part) },
+  ));
+  for (const rows of pages) for (const r of rows) found.add(String((r as unknown as Raw)[TRACKING_COL.id]).toLowerCase());
+  return found;
 }
 
 /**

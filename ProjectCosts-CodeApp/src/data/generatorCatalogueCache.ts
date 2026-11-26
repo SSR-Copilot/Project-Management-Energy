@@ -11,6 +11,12 @@
  * read's `$select` is built from), or a changed row shape (`SHAPE`, bump it when `CatalogModel` changes) drops every
  * entry, so a cache written by an older build is never shown.
  *
+ * SCOPE (PA-12, dvopt T-22): IndexedDB is per ORIGIN, not per environment or per person, so two people on one browser profile, or
+ * two environments served from one origin, would otherwise read each other's last catalogue (a model a role cannot see could show
+ * for the length of one read). The entry key is therefore `<environment id>.<user hash>:<FID>`: an entry is read only by the
+ * environment and the user that wrote it. With either id unknown nothing is read or written (the cache behaves as unavailable).
+ * The user's object id is stored only as a hash. The version key (shape, build, column fingerprint) still drops older entries.
+ *
  * MAXIMUM AGE, 12 hours: the models and prices change when an administrator maintains the catalogue (rare, a few times a
  * year), while a session is a working day at most. Because every use re-reads the server straight away and replaces the
  * cached rows, the age limit only bounds how old the rows may be when the re-read FAILS (or is slow): 12 h means
@@ -43,8 +49,24 @@ export const isCatalogModels = (data: unknown): data is CatalogModel[] =>
 
 let instance: PersistedReference<CatalogModel[]> | null = null;
 
-/** The catalogue cache (one per page load; IndexedDB is opened on first use). */
-export function generatorCatalogueCache(): PersistedReference<CatalogModel[]> {
+/** Who and where the stored catalogue belongs to (`SessionContext`: `session.environmentId`, `session.entraObjectId`). */
+export interface CatalogueScope {
+  environmentId?: string | null;
+  userId?: string | null;
+}
+
+/**
+ * The scope part of an entry key, or `null` when the environment or the user is unknown. The environment id is not personal and is kept
+ * as is (lower-cased); the user's id is reduced to a 64-bit-wide hash (two FNV-1a runs, the second over the reversed text).
+ */
+export function catalogueScopeKey(scope: CatalogueScope): string | null {
+  const env = scope.environmentId?.trim().toLowerCase();
+  const user = scope.userId?.trim().toLowerCase();
+  if (!env || !user) return null;
+  return `${env}.${fingerprint(user)}${fingerprint([...user].reverse().join(""))}`;
+}
+
+const rawCatalogueCache = (): PersistedReference<CatalogModel[]> => {
   instance ??= createPersistedReference<CatalogModel[]>({
     name: "generatorCatalogue",
     version: generatorCatalogueVersion(),
@@ -53,6 +75,19 @@ export function generatorCatalogueCache(): PersistedReference<CatalogModel[]> {
     rowsOf: (rows) => rows.length,
   });
   return instance;
+};
+
+/**
+ * The catalogue cache of ONE environment and user (one store per page load; IndexedDB is opened on first use). `read` / `write` /
+ * `remove` take the FID date as before and file the entry under the scope; with an unknown scope they do nothing (a miss).
+ */
+export function generatorCatalogueCache(scope: CatalogueScope): PersistedReference<CatalogModel[]> {
+  const prefix = catalogueScopeKey(scope);
+  return {
+    read: async (fid) => (prefix === null ? null : rawCatalogueCache().read(`${prefix}:${fid}`)),
+    write: async (fid, data) => { if (prefix !== null) await rawCatalogueCache().write(`${prefix}:${fid}`, data); },
+    remove: async (fid) => { if (prefix !== null) await rawCatalogueCache().remove(`${prefix}:${fid}`); },
+  };
 }
 
 /** Test seam: replaces (or, with `null`, forgets) the cache instance. */

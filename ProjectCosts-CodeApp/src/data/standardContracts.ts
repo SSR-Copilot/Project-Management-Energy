@@ -9,6 +9,7 @@ import { Vsb_generatortypeinprojectsService } from "@/generated/services/Vsb_gen
 import { fetchAll } from "./client";
 import { ACTIVE, and, chunk, lookupEq, lookupIn, numberOf } from "./odata";
 import type { DevexCapexAssumption } from "@/features/cost/capex-costs/standardContracts";
+import { CAPEX_OPT } from "./capexOptFlags";
 
 /**
  * Every standard assumption for the sub-accounts of one category.
@@ -68,7 +69,10 @@ export async function loadActiveWtgCount(projectId: string): Promise<number> {
     "list generator types in project",
     (o) => Vsb_generatortypeinprojectsService.getAll(o),
     {
-      select: ["vsb_generatortypeinprojectid", "vsb_numberofgenerators", "statecode"],
+      // CA-16 (`WTG_COUNT_STANDARD_ONLY`): `statecode` was selected but never read (the filter already restricts to ACTIVE rows).
+      select: CAPEX_OPT.WTG_COUNT_STANDARD_ONLY
+        ? ["vsb_generatortypeinprojectid", "vsb_numberofgenerators"]
+        : ["vsb_generatortypeinprojectid", "vsb_numberofgenerators", "statecode"],
       filter: and(lookupEq("vsb_project", projectId), ACTIVE),
     },
   );

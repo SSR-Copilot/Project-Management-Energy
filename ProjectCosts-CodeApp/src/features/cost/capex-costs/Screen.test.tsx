@@ -12,7 +12,7 @@
  * file asserts is that the panel actually puts them on screen.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { appliedRules } from "@/test/appliedRules";
 import { FluentProvider } from "@fluentui/react-components";
 import { MemoryRouter } from "react-router-dom";
@@ -87,6 +87,10 @@ let paidPending = false;
 let standardExistsResult = false;
 /** The `Devex/Capex Standard Assumptions` the menu is built from; empty by default (no menu). */
 let stdAssumptions: Record<string, unknown>[] = [];
+/** CA-16: whether the lazily read active-WTG count has landed, and what an on-demand read returns. */
+let wtgReady = true;
+let wtgCount = 0;
+const ensureActiveWtgCount = vi.fn(async () => 7);
 /** The `standardOptions` the grid was last given (the Add Standard Contract menu). */
 let gridStandardOptions: { id: string; subaccountId: string }[] = [];
 let deletePending = false;
@@ -121,7 +125,8 @@ vi.mock("@/features/cost/costing/useCostBook", () => ({
     };
   },
   useStandardAssumptions: () => ({
-    assumptions: stdAssumptions, activeWtgCount: 0, totalCapacity: 0,
+    assumptions: stdAssumptions, activeWtgCount: wtgCount, totalCapacity: 0,
+    activeWtgCountReady: wtgReady, ensureActiveWtgCount,
     countryId: stdAssumptions.length ? "country-1" : undefined, technology: stdAssumptions.length ? 952850000 : undefined, isLoading: false,
   }),
   useCapexComments: () => ({ data: [] }),
@@ -241,6 +246,9 @@ const savedLine = () => saveLine.mutateAsync.mock.calls[0]?.[0]?.line;
 beforeEach(() => {
   lines = [];
   stdAssumptions = [];
+  wtgReady = true;
+  wtgCount = 0;
+  ensureActiveWtgCount.mockClear();
   standardExistsResult = false;
   gridStandardOptions = [];
   startClusterNo = 0;
@@ -1441,6 +1449,44 @@ describe("confirmation dialog dimensions", () => {
     await act(async () => { onAction("AddStandardContract", "sub-1", "a1"); });
     expect(saveLine.mutate).toHaveBeenCalledTimes(1);
     expect(gridStandardOptions.map(o => o.id)).toEqual(["a1"]);
+  });
+
+  /** A per-WTG standard contract (CA-16): the amount is the active-WTG count times the cost amount. */
+  const perWtgAssumption = () => [{
+    id: "a1", description: "Standard O&M", subaccountId: "sub-1", countryId: "country-1", technology: 952850000,
+    costAmount: 100, unit: 952850002, costPaidBy: 952850001, distributionFrequency: 1, applyVat: true, depreciation: true,
+    clusters: [true, true, true, true, true],
+  }];
+
+  it("UT-CAPEXSTD-020 a per-WTG contract whose count has landed books count x amount at once and reads nothing", async () => {
+    stdAssumptions = perWtgAssumption();
+    wtgReady = true;
+    wtgCount = 3;
+    mount();
+    await act(async () => { onAction("AddStandardContract", "sub-1", "a1"); });
+    expect(ensureActiveWtgCount).not.toHaveBeenCalled();
+    expect(saveLine.mutate).toHaveBeenCalledTimes(1);
+    expect(saveLine.mutate.mock.calls[0]?.[0]?.line.totalCost).toBe(300);
+  });
+
+  it("UT-CAPEXSTD-021 a click that beats the lazy count read waits for it and then books the real count, never 0 (CA-16)", async () => {
+    stdAssumptions = perWtgAssumption();
+    wtgReady = false;
+    wtgCount = 0;
+    mount();
+    await act(async () => { onAction("AddStandardContract", "sub-1", "a1"); });
+    expect(ensureActiveWtgCount).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(saveLine.mutate).toHaveBeenCalledTimes(1));
+    expect(saveLine.mutate.mock.calls[0]?.[0]?.line.totalCost).toBe(700); // the on-demand answer, 7 x 100
+  });
+
+  it("UT-CAPEXSTD-022 a flat (EUR) contract never waits for the count", async () => {
+    stdAssumptions = [{ ...perWtgAssumption()[0], unit: 952850000 }];
+    wtgReady = false;
+    mount();
+    await act(async () => { onAction("AddStandardContract", "sub-1", "a1"); });
+    expect(ensureActiveWtgCount).not.toHaveBeenCalled();
+    expect(saveLine.mutate).toHaveBeenCalledTimes(1);
   });
 
   it("UT-CAPEXLINK-001 confirming the cluster-linked paid dialog clears the Linked Cluster, then marks it paid", () => {

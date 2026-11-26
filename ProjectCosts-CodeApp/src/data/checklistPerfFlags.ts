@@ -51,7 +51,24 @@
  *    to a cluster nobody has worked on (no row has a task state, a comment or an approval state) and that is not Completed, so a template
  *    an admin adds later never reaches a project's work in progress. DIVERGENCE from the canvas (product owner, 23 Nov 2026: "Fix #3").
  *    OFF: the canvas rule (copy only into an empty cluster).
+ *
+ * Dataverse optimization programme (PB-13, PB-14; task blocks T-23, T-01). Each has its named constant and its field:
+ *  - `trackingsOnce` = `CHECKLIST_TRACKINGS_ONCE` (default ON, PB-13): `prepareCluster` (the visit's ensure-tracking and copy) reuses the
+ *    trackings the screen's own query read a moment ago (at most `TRACKINGS_REUSE_MS`, 2 s, old; not invalidated; not refetching)
+ *    instead of listing them again. Every WRITE job keeps its own fresh read (C6; Move, Reset, Request, Cancel). DIVERGENCE (timing
+ *    only): D127 C5's "fresh read first" is satisfied by a read made up to 2 s earlier. A write invalidates the query, so the next visit
+ *    reads again. OFF: a second list read per cluster visit, as before.
+ *  - `backfillGuard` = `CHECKLIST_BACKFILL_GUARD` (default ON, PB-14): before the Draft back-fill PATCHes existing trackings, one key-only
+ *    read asks which of them still exist, and only those are written (creates stay creates), so a tracking deleted since the list was
+ *    read is not brought back as an orphan (no project, no owning business unit). The seven independent writes then go out as ONE
+ *    concurrent group instead of one after the other (only the Draft row is In Progress, the one value `SynchroniseProjectState` acts on).
+ *    Same rows, same payloads, same flow triggers. OFF: the sequential, unguarded upserts, as before.
  */
+export const CHECKLIST_TRACKINGS_ONCE = true;
+export const CHECKLIST_BACKFILL_GUARD = true;
+/** PB-13: how old the screen's trackings query data may be for `prepareCluster` to reuse it. */
+export const TRACKINGS_REUSE_MS = 2_000;
+
 export interface ChecklistPerfFlags {
   targetedReload: boolean;
   earlyRows: boolean;
@@ -63,6 +80,8 @@ export interface ChecklistPerfFlags {
   sharedStates: boolean;
   quietFocus: boolean;
   completeCopy: boolean;
+  trackingsOnce: boolean;
+  backfillGuard: boolean;
 }
 
 /** The switches as shipped. */
@@ -77,12 +96,15 @@ export const CHECKLIST_PERF: Readonly<ChecklistPerfFlags> = {
   sharedStates: true,
   quietFocus: true,
   completeCopy: true,
+  trackingsOnce: CHECKLIST_TRACKINGS_ONCE,
+  backfillGuard: CHECKLIST_BACKFILL_GUARD,
 };
 
 /** Every switch at its OLD behaviour: today's requests exactly (tests, and the rollback in one line). */
 export const CHECKLIST_PERF_ALL_OFF: Readonly<ChecklistPerfFlags> = {
   targetedReload: false, earlyRows: false, earlyVisit: false, prefetchCopy: false, wideCopy: false,
   longPeopleCache: false, scopedGates: false, sharedStates: false, quietFocus: false, completeCopy: false,
+  trackingsOnce: false, backfillGuard: false,
 };
 
 let override: Partial<ChecklistPerfFlags> | null = null;

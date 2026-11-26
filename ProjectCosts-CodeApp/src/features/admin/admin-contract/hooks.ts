@@ -80,6 +80,7 @@ export function useDeleteContract() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (args: { id: string; selection: CountryTechnology }) => deleteStandardContract(args.id),
-    onSettled: (_data, _error, args) => invalidateAfterContractsWrite(queryClient, args.selection),
+    // AD-11: the standard contract's delete plug-in removes the project rows built from it, so their caches are marked stale too.
+    onSettled: (_data, _error, args) => invalidateAfterContractsWrite(queryClient, args.selection, { cascade: true }),
   });
 }

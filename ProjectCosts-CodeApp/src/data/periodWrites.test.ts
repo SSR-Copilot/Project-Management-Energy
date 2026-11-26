@@ -23,7 +23,16 @@
  * `UT-PWRITE-###` is its own series: `UT-BOOK-###` in `costBook.test.ts` numbers the READ side,
  * and the round-trip cases below drive one into the other rather than belonging to either.
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+// STABLE_CREATE_IDS ships OFF at integration (CB-14, owner decision). The tests of the feature switch it ON for their own duration
+// (`stableIds.on = true`); the file's beforeEach puts it back OFF.
+const stableIds = vi.hoisted(() => ({ on: false }));
+vi.mock("./leaseOpexFlags", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./leaseOpexFlags")>()),
+  get STABLE_CREATE_IDS() { return stableIds.on; },
+  // A refused write fails at once here, except in the describe at the end, which turns the policy on (UT-COSTPOLICY-02x).
+  get COST_WRITES_POLICY() { return policy.on; },
+}));
 import type { CostPeriod } from "@/features/cost/costing/model";
 
 /* ═════════════════════════════════════════════════════════════════ harness ══ */
@@ -50,6 +59,16 @@ const DELETE_TABLE: Record<string, string> = {
 let refusedDeletes = new Set<string>();
 /** Ids whose update the service answers with { success: false }. */
 const failingUpdates = new Set<string>();
+/** dvopt policy tests: the next `left` requests of this op (and id, when given) are refused with `status`. */
+let flaky: { op: "create" | "update" | "delete"; id?: string; status: number; left: number } | null = null;
+const flakyHit = (op: "create" | "update" | "delete", id?: string): number | undefined => {
+  if (!flaky || flaky.op !== op || flaky.left <= 0 || (flaky.id !== undefined && flaky.id !== id)) return undefined;
+  flaky.left -= 1;
+  return flaky.status;
+};
+/** Requests that reached each op, refused or not (a retry shows as a second one). */
+const attempts = { create: 0, update: 0, delete: 0 };
+const policy = vi.hoisted(() => ({ on: false }));
 
 vi.mock("./client", () => ({
   fetchAll: async (label: string, _page: unknown, options: unknown) => {
@@ -57,21 +76,58 @@ vi.mock("./client", () => ({
     return rowsByLabel[label] ?? [];
   },
   deleteRecord: async (operation: string, entitySet: string, id: string) => {
+    attempts.delete += 1;
+    const hit = flakyHit("delete", id);
+    if (hit !== undefined) throw Object.assign(new Error(`${operation} failed: refused`), { status: hit });
+    if (refusedDeletes.has(id)) throw new Error(`${operation} failed: refused`);
+    writes.push({ op: "delete", table: DELETE_TABLE[entitySet] ?? entitySet, id });
+  },
+  // dvopt CB-03: the app's deletes go through `deleteIfExists`; with no 404 in this double it is `deleteRecord`.
+  deleteIfExists: async (operation: string, entitySet: string, id: string) => {
+    attempts.delete += 1;
+    const hit = flakyHit("delete", id);
+    if (hit !== undefined) throw Object.assign(new Error(`${operation} failed: refused`), { status: hit });
     if (refusedDeletes.has(id)) throw new Error(`${operation} failed: refused`);
     writes.push({ op: "delete", table: DELETE_TABLE[entitySet] ?? entitySet, id });
   },
 }));
+// dvopt CB-01 / CB-14: the existence guard and the stable-id read-back are tested in costUpdateGuard.test.ts / periodWrites.dvopt.test.ts.
+const guard = vi.hoisted(() => ({
+  /** Every existence read: [operation, entitySet, ids]. */
+  reads: [] as [string, string, string[]][],
+  /** Ids the double reports as deleted by someone else. */
+  missing: new Set<string>(),
+  /** Ids whose retried create the read-back finds already there. */
+  landed: new Set<string>(),
+}));
+vi.mock("./costUpdateGuard", async () => {
+  const { RecordGoneError } = await import("@/platform/errors");
+  return {
+    assertRowsExist: async (operation: string, entitySet: string, ids: string[]) => {
+      guard.reads.push([operation, entitySet, [...ids]]);
+      const gone = ids.find((id) => guard.missing.has(id));
+      if (gone) throw new RecordGoneError(operation, entitySet, gone);
+    },
+    rowExists: async (_operation: string, _entitySet: string, id: string) => guard.landed.has(id),
+  };
+});
 
 /** A generated service double that records what it was asked to write. */
 function service(table: string, idColumn: string) {
   return {
     getAll: async () => ({ success: true, data: [] }),
     create: async (fields: Record<string, unknown>) => {
+      attempts.create += 1;
+      const hit = flakyHit("create");
+      if (hit !== undefined) return { success: false, error: Object.assign(new Error("refused"), { status: hit }) };
       const id = nextId(table);
       writes.push({ op: "create", table, id, fields });
       return { success: true, data: { [idColumn]: id } };
     },
     update: async (id: string, fields: Record<string, unknown>) => {
+      attempts.update += 1;
+      const hit = flakyHit("update", id);
+      if (hit !== undefined) return { success: false, error: Object.assign(new Error("refused"), { status: hit }) };
       if (failingUpdates.has(id)) return { success: false, error: new Error("refused") };
       writes.push({ op: "update", table, id, fields });
       return { success: true, data: {} };
@@ -130,6 +186,8 @@ const {
 const { standardCostName } = await import("@/features/cost/periods/opexRules");
 const { mapOpexRow } = await import("./costBook");
 const { invalidateCurrencies } = await import("./currencies");
+const { resetStableCreateIds } = await import("./stableCreateId");
+const { RecordGoneError } = await import("@/platform/errors");
 
 /* ══════════════════════════════════════════════════════════════ fixtures ══ */
 
@@ -209,12 +267,18 @@ const created = (table: string) => writes.find((w) => w.op === "create" && w.tab
 const fieldsOf = (w: Write | undefined) => (w?.fields ?? {}) as Record<string, unknown>;
 
 beforeEach(() => {
+  stableIds.on = false;
+  policy.on = false; flaky = null; attempts.create = 0; attempts.update = 0; attempts.delete = 0;
   // B2 (OPT-07b/c): the currency table and the chart are read through short-lived shared reads; each case starts with them empty.
   invalidateCurrencies();
   rowsByLabel = {};
   queriedBy = {};
   writes = [];
   failingUpdates.clear();
+  guard.reads.length = 0;
+  guard.missing.clear();
+  guard.landed.clear();
+  resetStableCreateIds();
   for (const key of Object.keys(NEW_ID)) delete NEW_ID[key];
 });
 
@@ -913,5 +977,188 @@ describe("period round trip", () => {
       inflationPercent: null, inflationYear: 0,
       align: false,
     });
+  });
+});
+
+/* ═══════════════════════════ dvopt: upsert guard (CB-01), 404 as done (CB-03), stable create id (CB-14) ══ */
+
+describe("dvopt — OPEX guard, gone-as-done and stable ids", () => {
+  const HEAD = "9d3168e6-2b7c-ef11-ac20-6045bda08851";
+  const chain = (id: string, startDate: string, parentId?: string): CostPeriod =>
+    ({ ...OM_PERIOD, id, startDate, years: 1, months: 0, parentId, contractId: HEAD });
+  const chainBook = [chain(HEAD, "2027-01-01"), chain("p2", "2028-01-01", HEAD), chain("p3", "2029-01-01", HEAD)];
+  beforeEach(() => { rowsByLabel = { ...opexReferenceRows() }; });
+
+  it("UT-OPEXDVOPT-001 an Edit reads the row and the followers it re-chains in ONE read before any write", async () => {
+    const before = chainBook[0]!;
+    await savePeriod(CTX, { ...before, years: 2 }, false, { before, bookPeriods: chainBook });
+    expect(guard.reads).toEqual([["update OPEX period", "vsb_opexprojectcosts", [HEAD, "p2", "p3"]]]);
+    expect(writes.some((w) => w.op === "update" && w.id === HEAD)).toBe(true);
+  });
+
+  it("UT-OPEXDVOPT-002 a row another user deleted refuses the Edit with RecordGoneError and NOTHING is written", async () => {
+    guard.missing.add(HEAD);
+    await expect(savePeriod(CTX, { ...OM_PERIOD, id: HEAD }, false)).rejects.toBeInstanceOf(RecordGoneError);
+    expect(writes).toEqual([]);
+  });
+
+  it("UT-OPEXDVOPT-003 a deleted FOLLOWER refuses the whole Edit before the row itself is patched", async () => {
+    guard.missing.add("p3");
+    const before = chainBook[0]!;
+    await expect(savePeriod(CTX, { ...before, years: 2 }, false, { before, bookPeriods: chainBook }))
+      .rejects.toBeInstanceOf(RecordGoneError);
+    expect(writes).toEqual([]);
+  });
+
+  it("UT-OPEXDVOPT-004 an Add reads nothing to guard (a create is not an upsert)", async () => {
+    NEW_ID.opex = ["7db92415-8111-e7ee-bd6c-032eeb14100b"];
+    await savePeriod(CTX, OM_PERIOD, true);
+    expect(guard.reads).toEqual([]);
+    expect(writes.filter((w) => w.op === "create")).toHaveLength(1);
+  });
+
+  it("UT-OPEXDVOPT-005 the Edit writes are the same with the guard on as with the flags off (oracle = the old code path)", async () => {
+    const before = chainBook[0]!;
+    await savePeriod(CTX, { ...before, years: 2 }, false, { before, bookPeriods: chainBook });
+    const guarded = writes.map((w) => [w.op, w.table, w.id, w.fields]);
+    writes = [];
+    guard.reads.length = 0;
+    vi.resetModules();
+    vi.doMock("./leaseOpexFlags", () => ({
+      GONE_AS_DONE_LEASE_OPEX: false, LEASE_GUARD: false, OPEX_GUARD: false, COST_REFRESH_ON_FAILURE: false, STABLE_CREATE_IDS: false,
+      // dvopt batch 2: every batch-2 switch off, so this run is the old code.
+      LEASE_TIER_WIDER: false, LEASE_LEAN_RELOAD: false, COST_WRITES_POLICY: false, OPEX_WRITES_TOGETHER: false, OPEX_BOOK_REUSES_CATALOGUE: false,
+      CONTRACT_LINKS_WITH_PATCH: false, CONTRACT_KEYS_ONCE: false, BOP_ASSUMPTIONS_ONE_READ: false, COST_READS_RETRY: false,
+    }));
+    const legacy = await import("./periodWrites");
+    await legacy.savePeriod(CTX, { ...before, years: 2 }, false, { before, bookPeriods: chainBook });
+    vi.doUnmock("./leaseOpexFlags");
+    vi.resetModules();
+    expect(guard.reads).toEqual([]); // OPEX_GUARD off: no read
+    expect(writes.map((w) => [w.op, w.table, w.id, w.fields])).toEqual(guarded);
+  });
+
+  it("UT-OPEXDVOPT-006 a create carries a client id; the SAME save retried keeps it, and a landed create is read back, not repeated", async () => {
+    stableIds.on = true;
+    const sent: string[] = [];
+    const svc = (await import("@/generated/services/Vsb_opexprojectcostsService")).Vsb_opexprojectcostsService as unknown as {
+      create: (f: Record<string, unknown>) => Promise<unknown>;
+    };
+    const realCreate = svc.create;
+    let fail = true;
+    svc.create = async (f) => {
+      sent.push(String(f.vsb_opexprojectcostid));
+      if (fail) return { success: false, error: new Error("gateway timeout") };
+      return realCreate(f);
+    };
+    try {
+      await expect(savePeriod(CTX, OM_PERIOD, true)).rejects.toThrow();
+      expect(sent[0]).toMatch(/^[0-9a-f-]{36}$/);
+      // The retry, the row did NOT land (the read-back finds nothing): the same id is sent again.
+      await expect(savePeriod(CTX, OM_PERIOD, true)).rejects.toThrow();
+      expect(sent[1]).toBe(sent[0]);
+      // The retry where the earlier POST had landed: the read-back finds it and NOTHING is created again.
+      guard.landed.add(sent[0]!);
+      fail = false;
+      const count = sent.length;
+      const saved = await savePeriod(CTX, OM_PERIOD, true);
+      expect(sent.length).toBe(count);
+      expect(saved.id).toBe(sent[0]);
+      expect(writes.filter((w) => w.op === "create")).toEqual([]);
+    } finally {
+      svc.create = realCreate;
+    }
+  });
+
+  it("UT-OPEXDVOPT-007 deleting a chain goes through the gone-as-done delete: children, then the head", async () => {
+    rowsByLabel["list OPEX chain children"] = [
+      { vsb_opexprojectcostid: "child-b", vsb_name: "…- 3" },
+      { vsb_opexprojectcostid: "child-a", vsb_name: "…- 2" },
+    ];
+    await deletePeriod({ ...OM_PERIOD, id: HEAD, contractId: HEAD, periodIndex: 1 });
+    expect(writes.map((w) => `${w.op}:${w.id}`)).toEqual(["delete:child-a", "delete:child-b", `delete:${HEAD}`]);
+  });
+});
+
+/* ═══════════════════════════════════════════ dvopt T-11 adoption (`COST_WRITES_POLICY`): OPEX writes retry by kind ══ */
+
+describe("OPEX writes through the request policy", () => {
+  const HEAD = "9d3168e6-2b7c-ef11-ac20-6045bda08851";
+  beforeEach(() => { rowsByLabel = { ...opexReferenceRows() }; policy.on = true; });
+  afterEach(() => { vi.useRealTimers(); });
+
+  /** Runs `work` under fake timers and lets every backoff elapse. */
+  async function settle<T>(work: () => Promise<T>): Promise<PromiseSettledResult<T>> {
+    vi.useFakeTimers();
+    const run = work().then((value) => ({ status: "fulfilled", value }) as const, (reason: unknown) => ({ status: "rejected", reason }) as const);
+    await vi.advanceTimersByTimeAsync(60_000);
+    return run;
+  }
+
+  it("UT-COSTPOLICY-020 an Edit whose PATCH is answered 503 is sent again and saves; the row is written ONCE", async () => {
+    flaky = { op: "update", id: HEAD, status: 503, left: 1 };
+    const out = await settle(() => savePeriod(CTX, { ...OM_PERIOD, id: HEAD }, false));
+    expect(out.status).toBe("fulfilled");
+    expect(attempts.update).toBe(2);
+    expect(writes.filter((w) => w.op === "update" && w.id === HEAD)).toHaveLength(1);
+  });
+
+  it("UT-COSTPOLICY-021 a cascade PATCH answered 503 is sent again; no warning reaches the user", async () => {
+    rowsByLabel["list OPEX chain children"] = [{ vsb_opexprojectcostid: "child-a", vsb_name: "…- 2" }];
+    flaky = { op: "update", id: "child-a", status: 503, left: 1 };
+    const warnings: string[] = [];
+    const out = await settle(() => savePeriod(CTX, { ...OM_PERIOD, id: HEAD }, false, { before: null, bookPeriods: [], warnings }));
+    expect(out.status).toBe("fulfilled");
+    expect(warnings).toEqual([]);
+    expect(writes.filter((w) => w.op === "update" && w.id === "child-a")).toHaveLength(1);
+  });
+
+  it("UT-COSTPOLICY-022 a cascade PATCH that keeps failing with 503 gives up after the tries and ends as the canvas' non-fatal warning", async () => {
+    rowsByLabel["list OPEX chain children"] = [{ vsb_opexprojectcostid: "child-a", vsb_name: "…- 2" }];
+    flaky = { op: "update", id: "child-a", status: 503, left: 99 };
+    const warnings: string[] = [];
+    const out = await settle(() => savePeriod(CTX, { ...OM_PERIOD, id: HEAD }, false, { before: null, bookPeriods: [], warnings }));
+    expect(out.status).toBe("fulfilled"); // the row is saved; the warning is shown, as before
+    expect(warnings).toHaveLength(1);
+    expect(attempts.update).toBeGreaterThan(2);
+    expect(attempts.update).toBeLessThanOrEqual(5); // the head (1) + at most 3 tries of the child (transient: 3 in all)
+  });
+
+  it("UT-COSTPOLICY-023 an Add whose POST is answered 503 is NOT sent again (it may have landed): one POST, the error reaches the caller", async () => {
+    flaky = { op: "create", status: 503, left: 9 };
+    const out = await settle(() => savePeriod(CTX, { ...OM_PERIOD }, true));
+    expect(out.status).toBe("rejected");
+    expect(attempts.create).toBe(1);
+  });
+
+  it("UT-COSTPOLICY-024 an Add whose POST is answered 429 is sent again and creates ONE row", async () => {
+    flaky = { op: "create", status: 429, left: 1 };
+    const out = await settle(() => savePeriod(CTX, { ...OM_PERIOD }, true));
+    expect(out.status).toBe("fulfilled");
+    expect(attempts.create).toBe(2);
+    expect(writes.filter((w) => w.op === "create" && w.table === "opex")).toHaveLength(1);
+  });
+
+  it("UT-COSTPOLICY-025 a chain DELETE: a child delete answered 503 is sent again; the head still goes after every child", async () => {
+    rowsByLabel["list OPEX chain children"] = [{ vsb_opexprojectcostid: "child-a", vsb_name: "…- 2" }];
+    flaky = { op: "delete", id: "child-a", status: 503, left: 1 };
+    const out = await settle(() => deletePeriod({ ...OM_PERIOD, id: HEAD }));
+    expect(out.status).toBe("fulfilled");
+    expect(writes.filter((w) => w.op === "delete").map((w) => w.id)).toEqual(["child-a", HEAD]);
+  });
+
+  it("UT-COSTPOLICY-026 a 403 on the PATCH is never retried: one request, the error reaches the caller", async () => {
+    flaky = { op: "update", id: HEAD, status: 403, left: 9 };
+    const out = await settle(() => savePeriod(CTX, { ...OM_PERIOD, id: HEAD }, false));
+    expect(out.status).toBe("rejected");
+    expect(attempts.update).toBe(1);
+  });
+
+  it("UT-COSTPOLICY-027 the switch off: a 503 on the PATCH fails the save at once (the old behaviour)", async () => {
+    policy.on = false;
+    flaky = { op: "update", id: HEAD, status: 503, left: 9 };
+    const out = await settle(() => savePeriod(CTX, { ...OM_PERIOD, id: HEAD }, false));
+    expect(out.status).toBe("rejected");
+    expect(attempts.update).toBe(1);
   });
 });

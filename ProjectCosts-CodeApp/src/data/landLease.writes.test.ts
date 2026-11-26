@@ -35,6 +35,8 @@ const fake = vi.hoisted(() => {
     /** A request answers `{ success: false }` (or throws, for a delete) when this says so. */
     fails: (_table: string, _op: string, _id: string | undefined, _payload: Row | undefined): boolean => false,
     created: 0,
+    /** The HTTP status a refused request carries (dvopt policy tests); undefined = none, as before. */
+    failStatus: undefined as number | undefined,
   };
   const DELETE_TABLE: Record<string, string> = {
     vsb_landleaseprojectcosts: "cost", vsb_landleaseperiods: "period", vsb_landleaseallocationwtgs: "alloc",
@@ -55,7 +57,7 @@ const fake = vi.hoisted(() => {
     create: async (payload: Row) => {
       await request("create", table, undefined, payload);
       if (state.fails(table, "create", undefined, payload)) {
-        return { success: false, error: new Error(`${table} create refused ${String(payload["tag"] ?? "")}`) };
+        return { success: false, error: Object.assign(new Error(`${table} create refused ${String(payload["tag"] ?? "")}`), { status: state.failStatus }) };
       }
       state.created += 1;
       return { success: true, data: { [idColumn]: `new-${String(payload["tag"] ?? state.created)}` } };
@@ -63,7 +65,7 @@ const fake = vi.hoisted(() => {
     update: async (id: string, payload: Row) => {
       await request("update", table, id, payload);
       if (state.fails(table, "update", id, payload)) {
-        return { success: false, error: new Error(`${table} update refused ${id}`) };
+        return { success: false, error: Object.assign(new Error(`${table} update refused ${id}`), { status: state.failStatus }) };
       }
       return { success: true, data: {} };
     },
@@ -77,8 +79,27 @@ vi.mock("./client", () => ({
   deleteRecord: async (operation: string, entitySet: string, id: string) => {
     const table = fake.DELETE_TABLE[entitySet] ?? entitySet;
     await fake.request("delete", table, id, undefined);
-    if (fake.state.fails(table, "delete", id, undefined)) throw new Error(`${operation} failed: refused ${id}`);
+    if (fake.state.fails(table, "delete", id, undefined)) throw Object.assign(new Error(`${operation} failed: refused ${id}`), { status: fake.state.failStatus });
   },
+  // dvopt CB-03: the app's deletes go through `deleteIfExists`; with no 404 in this double it is `deleteRecord`.
+  deleteIfExists: async (operation: string, entitySet: string, id: string) => {
+    const table = fake.DELETE_TABLE[entitySet] ?? entitySet;
+    await fake.request("delete", table, id, undefined);
+    if (fake.state.fails(table, "delete", id, undefined)) throw Object.assign(new Error(`${operation} failed: refused ${id}`), { status: fake.state.failStatus });
+  },
+}));
+// dvopt CB-01 / CB-14: this file is the OPT-10 differential (tiered vs sequential). The guard is a no-op here and the header create keeps
+// the server-issued id (the stable client id is random, so the two runs would differ); both are tested in landLease.dvopt.test.ts.
+vi.mock("./costUpdateGuard", () => ({ assertRowsExist: async () => undefined, rowExists: async () => false }));
+// dvopt batch 2: the OPT-10 pins below are the D160 tiers, so `LEASE_TIER_WIDER` is off here (CB-07 has its own describe at the end, which turns
+// it on), and `COST_WRITES_POLICY` is off (a refused write must fail at once, not wait for a retry; the policy has its own tests).
+const widerFlag = vi.hoisted(() => ({ wider: false }));
+const policyFlag = vi.hoisted(() => ({ on: false }));
+vi.mock("./leaseOpexFlags", () => ({
+  GONE_AS_DONE_LEASE_OPEX: true, LEASE_GUARD: true, OPEX_GUARD: true, COST_REFRESH_ON_FAILURE: true, STABLE_CREATE_IDS: false,
+  get LEASE_TIER_WIDER() { return widerFlag.wider; },
+  LEASE_LEAN_RELOAD: true,
+  get COST_WRITES_POLICY() { return policyFlag.on; },
 }));
 vi.mock("@/generated/services/Vsb_landleaseprojectcostsService", () => ({
   Vsb_landleaseprojectcostsService: fake.service("cost", "vsb_landleaseprojectcostid"),
@@ -210,7 +231,7 @@ function import40(): LeaseWrite[] {
 function reset(): void {
   const s = fake.state;
   s.events = []; s.n = 0; s.inFlight = 0; s.peak = 0; s.manual = false; s.held = [];
-  s.ticks = () => 0; s.fails = () => false; s.created = 0;
+  s.ticks = () => 0; s.fails = () => false; s.created = 0; s.failStatus = undefined;
 }
 
 /** The requests in the order they STARTED, as `op:table`. */
@@ -246,7 +267,7 @@ async function inWaves<T>(work: () => Promise<T>): Promise<{ result: PromiseSett
   return { result, waves, widest };
 }
 
-beforeEach(reset);
+beforeEach(() => { widerFlag.wider = false; policyFlag.on = false; reset(); });
 
 /* ═════════════════════════════════════════════════════════════════ characterisation (OPT-10) ══ */
 
@@ -769,5 +790,247 @@ describe("OPT-10 safety: after a failure the tiered executor sends no more than 
       // The other create of the same tier was in flight beside the refused one: the only permitted extra.
       expect(sent.filter((e) => e.table === "alloc" && e.op === "create").length).toBeLessThanOrEqual(2);
     }
+  });
+});
+
+/* ═══════════════════════════════════════════ dvopt CB-07 (`LEASE_TIER_WIDER`): followers and period deletes together ══ */
+
+describe("CB-07 wider tiers — waves (switch on)", () => {
+  it("UT-LLWRITE-050 the 40-WTG save needs 8 waves, one fewer: the two follower start-date updates go together (behind the saved period)", async () => {
+    widerFlag.wider = true;
+    const { waves, widest, result } = await inWaves(() => exec.applyLeaseWrites(save40(), { independentSteps: true }));
+    expect(result.status).toBe("fulfilled");
+    expect(waves).toBe(8); // header 1, 40 re-writes 8 wide 5, the saved period 1, its 2 followers 1
+    expect(widest).toBe(8);
+    expect(fake.state.events.filter((e) => e.kind === "start")).toHaveLength(44);
+    // The followers started only after the saved period's own update had ended (D160 section 12).
+    const ev = fake.state.events;
+    const savedEnd = ev.find((e) => e.kind === "end" && e.table === "period")!;
+    const followerStarts = ev.filter((e) => e.kind === "start" && e.table === "period").slice(1);
+    expect(followerStarts).toHaveLength(2);
+    for (const s of followerStarts) expect(s.n).toBeGreaterThan(savedEnd.n);
+  });
+
+  it("UT-LLWRITE-051 the contract delete needs 5 waves, two fewer: allocations 3, the 3 periods together 1, the cost 1; children still before the parent", async () => {
+    widerFlag.wider = true;
+    const { waves, widest } = await inWaves(() => exec.applyLeaseWrites(delete40()));
+    expect(waves).toBe(5);
+    expect(widest).toBe(16);
+    const ev = fake.state.events;
+    const lastEnd = (table: string) => Math.max(...ev.filter((e) => e.kind === "end" && e.table === table).map((e) => e.n));
+    const firstStart = (table: string) => Math.min(...ev.filter((e) => e.kind === "start" && e.table === table).map((e) => e.n));
+    expect(lastEnd("alloc")).toBeLessThan(firstStart("period"));
+    expect(lastEnd("period")).toBeLessThan(firstStart("cost"));
+  });
+
+  it("UT-LLWRITE-052 the switch off gives the D160 numbers again (9 and 7 waves)", async () => {
+    widerFlag.wider = false;
+    expect((await inWaves(() => exec.applyLeaseWrites(save40(), { independentSteps: true }))).waves).toBe(9);
+    reset();
+    expect((await inWaves(() => exec.applyLeaseWrites(delete40()))).waves).toBe(7);
+  });
+
+  it("UT-LLWRITE-053 the standard import keeps its tiers: period creates are NOT widened (same waves with the switch on and off)", async () => {
+    widerFlag.wider = true;
+    const on = await inWaves(() => exec.applyLeaseWrites(import40()));
+    reset();
+    widerFlag.wider = false;
+    const off = await inWaves(() => exec.applyLeaseWrites(import40()));
+    expect(on.waves).toBe(off.waves);
+  });
+});
+
+/** A random plan that HAS follower start-date updates and period deletes (what the wider rule changes), with the real payload shape. */
+function randomWiderPlan(rand: () => number): { writes: LeaseWrite[]; independent: boolean } {
+  const writes: LeaseWrite[] = [];
+  const push = (w: LeaseWrite): void => { writes.push(w); };
+  if (chance(rand, 0.6)) { // a Period-1 / Period-n save
+    push({ op: "update", entitySet: ES.cost, id: "cost-1", payload: { tag: 0 } });
+    for (let i = int(rand, 0, 12); i > 0; i -= 1) push({ op: "update", entitySet: ES.allocation, id: `a-u${writes.length}`, payload: { tag: writes.length } });
+    for (let i = int(rand, 0, 4); i > 0; i -= 1) push({ op: "delete", entitySet: ES.allocation, id: `a-d${writes.length}` });
+    push({ op: "update", entitySet: ES.period, id: "p-1", payload: { tag: writes.length, vsb_name: "n", vsb_startdate: "2027-01-01" } });
+    for (let i = int(rand, 0, 8); i > 0; i -= 1) {
+      push({ op: "update", entitySet: ES.period, id: `p-f${writes.length}`, payload: { vsb_startdate: `2030-0${int(rand, 1, 9)}-01` } });
+    }
+    return { writes, independent: chance(rand, 0.7) };
+  }
+  for (let i = int(rand, 0, 20); i > 0; i -= 1) push({ op: "delete", entitySet: ES.allocation, id: `a-${writes.length}` });
+  for (let i = int(rand, 1, 9); i > 0; i -= 1) push({ op: "delete", entitySet: ES.period, id: `p-${writes.length}` });
+  push({ op: "delete", entitySet: ES.cost, id: "c-1" });
+  return { writes, independent: false };
+}
+
+/** `permittedExtras` for the WIDER tiers: only the same-tier, same-op siblings of the failed write may have started beyond the loop. */
+function permittedExtrasWider(writes: readonly LeaseWrite[], independent: boolean, legacyStarted: ReadonlySet<string>, failing: ReadonlySet<string>): Set<string> {
+  const extras = new Set<string>();
+  for (const unit of unitsOf(writes, independent)) {
+    const failedIdx = unit.find((i) => failing.has(keyOfWrite(writes[i]!, i)) && legacyStarted.has(keyOfWrite(writes[i]!, i)));
+    if (failedIdx === undefined) continue;
+    for (const tier of rules.leaseWriteTiers(unit.map((i) => writes[i]!), { wider: true })) {
+      const global = tier.map((t) => unit[t]!);
+      if (!global.includes(failedIdx)) continue;
+      for (const i of global) if (writes[i]!.op === writes[failedIdx]!.op) extras.add(keyOfWrite(writes[i]!, i));
+    }
+  }
+  return extras;
+}
+
+describe("CB-07 wider tiers — differential against the sequential oracle and failure injection", () => {
+  it("UT-LLWRITE-054 without a failure, 200 random plans land exactly what the legacy loop lands, with the same result", async () => {
+    widerFlag.wider = true;
+    for (let seed = 1; seed <= 200; seed += 1) {
+      const { writes, independent } = randomWiderPlan(prng(seed + 21_000));
+      const legacy = await execute(legacyApply, writes, independent, new Set(), prng(seed));
+      const wider = await execute(tieredApply, writes, independent, new Set(), prng(seed + 1));
+      expect(wider.error, `seed ${seed}`).toBeNull();
+      expect(wider.landed, `seed ${seed}`).toEqual(legacy.landed);
+      expect(wider.createdIds, `seed ${seed}`).toEqual(legacy.createdIds);
+    }
+  });
+
+  it("UT-LLWRITE-055 a failure injected at EVERY index of 60 random plans: every write started is one the loop started or a same-tier same-op sibling; nothing of a later tier", async () => {
+    widerFlag.wider = true;
+    let cases = 0;
+    for (let seed = 1; seed <= 60; seed += 1) {
+      const { writes, independent } = randomWiderPlan(prng(seed + 23_000));
+      for (let k = 0; k < writes.length; k += 1) {
+        cases += 1;
+        const fail = new Set([keyOfWrite(writes[k]!, k)]);
+        await execute(legacyApply, writes, independent, fail, prng(seed * 71 + k));
+        const legacyStarted = startedKeys();
+        const out = await execute(tieredApply, writes, independent, fail, prng(seed * 71 + k + 50_000));
+        expect(out.error, `seed ${seed} index ${k}`).not.toBeNull();
+        const extras = permittedExtrasWider(writes, independent, legacyStarted, fail);
+        for (const key of startedKeys()) expect(legacyStarted.has(key) || extras.has(key), `seed ${seed} index ${k}: ${key}`).toBe(true);
+      }
+    }
+    expect(cases).toBeGreaterThan(500);
+  });
+
+  it("UT-LLWRITE-056 SCENARIO: with a refused period delete the cost header is NEVER deleted; running the plan again finishes it", async () => {
+    widerFlag.wider = true;
+    const writes = delete40();
+    const refused = writes.findIndex((w) => w.entitySet === ES.period && w.op === "delete");
+    const out = await execute(tieredApply, writes, false, new Set([keyOfWrite(writes[refused]!, refused)]), prng(56));
+    expect(out.error).not.toBeNull();
+    expect(fake.state.events.filter((e) => e.kind === "start").some((e) => e.table === "cost")).toBe(false);
+    // The retry: rows that landed answer 404 in the real client (deleteIfExists, CB-03); here the second run simply succeeds in full.
+    const again = await execute(tieredApply, writes, false, new Set(), prng(57));
+    expect(again.error).toBeNull();
+    expect(fake.state.events.filter((e) => e.kind === "start" && e.table === "cost")).toHaveLength(1);
+  });
+
+  it("UT-LLWRITE-057 SCENARIO: a refused saved-period update sends NO follower (they are a later tier), switch on, plain and independent", async () => {
+    widerFlag.wider = true;
+    const writes = save40();
+    const periodUpdates = writes.map((x, i) => [x, i] as const).filter(([x]) => x.entitySet === ES.period);
+    const [selected, ...followers] = periodUpdates;
+    for (const independent of [false, true]) {
+      const out = await execute(tieredApply, writes, independent, new Set([keyOfWrite(selected![0], selected![1])]), prng(58));
+      expect(out.error, `independent ${independent}`).not.toBeNull();
+      for (const [f, i] of followers) expect(startedKeys().has(keyOfWrite(f, i)), `follower ${i} (independent ${independent})`).toBe(false);
+    }
+  });
+
+  it("UT-LLWRITE-058 SCENARIO: one refused follower beside a good one: the good one may land, the error is the refused one's, the other steps still ran", async () => {
+    widerFlag.wider = true;
+    const writes = save40();
+    const followers = writes.map((x, i) => [x, i] as const).filter(([x]) => x.entitySet === ES.period).slice(1);
+    const out = await execute(tieredApply, writes, true, new Set([keyOfWrite(followers[0]![0], followers[0]![1])]), prng(59));
+    expect(out.steps).not.toBeNull();
+    expect(out.steps!.filter((s) => s.startsWith("period:"))).toHaveLength(1);
+    expect(startedKeys().has(keyOfWrite(followers[1]![0], followers[1]![1]))).toBe(true);
+  });
+});
+
+/* ═══════════════════════════════════════════ dvopt T-11 adoption (`COST_WRITES_POLICY`): Land Lease writes retry by kind ══ */
+
+describe("Land Lease writes through the request policy", () => {
+  const periodUpdate = (): LeaseWrite[] => [{ op: "update", entitySet: ES.period, id: "p-1", payload: { vsb_name: "x" } }];
+  const periodCreate = (): LeaseWrite[] => [{ op: "create", entitySet: ES.period, payload: { tag: 7, vsb_name: "x" }, ref: "period" }];
+  const periodDelete = (): LeaseWrite[] => [{ op: "delete", entitySet: ES.period, id: "p-9" }];
+  const starts = (table: string, op: string): number =>
+    fake.state.events.filter((e) => e.kind === "start" && e.table === table && e.op === op).length;
+
+  /** Runs `work` under fake timers and lets every backoff elapse. */
+  async function settle<T>(work: () => Promise<T>): Promise<PromiseSettledResult<T>> {
+    vi.useFakeTimers();
+    try {
+      const run = work().then((value) => ({ status: "fulfilled", value }) as const, (reason: unknown) => ({ status: "rejected", reason }) as const);
+      await vi.advanceTimersByTimeAsync(60_000);
+      return await run;
+    } finally {
+      vi.useRealTimers();
+    }
+  }
+  /** The first `n` requests of this table and op are refused with `status`; later ones answer. */
+  function refuse(table: string, op: string, status: number, n = 1): void {
+    let left = n;
+    fake.state.failStatus = status;
+    fake.state.fails = (t, o) => t === table && o === op && left-- > 0;
+  }
+
+  it("UT-COSTPOLICY-010 a period UPDATE answered 503 is sent again and the plan succeeds (patch: transient is retried)", async () => {
+    policyFlag.on = true;
+    refuse("period", "update", 503);
+    const out = await settle(() => exec.applyLeaseWrites(periodUpdate()));
+    expect(out.status).toBe("fulfilled");
+    expect(starts("period", "update")).toBe(2);
+  });
+
+  it("UT-COSTPOLICY-011 a period CREATE answered 503 is NOT sent again (it may have landed): one request, the error reaches the caller", async () => {
+    policyFlag.on = true;
+    refuse("period", "create", 503, 9);
+    const out = await settle(() => exec.applyLeaseWrites(periodCreate()));
+    expect(out.status).toBe("rejected");
+    expect(starts("period", "create")).toBe(1);
+  });
+
+  it("UT-COSTPOLICY-012 a period CREATE answered 429 (not processed) is sent again and succeeds, the same payload", async () => {
+    policyFlag.on = true;
+    refuse("period", "create", 429);
+    const out = await settle(() => exec.applyLeaseWrites(periodCreate()));
+    expect(out.status).toBe("fulfilled");
+    const sent = fake.state.events.filter((e) => e.kind === "start" && e.table === "period" && e.op === "create");
+    expect(sent).toHaveLength(2);
+    expect(sent[1]!.payload).toEqual(sent[0]!.payload);
+  });
+
+  it("UT-COSTPOLICY-013 a DELETE answered 503 is sent again and succeeds", async () => {
+    policyFlag.on = true;
+    refuse("period", "delete", 503);
+    const out = await settle(() => exec.applyLeaseWrites(periodDelete()));
+    expect(out.status).toBe("fulfilled");
+    expect(starts("period", "delete")).toBe(2);
+  });
+
+  it("UT-COSTPOLICY-014 a 403 is never retried: one request, the failure is the plan's error", async () => {
+    policyFlag.on = true;
+    refuse("period", "update", 403, 9);
+    const out = await settle(() => exec.applyLeaseWrites(periodUpdate()));
+    expect(out.status).toBe("rejected");
+    expect(starts("period", "update")).toBe(1);
+  });
+
+  it("UT-COSTPOLICY-015 the switch off: a refused write is sent once, whatever the status (the old behaviour)", async () => {
+    policyFlag.on = false;
+    refuse("period", "update", 503, 9);
+    expect((await settle(() => exec.applyLeaseWrites(periodUpdate()))).status).toBe("rejected");
+    expect(starts("period", "update")).toBe(1);
+  });
+
+  it("UT-COSTPOLICY-016 a retried write leaves the plan's order intact: a refused-then-accepted allocation does not let the period start early", async () => {
+    policyFlag.on = true;
+    refuse("alloc", "update", 503);
+    const writes: LeaseWrite[] = [
+      { op: "update", entitySet: ES.allocation, id: "a-1", payload: { tag: 1 } },
+      { op: "update", entitySet: ES.period, id: "p-1", payload: { vsb_name: "x" } },
+    ];
+    const out = await settle(() => exec.applyLeaseWrites(writes));
+    expect(out.status).toBe("fulfilled");
+    const ev = fake.state.events;
+    const lastAllocEnd = Math.max(...ev.filter((e) => e.kind === "end" && e.table === "alloc").map((e) => e.n));
+    const periodStart = ev.find((e) => e.kind === "start" && e.table === "period")!.n;
+    expect(lastAllocEnd).toBeLessThan(periodStart);
   });
 });

@@ -25,11 +25,9 @@
  */
 import { useQuery } from "@tanstack/react-query";
 import { ES } from "@/data/dataverseNames";
-import { qk } from "@/data/keys";
 import type { ScreenData } from "@/data/notConnected";
 import { usePlanWrite } from "@/data/usePlanWrite";
-import { loadPlanningProject } from "@/data/planning";
-import { loadGridOperator } from "@/data/gridOperator";
+import { gridOperatorProjectQuery, gridOperatorRowQuery } from "./queries";
 import { gridOperatorReloadKeys } from "./reload";
 import type { GridOperatorProject, GridOperatorRecord } from "./rules";
 
@@ -44,21 +42,14 @@ const out = <T,>(q: { data?: T; isLoading: boolean; error: unknown }, empty: T):
 
 /** `Set(gblRecordSelectedProject, LookUp(Projects, …))` (`OnVisible`). */
 export function useGridOperatorProject(projectId: string | undefined): ScreenData<GridOperatorProject | null> {
-  const q = useQuery({
-    queryKey: qk.gridOperator(projectId ?? "", "project"),
-    queryFn: () => loadPlanningProject(projectId!),
-    enabled: Boolean(projectId),
-  });
+  // PB-10: Planning's key when `PM_PROJECT_ROW_SHARED` is on (the same loader and the same columns), its own key when off.
+  const q = useQuery({ ...gridOperatorProjectQuery(projectId ?? ""), enabled: Boolean(projectId) });
   return out<GridOperatorProject | null>(q, null);
 }
 
 /** `Set(gblRecordGridOperator, LookUp('Grid Operators', Project.Project = …))` (`OnVisible`). */
 export function useGridOperator(projectId: string | undefined): ScreenData<GridOperatorRecord | null> {
-  const q = useQuery({
-    queryKey: qk.gridOperator(projectId ?? "", "row"),
-    queryFn: () => loadGridOperator(projectId!),
-    enabled: Boolean(projectId),
-  });
+  const q = useQuery({ ...gridOperatorRowQuery(projectId ?? ""), enabled: Boolean(projectId) });
   return out(q, null);
 }
 

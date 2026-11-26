@@ -15,7 +15,7 @@
 import { useMemo } from "react";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { qk } from "@/data/keys";
-import { ACCOUNTS_TABLE, hasContracts, loadCapexAccountRows } from "@/data/adminCapexAccounts";
+import { ACCOUNTS_TABLE, hasContractsPooled, loadCapexAccountRows } from "@/data/adminCapexAccounts";
 import { invalidateAfterCapexAccountsWrite } from "@/data/adminInvalidation";
 import { invalidateCapexChart } from "@/data/capexChart";
 import { FRESH_ON_ENTRY } from "@/data/adminQueryPresets";
@@ -50,7 +50,7 @@ export function useHasContracts(ids: readonly string[]): ContractChecks {
   const results = useQueries({
     queries: ids.map((id) => ({
       queryKey: qk.adminCapexHasContracts(id),
-      queryFn: () => hasContracts(id),
+      queryFn: () => hasContractsPooled(id),
       staleTime: 30_000,
     })),
   });

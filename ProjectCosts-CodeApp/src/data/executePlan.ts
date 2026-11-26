@@ -104,7 +104,7 @@ import { GENERATORS_DELETE, type DeleteFlagOverrides, type GeneratorsDeleteFlags
 import { ownerBindGuard, ownerBindProblem } from "./ownerBindGuard";
 import { withDeleteRetry } from "./retry";
 import { DeleteNotConfirmedError, verifyGone, type VerifyClient } from "./verifyGone";
-import { changeCount, CREATED_ROW_ID, isBulkWrite, type PlannedWrite, type WritePlan } from "./writePlan";
+import { changeCount, CREATED_ROW_ID, isBulkWrite, planEngineFlags, type PlannedWrite, type WritePlan } from "./writePlan";
 
 /** A row a create made: kept so a failed save can be rolled back (delete these, last first). The exact shape is a contract. */
 export interface LandedRow {
@@ -212,6 +212,17 @@ export class PlanRefusedError extends Error {
   constructor(reason: string) {
     super(reason);
     this.name = "PlanRefusedError";
+  }
+}
+
+/**
+ * The plan itself is malformed (a programmer error, dvopt T-15 / WE-06): found BEFORE anything was sent, so nothing was saved.
+ * Deliberately not a `PlanRefusedError` (that one carries a business reason a screen may map to its own message).
+ */
+export class PlanShapeError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PlanShapeError";
   }
 }
 
@@ -380,19 +391,100 @@ async function sendWrite(
   return undefined;
 }
 
-/** Throws (before anything is sent) for a bulk step that is marked concurrent / guarded or has no rows array. */
+const KNOWN_OPS: ReadonlySet<string> = new Set(["create", "update", "delete", "createMany", "updateMany"]);
+
+/** Every `@created#n` index in `text`. */
+const createdRefsIn = (text: string): number[] => [...text.matchAll(CREATED_REF)].map((m) => Number(m[1]));
+
+/** The strings of a write that `resolveRefs` rewrites: its id and the top-level string values of its data (and of every bulk row). */
+function refStringsOf(w: PlannedWrite): string[] {
+  const out: string[] = [];
+  const addData = (data: unknown) => {
+    for (const v of Object.values((data ?? {}) as Record<string, unknown>)) if (typeof v === "string") out.push(v);
+  };
+  if (isBulkWrite(w)) {
+    for (const r of w.rows ?? []) {
+      if (typeof r.id === "string") out.push(r.id);
+      addData(r.data);
+    }
+  } else {
+    if (typeof w.id === "string" && w.id !== CREATED_ROW_ID) out.push(w.id);
+    addData(w.data);
+  }
+  return out;
+}
+
+/**
+ * WE-06 (`PLAN_SHAPE_CHECKS`): the shapes that used to fail one step at a time, after earlier writes had landed, are refused
+ * whole before the first request. Mirrors what `sendWrite` / `resolveRefs` would throw for the same plan, so a plan that runs
+ * today is never refused: an op the engine does not know (it would be sent as a delete), an update or delete without an id, a
+ * guarded write that is not an update, an unregistered table, a bad `concurrencyLimit`, `CREATED_ROW_ID` or `createdRowRef(n)`
+ * naming a create that has not run (a write of a concurrent run sees only the creates BEFORE the run).
+ */
+function assertPlanShapeStrict(writes: readonly PlannedWrite[]): void {
+  let created = 0;
+  let runKey: string | null = null;
+  let runStart = 0;
+  for (const w of writes) {
+    const where = `"${w.reason}"`;
+    if (!KNOWN_OPS.has(w.op)) throw new PlanShapeError(`${where}: unknown operation "${String(w.op)}" (programmer error in the plan, nothing was sent)`);
+    if (w.concurrencyLimit !== undefined && (!Number.isInteger(w.concurrencyLimit) || w.concurrencyLimit < 1)) {
+      throw new PlanShapeError(`${where}: the concurrency limit must be a whole number of at least 1 (programmer error in the plan, nothing was sent)`);
+    }
+    if (!isBulkWrite(w)) {
+      if (w.guarded && w.op !== "update") {
+        throw new PlanShapeError(`${where}: only an update can be guarded (guarded: true on a create or delete is a bug in the plan; nothing was sent)`);
+      }
+      try {
+        primaryKeyOf(w.entitySet);
+      } catch (cause) {
+        throw new PlanShapeError(`${where}: ${(cause as Error).message} (nothing was sent)`);
+      }
+      if ((w.op === "update" || w.op === "delete") && (typeof w.id !== "string" || w.id.trim() === "")) {
+        throw new PlanShapeError(`${where}: ${w.op === "update" ? "an update" : "a delete"} needs the id of the row (programmer error in the plan, nothing was sent)`);
+      }
+    }
+    // How many creates this write can see: all earlier steps, but a write of a concurrent run only those before the run.
+    let visible = created;
+    if (!isBulkWrite(w) && w.concurrent) {
+      const key = `${w.concurrencyGroup ?? ""}|${w.concurrencyLimit ?? WRITE_CONCURRENCY}`;
+      if (key !== runKey) {
+        runKey = key;
+        runStart = created;
+      }
+      visible = runStart;
+    } else {
+      runKey = null;
+    }
+    if (!isBulkWrite(w) && w.id === CREATED_ROW_ID && visible === 0) {
+      throw new PlanShapeError(`${where}: a write refers to a created row, but no create preceded it (programmer error in the plan, nothing was sent)`);
+    }
+    for (const text of refStringsOf(w)) {
+      for (const n of createdRefsIn(text)) {
+        if (n >= visible) {
+          throw new PlanShapeError(`${where}: a write refers to created row ${n}, but that create has not run (programmer error in the plan, nothing was sent)`);
+        }
+      }
+    }
+    if (w.op === "create") created += 1;
+    else if (w.op === "createMany") created += w.rows?.length ?? 0;
+  }
+}
+
+/** Throws (before anything is sent) for a malformed plan: the bulk-step rules here, then `assertPlanShapeStrict` (WE-06). */
 function assertPlanShape(writes: readonly PlannedWrite[]): void {
   for (const w of writes) {
     if ((w.hardened || w.confirm) && w.op !== "delete") {
-      throw new Error(`"${w.reason}": only a delete can be hardened or confirmed (programmer error in the plan)`);
+      throw new PlanShapeError(`"${w.reason}": only a delete can be hardened or confirmed (programmer error in the plan)`);
     }
     if (!isBulkWrite(w)) continue;
     if (w.concurrent) {
-      throw new Error(`"${w.reason}": a bulk operation (${w.op}) cannot be part of a together() group (programmer error in the plan)`);
+      throw new PlanShapeError(`"${w.reason}": a bulk operation (${w.op}) cannot be part of a together() group (programmer error in the plan)`);
     }
-    if (w.guarded) throw new Error(`"${w.reason}": guarded does not apply to a bulk operation (updateMany is always guarded by the backend)`);
-    if (!Array.isArray(w.rows)) throw new Error(`"${w.reason}": a bulk operation needs its rows (programmer error in the plan)`);
+    if (w.guarded) throw new PlanShapeError(`"${w.reason}": guarded does not apply to a bulk operation (updateMany is always guarded by the backend)`);
+    if (!Array.isArray(w.rows)) throw new PlanShapeError(`"${w.reason}": a bulk operation needs its rows (programmer error in the plan)`);
   }
+  if (planEngineFlags().shapeChecks) assertPlanShapeStrict(writes);
 }
 
 /**

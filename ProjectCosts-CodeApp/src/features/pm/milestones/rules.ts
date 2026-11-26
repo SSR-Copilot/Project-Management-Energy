@@ -45,7 +45,8 @@ import { dateFormat } from "@/domain/locale";
 import { DATE_PICKER_FORMAT, MODERN_DATE_PICKER_FORMAT, type CanvasDateFormat } from "@/domain/canvasDate";
 import { ES, CHOICE, CHOICE_FINANCE } from "@/data/dataverseNames";
 import { dateOnly } from "@/data/odata";
-import type { PlannedWrite, WritePlan } from "@/data/writePlan";
+import { together, type PlannedWrite, type WritePlan } from "@/data/writePlan";
+import { milestonesRepriceTogether } from "./milestonesPerfFlags";
 import type { MilestoneAssumptionValues } from "@/data/costBook";
 import {
   PROJECT_COL, bind, clearSkippedMilestones, startClusterNo, formatAuditStamp,
@@ -1408,18 +1409,21 @@ export function planSaveMilestones(ctx: MilestoneSaveContext): MilestoneSavePlan
   // Rule 13, in the canvas order (Y:445-473): the re-priced generators, then a SECOND project
   // patch with `'Plant WTG Cost [EUR]': Sum(colProjectGenerators, 'Generators Cost')`.
   if (ctx.repricedGenerators) {
+    const typeWrites = ctx.repricedGenerators.map((g): PlannedWrite => ({
+      op: "update",
+      entitySet: ES.generatorTypeInProjects,
+      id: g.id,
+      // CORRECTED (D26): was `vsb_totalcosteur`, which does not exist on the table.
+      data: { [GENERATOR_TYPE_COL.generatorsCost]: g.generatorsCost },
+      reason: "Re-price a generator type for the new FID",
+    }));
     steps.push({
       kind: "reprice-generators",
       log: MILESTONES_MSG.stepPlantCost(ctx.repricedGenerators.length),
       writes: [
-        ...ctx.repricedGenerators.map((g): PlannedWrite => ({
-          op: "update",
-          entitySet: ES.generatorTypeInProjects,
-          id: g.id,
-          // CORRECTED (D26): was `vsb_totalcosteur`, which does not exist on the table.
-          data: { [GENERATOR_TYPE_COL.generatorsCost]: g.generatorsCost },
-          reason: "Re-price a generator type for the new FID",
-        })),
+        // PB-12 (MILESTONES_REPRICE_TOGETHER): the generator-type updates are independent single-row PATCHes, sent together
+        // (one concurrent group, no new one after a failure); the plant-cost PATCH stays after the group. OFF: one after the other.
+        ...(milestonesRepriceTogether() ? together(typeWrites, { stopOnFailure: true }) : typeWrites),
         {
           op: "update", entitySet: ES.projects, id: project.id!,
           data: { [PROJECT_COL.plantWtgCost]: plantWtgCost(ctx.repricedGenerators) },

@@ -4,12 +4,16 @@
  * from `.power/schemas/appschemas/dataSourcesInfo.ts`. `vsb_financinginputs` itself is NOT registered: a tranche and the
  * seeds are single creates and updates (no bulk request is used for them).
  *
- * Importing this module registers the tables (a side effect, like `./generators.ts` registering the backend).
+ * Importing this module registers the tables AND the default bulk backend (a side effect, like `./checklistBulk.ts`).
+ * PA-02 (dvopt T-05): the backend registration is needed because a tranche plan with a bulk step (`bulkSchedules`) can run
+ * in a page load where neither `./generators.ts` nor `./checklistBulk.ts` was loaded; without it `getBulkBackend()` threw
+ * AFTER the tranche write had landed. `./generatorsBulk.ts` does not import `./generators.ts`, so there is no cycle.
  */
 import { Vsb_financinginputsrepaymentamountsService } from "@/generated/services/Vsb_financinginputsrepaymentamountsService";
 import { Vsb_financinginputstepupmarginsesService } from "@/generated/services/Vsb_financinginputstepupmarginsesService";
 import { ES_FINANCE } from "./dataverseNames";
-import { defineBulkTable, registerBulkTables } from "./generatorsBulk";
+import { registerDefaultBulkBackend } from "./bulkBackend";
+import { createGeneratorsBulkBackend, defineBulkTable, registerBulkTables } from "./generatorsBulk";
 
 export const FINANCE_BULK_TABLES = Object.freeze([
   defineBulkTable(
@@ -23,3 +27,4 @@ export const FINANCE_BULK_TABLES = Object.freeze([
 ]);
 
 registerBulkTables(FINANCE_BULK_TABLES);
+registerDefaultBulkBackend(createGeneratorsBulkBackend);

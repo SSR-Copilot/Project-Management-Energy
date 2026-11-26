@@ -14,7 +14,8 @@ import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { qk, contractInvalidations, contractSaveInvalidations } from "@/data/keys";
 import { costRepository } from "@/data/costRepository";
-import { ContractLinksError, type ContractWrite, type PaymentTargetWrite } from "@/data/contracts";
+import { ContractLinksError, findBopStandardAssumptions, type ContractWrite, type PaymentTargetWrite } from "@/data/contracts";
+import { BOP_ASSUMPTIONS_ONE_READ, CONTRACT_KEYS_ONCE, CONTRACT_LINKS_WITH_PATCH } from "@/data/leaseOpexFlags";
 import { loadProjectExtras, type ProjectExtras } from "@/data/project";
 import { useSession } from "@/app/SessionContext";
 import { costWriteKey } from "@/domain/writeGuard";
@@ -192,7 +193,21 @@ export function useBopStandardAssumption(args: {
   contractType: ContractType | undefined;
 }) {
   const { countryId, technology, contractType } = args;
-  return useQuery({
+  const enabled = Boolean(countryId) && technology !== undefined && contractType !== undefined;
+  /*
+   * dvopt CB-13 (`BOP_ASSUMPTIONS_ONE_READ`): the screen asks for the Development and the Construction assumption of one country and
+   * technology. They share ONE query (the key has the same last part for both types) that reads both rows in one request; each hook
+   * takes its own type out with `select`. The key stays under `qk.bopStandardAssumptions(c, t)`, so every Admin Contract invalidation by
+   * that prefix still reaches it. With the switch off: one query and one request per type, as before.
+   */
+  const pair = useQuery({
+    queryKey: [...qk.bopStandardAssumptions(countryId, technology), "both"] as const,
+    queryFn: () => findBopStandardAssumptions({ countryId, technology }),
+    select: (rows) => (contractType === undefined ? undefined : rows.get(contractType)),
+    enabled: enabled && BOP_ASSUMPTIONS_ONE_READ,
+    staleTime: 15 * 60 * 1000,
+  });
+  const single = useQuery({
     queryKey: [...qk.bopStandardAssumptions(countryId, technology), contractType] as const,
     queryFn: () =>
       costRepository().findBopStandardAssumption({
@@ -200,9 +215,10 @@ export function useBopStandardAssumption(args: {
         technology,
         contractType: contractType as ContractType,
       }),
-    enabled: Boolean(countryId) && technology !== undefined && contractType !== undefined,
+    enabled: enabled && !BOP_ASSUMPTIONS_ONE_READ,
     staleTime: 15 * 60 * 1000,
   });
+  return BOP_ASSUMPTIONS_ONE_READ ? pair : single;
 }
 
 /* ═════════════════════════════════════════════════════ the derived tree */
@@ -258,6 +274,13 @@ export function useSaveContract(projectId: string | undefined) {
     mutationKey: costWriteKey(projectId, "contracts"),
     mutationFn: async ({ write, accounts, visibleAccountIds }: SaveContractArgs) => {
       const repo = costRepository();
+      // dvopt CB-11 (`CONTRACT_LINKS_WITH_PATCH`): an EDIT's stored links are read beside the contract save (its existence check and PATCH), not
+      // after it: the save never changes a link, so the answer is the same. Waited for only where the links are replaced, below; a refused
+      // save (the contract was deleted) ignores it. A failed read surfaces there, inside the same ContractLinksError wrap as before.
+      const linksRead = CONTRACT_LINKS_WITH_PATCH && write.id && write.contractType !== CONTRACT_TYPE.ProjectRights
+        ? repo.listDevCoLinks(write.projectId, [write.id])
+        : undefined;
+      linksRead?.catch(() => undefined);
       const saved = await repo.saveContract(write);
       // The Project Rights Save writes no DevCo rows and removes none (`:3744-3801`).
       if (write.contractType !== CONTRACT_TYPE.ProjectRights) {
@@ -268,6 +291,7 @@ export function useSaveContract(projectId: string | undefined) {
             owningBusinessUnitId: write.owningBusinessUnitId,
             accounts,
             visibleAccountIds,
+            ...(linksRead ? { existingLinks: linksRead } : {}),
           });
         } catch (error) {
           // The contract row exists now. Say so, with its id, so the screen retries it as an UPDATE (no duplicate).
@@ -279,7 +303,16 @@ export function useSaveContract(projectId: string | undefined) {
     // `onSettled`, not `onSuccess`: a save that fails after the contract row landed (its links did not) has still
     // changed Dataverse, and the list must show what is really there (D100 retest note: no onError invalidation).
     // B2 (OPT-12): the list and the DevCo links only; a save never changes a payment target.
-    onSettled: () => invalidateContractCaches(queryClient, projectId, contractSaveInvalidations),
+    onSettled: (_saved, _error, args) => {
+      // dvopt CB-12 (`CONTRACT_KEYS_ONCE`): a CREATE adds a contract id, so the DevCo links are read under the NEW id-set key once the list
+      // answers; refetching the old key first would be a read thrown away. They are only marked stale. An EDIT keeps the ids, so its links
+      // (which the save replaced) are refetched under the same key, as before.
+      const creates = CONTRACT_KEYS_ONCE && !args.write.id;
+      return invalidateContractCaches(
+        queryClient, projectId, contractSaveInvalidations,
+        creates ? (id) => [qk.devCoLinks(id)] : undefined,
+      );
+    },
   });
 }
 
@@ -288,7 +321,12 @@ export function useDeleteContract(projectId: string | undefined) {
   return useMutation({
     mutationKey: costWriteKey(projectId, "contracts"), // CA-15
     mutationFn: (id: string) => costRepository().deleteContract(projectId as string, id),
-    onSettled: () => invalidateContractCaches(queryClient, projectId),
+    // dvopt CB-12 (`CONTRACT_KEYS_ONCE`): a delete removes a contract id, so the payment targets and DevCo links are read under the NEW
+    // id-set key once the list answers (the server cascade already removed the deleted contract's rows); the old key is only marked stale.
+    onSettled: () => invalidateContractCaches(
+      queryClient, projectId, contractInvalidations,
+      CONTRACT_KEYS_ONCE ? (id) => [qk.paymentTargets(id), qk.devCoLinks(id)] : undefined,
+    ),
   });
 }
 
@@ -319,9 +357,14 @@ async function invalidateContractCaches(
   queryClient: ReturnType<typeof useQueryClient>,
   projectId: string | undefined,
   keysOf: (projectId: string) => readonly (readonly unknown[])[] = contractInvalidations,
+  /** CB-12: keys that are only marked stale, not refetched now (their id-set key is about to change). They are left out of `keysOf`' refetch. */
+  lazyKeysOf?: (projectId: string) => readonly (readonly unknown[])[],
 ): Promise<void> {
   if (!projectId) return;
-  await Promise.all(
-    keysOf(projectId).map((key) => queryClient.invalidateQueries({ queryKey: key })),
-  );
+  const lazy = lazyKeysOf?.(projectId) ?? [];
+  const isLazy = (key: readonly unknown[]) => lazy.some((l) => l[0] === key[0]);
+  await Promise.all([
+    ...keysOf(projectId).filter((key) => !isLazy(key)).map((key) => queryClient.invalidateQueries({ queryKey: key })),
+    ...lazy.map((key) => queryClient.invalidateQueries({ queryKey: key, refetchType: "none" })),
+  ]);
 }

@@ -36,7 +36,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ES, ES_PROCESS } from "@/data/dataverseNames";
 import { qk } from "@/data/keys";
 import { CHECKLIST_BULK } from "@/data/checklistBulkFlags";
-import { checklistPerf } from "@/data/checklistPerfFlags";
+import { TRACKINGS_REUSE_MS, checklistPerf } from "@/data/checklistPerfFlags";
 import { WIDE_GROUP_CONCURRENCY } from "@/data/concurrency";
 import { resetChecklistPeopleCache } from "@/data/checklistPeople";
 import type { ScreenData } from "@/data/notConnected";
@@ -48,13 +48,13 @@ import {
   requestChecklistApproval, requestGateApproval,
 } from "@/data/flows";
 import {
-  countClusterChecklistRows, listChecklistApprovalSettings, listChecklistGates, listChecklistProjectStates,
+  countClusterChecklistRows, existingTrackingIds, listChecklistApprovalSettings, listChecklistGates, listChecklistProjectStates,
   listChecklistTrackings, listClusterChecklist, listClusterCopyProbe, listClusterTemplates, listHistory, loadChecklistProject,
   readClusterTask, readClusterTracking,
   type HistoryEntry,
 } from "@/data/checklist";
 import {
-  MSG, appIdRefusal, backfillNeeded, checklistCancelSucceeded, checklistHtmlTable, gateCancellationPayload, needsTemplates,
+  MSG, appIdRefusal, backfillNeeded, backfillUpdateIds, checklistCancelSucceeded, checklistHtmlTable, gateCancellationPayload, needsTemplates,
   planChecklistApprovalRequestFollowUp, planChecklistApprovalRequestPatch, planChecklistRowPatch, planClusterTransition,
   planGateApprovalRequestNote, planGateApprovalRequestPatch, planGateCancelNote, planGateCancelPatch,
   planPrepareCluster, planReturnToPreviousCluster, planSkippedClusterBackfill, planTerminalStateChange,
@@ -311,6 +311,21 @@ export interface WriteEnd { onWritten: (ok: boolean) => void }
 const endOf = (after?: WriteEnd): { onWritten?: (ok: boolean) => void; reloadProgress?: string } =>
   after ? { onWritten: after.onWritten, reloadProgress: MSG.loading } : {};
 
+/**
+ * PB-13: the trackings the screen's own query already holds, when they are young enough for `prepareCluster` to use instead of a second
+ * read of the same list: a success, at most `TRACKINGS_REUSE_MS` old, not invalidated (a write or a Refresh marks it) and not being
+ * refetched. `null` = read afresh. Pure (the clock is passed in).
+ */
+export function reusableTrackings(
+  state: { data: TrackingRow[] | undefined; status: string; fetchStatus: string; isInvalidated: boolean; dataUpdatedAt: number } | undefined,
+  now: number,
+): TrackingRow[] | null {
+  if (!state || state.status !== "success" || state.data === undefined) return null;
+  if (state.isInvalidated || state.fetchStatus !== "idle") return null;
+  const age = now - state.dataUpdatedAt;
+  return age >= 0 && age <= TRACKINGS_REUSE_MS ? state.data : null;
+}
+
 /** How long a cluster's templates and their approval settings are kept (the screen's own `staleTime`). */
 const COPY_FRESH_MS = 30_000;
 
@@ -398,7 +413,14 @@ export function useChecklistWrites(projectId: string | undefined) {
       if (!shouldBackfillSkippedClusters({ startCluster: start, clusterStateName: project.clusterStateName, trackings })) {
         return { writes: [], log: [] } satisfies WritePlan;
       }
-      return planSkippedClusterBackfill(states, trackings, start, ctx(project));
+      const plan = planSkippedClusterBackfill(states, trackings, start, ctx(project));
+      // PB-14 (`backfillGuard`): write only the trackings that still exist (one key-only read), the independent writes together.
+      if (!checklistPerf().backfillGuard) return plan;
+      const ids = backfillUpdateIds(plan);
+      const existing = ids.length > 0 ? await existingTrackingIds(ids) : new Set<string>();
+      const gone = ids.filter((x) => !existing.has(x.toLowerCase()));
+      if (gone.length > 0) trace("warning", `The checklist back-fill skipped ${gone.length} tracking(s) deleted since they were listed (not re-created)`);
+      return planSkippedClusterBackfill(states, trackings, start, ctx(project), { existingTrackingIds: existing, together: true });
     },
   });
 
@@ -411,8 +433,12 @@ export function useChecklistWrites(projectId: string | undefined) {
   const prepareCluster = async (project: ChecklistProject, selected: SequenceEntry): Promise<string[] | null> => {
     let plan: WritePlan;
     try {
+      // PB-13 (`trackingsOnce`): the screen's own trackings query settled a moment ago (this job starts when it has); reuse that answer
+      // while it is this young, not invalidated and not refetching. A write job never takes this path: its plan reads afresh (C6).
+      const cached = checklistPerf().trackingsOnce
+        ? reusableTrackings(qc.getQueryState<TrackingRow[]>(qk.checklist(id, "trackings")), Date.now()) : null;
       const [trackings, count] = await Promise.all([
-        listChecklistTrackings(id), countClusterChecklistRows(id, selected.id),
+        cached ?? listChecklistTrackings(id), countClusterChecklistRows(id, selected.id),
       ]);
       const tracking = trackingFor(trackings, selected.id);
       const copyAll = needsTemplates(tracking, selected, count);

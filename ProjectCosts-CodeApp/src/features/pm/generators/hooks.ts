@@ -126,13 +126,16 @@ export function useProjectPlanning(projectId: string | undefined): ReadResult<Pr
 export function useGeneratorCatalog(fid: string | null | undefined, enabled = true): ReadResult<CatalogModel[]> {
   const persist = generatorsPerf().persistCatalogue;
   const qc = useQueryClient();
+  // PA-12: the stored copy belongs to one environment and one user (`generatorCatalogueCache`); with either unknown it is not used.
+  const { session } = useSession();
+  const cacheScope = { environmentId: session?.environmentId, userId: session?.entraObjectId };
   const key = qk.generatorCatalog(fid ?? "");
   const active = Boolean(fid) && enabled;
   const q = useQuery({
     queryKey: key,
     queryFn: async () => {
       const rows = await listOrderableGenerators(fid ?? null);
-      if (persist && fid) void generatorCatalogueCache().write(fid, rows);
+      if (persist && fid) void generatorCatalogueCache(cacheScope).write(fid, rows);
       return rows;
     },
     enabled: active,
@@ -141,7 +144,7 @@ export function useGeneratorCatalog(fid: string | null | undefined, enabled = tr
   useEffect(() => {
     if (!persist || !active || !fid) return;
     let cancelled = false;
-    void generatorCatalogueCache().read(fid).then((hit) => {
+    void generatorCatalogueCache(cacheScope).read(fid).then((hit) => {
       // The server may have answered first: its rows win, a cached copy never overwrites them.
       if (cancelled || !hit || qc.getQueryData(key) !== undefined) return;
       // `updatedAt: 0` marks the rows as seeded (and as stale, so the read that is already running is not skipped).
@@ -149,7 +152,7 @@ export function useGeneratorCatalog(fid: string | null | undefined, enabled = tr
     });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `key` is derived from `fid`; `qc` is stable
-  }, [persist, active, fid, qc]);
+  }, [persist, active, fid, qc, cacheScope.environmentId, cacheScope.userId]);
   const result = out(q, NONE as CatalogModel[]);
   const seeded = persist && q.data !== undefined && q.dataUpdatedAt === 0;
   return seeded ? { ...result, isLoading: q.isFetching, hasData: false } : result;

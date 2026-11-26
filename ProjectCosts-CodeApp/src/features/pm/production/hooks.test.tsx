@@ -12,6 +12,7 @@ import type { ReactNode } from "react";
 import type { WritePlan } from "@/data/writePlan";
 import { CHOICE_PRODUCTION, ES, ES_PRODUCTION } from "@/data/dataverseNames";
 import { qk } from "@/data/keys";
+import { setGeneratorsPerfFlags } from "@/data/generatorsPerfFlags";
 import { UI, type EnergyYieldRow, type ProductionProject } from "./rules";
 
 const s = vi.hoisted(() => ({
@@ -72,10 +73,12 @@ function held() {
   return { wrapper, invalidate, finish: () => finish(), reload };
 }
 
-afterEach(() => { s.runs.length = 0; s.yieldReads.length = 0; s.project = null; });
+afterEach(() => { s.runs.length = 0; s.yieldReads.length = 0; s.project = null; setGeneratorsPerfFlags(null); });
 
 describe("useProductionWrites (D108)", () => {
   it("UT-PRODHOOK-001 a delete and its roll-up are ONE job: one reload of the four views, the roll-up from the fresh read", async () => {
+    // dvopt PA-08 (`productionLeanReload`) changes WHICH keys reload (UT-PRODLEAN-*); this test pins the D108 path, so it runs with the switch off.
+    setGeneratorsPerfFlags({ productionLeanReload: false });
     const north = row();
     const south = row({ id: "y2", netYieldP50: 5_000 });
     s.yieldReads.push([north, south], [south]); // the action's read, then the roll-up's read after the delete
@@ -97,6 +100,7 @@ describe("useProductionWrites (D108)", () => {
   });
 
   it("UT-PRODHOOK-005 a write reloads Production and marks the Milestones and General Data views stale, but never reloads the session project (no yield column in it)", async () => {
+    setGeneratorsPerfFlags({ productionLeanReload: false }); // the D135 list; the lean list is pinned by UT-PRODLEAN-*
     s.yieldReads.push([row()], [row({ status: 1 })]);
     s.project = project();
     const h = held();

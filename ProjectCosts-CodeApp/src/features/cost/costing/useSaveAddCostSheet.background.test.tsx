@@ -162,7 +162,8 @@ describe("useSaveAddCostSheet â€” background Save (WS-F, flag on)", () => {
     await act(async () => { write.reject(new Error("boom")); });
     expect(await settled).toBe("rejected");
     expect(invalidations).toContain(`${JSON.stringify(["cost-book", "p-1", 1])} all`);
-    expect(invalidations).toContain(`${JSON.stringify(["capex-totals", "p-1"])} all`);
+    // CA-06 (dvopt, ADDCOST_LEAN_REFRESH): the not-displayed Summary totals are marked stale and refetched only while mounted.
+    expect(invalidations).toContain(`${JSON.stringify(["capex-totals", "p-1"])} active`);
     expect(invalidations).toContain(`${JSON.stringify(["add-cost-sheet", "p-1", 1])} active`);
     await waitFor(() => expect(screen.queryByTestId(BACKGROUND_SAVE_STATUS_TEST_ID)).toBeNull());
     expect(screen.queryByText(BACKGROUND_SAVE_MSG.saved)).toBeNull();

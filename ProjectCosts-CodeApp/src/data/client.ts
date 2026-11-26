@@ -87,7 +87,7 @@ export async function fetchAll<T>(
         // D157: a read that was meant to be complete must not return a plausible-looking short list as a success (a caller
         // that diffs, totals or deletes against it would act on partial data). It fails; the screen shows its load error.
         if (!boundedByCaller) {
-          throw new DataError(operation, `more than ${rows.length} rows match, so the read was stopped after ${pages} pages and is incomplete`);
+          throw DataError.deterministic(operation, `more than ${rows.length} rows match, so the read was stopped after ${pages} pages and is incomplete`);
         }
         break;
       }
@@ -137,6 +137,28 @@ export async function deleteRecord(
 ): Promise<void> {
   const client = getClient(dataSourcesInfo);
   await loggedCall("delete", tableName, async () => unwrap(await client.deleteRecordAsync(tableName, recordId), operation), () => 1);
+}
+
+/**
+ * A row that is already gone is the outcome a delete wanted (another user deleted it, a cascade removed it, or the list was
+ * stale), so HTTP 404 and Dataverse's `0x80040217` ("Does Not Exist") count as done, as `unwrapDeleteStrict` reads them (D157). The
+ * canvas `RemoveIf` on a missing row raised nothing either. Any other failure is not "gone". (Moved here from `contracts.ts`,
+ * dvopt CB-03, so the one definition serves Contracts, Land Lease and OPEX: CONVENTIONS rule 17.)
+ */
+export function isAlreadyGone(error: unknown): boolean {
+  return error instanceof DataError && (error.status === 404 || /0x80040217/i.test(error.message));
+}
+
+/**
+ * `deleteRecord` (rule 14) that treats an already-deleted row as deleted. Caveat (KNOWN-RISKS, "404 as success"): a delete sent
+ * to the WRONG entity set also answers 404, so callers pass the table's real entity-set constant, never a computed name.
+ */
+export async function deleteIfExists(operation: string, entitySet: string, id: string): Promise<void> {
+  try {
+    await deleteRecord(operation, entitySet, id);
+  } catch (error) {
+    if (!isAlreadyGone(error)) throw error;
+  }
 }
 
 /* ══════════════════════════════════════════════════════ counted paging ══ */

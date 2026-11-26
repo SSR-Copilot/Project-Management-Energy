@@ -92,7 +92,9 @@ async function t1Update(id: string, payload: Record<string, unknown>) {
 }
 
 // Master has no bulk services: the propagation goes through `updateRowsEach` (per-row, pooled).
-vi.mock("./adminRowWrites", () => ({
+vi.mock("./adminRowWrites", async (importOriginal) => ({
+  // AD-05: the real `deleteRowIfPresent` runs over the mocked `deleteRecord` above.
+  ...(await importOriginal<typeof import("./adminRowWrites")>()),
   updateRowsEach: async (_op: string, entitySet: string, _pk: string, rows: Record<string, unknown>[]) => {
     if (failBulk) { failBulk = false; throw new Error("per-row write refused"); }
     bulkCalls.push({ entitySet, rows });

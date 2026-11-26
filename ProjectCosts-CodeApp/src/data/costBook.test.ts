@@ -188,6 +188,8 @@ const { deleteCostLine, saveCostLine } = await import("./capexWrites");
 // fixture, so each starts with those memos empty.
 const { invalidateCapexChart } = await import("./capexChart");
 const { invalidateCurrencies } = await import("./currencies");
+// dvopt CB-15: the Land Lease sub-accounts are remembered for a few minutes; every case here brings its own.
+const { resetLeaseSubaccountsMemo } = await import("./landLease");
 
 /**
  * The real VSBCloud_Dev hierarchy, transcribed from `pac org fetch`. Note that
@@ -215,7 +217,7 @@ function realShapedRows(): Row[] {
   ];
 }
 
-beforeEach(() => { rows = realShapedRows(); invalidateCapexChart(); invalidateCurrencies(); });
+beforeEach(() => { rows = realShapedRows(); invalidateCapexChart(); invalidateCurrencies(); resetLeaseSubaccountsMemo(); });
 
 describe("loadCostAccounts", () => {
   it("UT-BOOK-001 returns accounts even though vsb_accountcategory is empty on every row", async () => {

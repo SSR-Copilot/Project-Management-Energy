@@ -5,6 +5,7 @@
  * de-duplicates the request, so calling it in several places costs one load.
  */
 import { useQuery } from "@tanstack/react-query";
+import { countriesQueryOptions } from "@/data/countries";
 import { loadCurrentUser } from "@/data/currentUser";
 import { useSession } from "@/app/SessionContext";
 import { adminEntriesVisible } from "@/app/adminAccess";
@@ -15,7 +16,12 @@ export function useCurrentUser() {
     queryKey: ["current-user", session?.entraObjectId ?? ""],
     enabled: Boolean(session?.entraObjectId),
     staleTime: Infinity,
-    queryFn: () => loadCurrentUser(session?.entraObjectId),
+    // PB-06: the country-to-business-unit map is a view of the shared `vsb_countries` entry, not a read of its own.
+    queryFn: ({ client }) => loadCurrentUser(session?.entraObjectId, {
+      readCountries: async () => (await client.fetchQuery(countriesQueryOptions)).map((c) => ({
+        vsb_name: c.name, _vsb_businessunit_value: c.businessUnitId ?? null,
+      })),
+    }),
   });
 }
 

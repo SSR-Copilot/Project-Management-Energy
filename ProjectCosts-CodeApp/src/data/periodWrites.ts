@@ -59,7 +59,12 @@ import { unwrap } from "@/platform/errors";
 import { loggedCall } from "@/platform/requestLog";
 import { OPEX_MSG, planFollowingPeriodStarts, type ChainPeriod, type OpexAccount, type OpexSubaccount } from "@/features/cost/periods/opexRules";
 import type { CostPeriod, PeriodMode } from "@/features/cost/costing/model";
-import { deleteRecord, fetchAll } from "./client";
+import type { IOperationResult } from "@microsoft/power-apps/data";
+import { deleteIfExists, deleteRecord, fetchAll } from "./client";
+import { assertRowsExist } from "./costUpdateGuard";
+import { GONE_AS_DONE_LEASE_OPEX, OPEX_GUARD, OPEX_WRITES_TOGETHER } from "./leaseOpexFlags";
+import { costWrite } from "./costWritePolicy";
+import { createWithStableId } from "./stableCreateId";
 import { mapLimit, mapLimitFirstFailure, WRITE_CONCURRENCY } from "./concurrency";
 import { loadActiveCurrencies } from "./currencies";
 import { ES_PLANT } from "./dataverseNames";
@@ -427,6 +432,18 @@ async function firstFailureOf<T>(items: readonly T[], task: (item: T) => Promise
   return null;
 }
 
+/** The periods of one chain: its head and the rows that point at it (shared by the re-chain plan and its guard, dvopt CB-01). */
+const inChainOf = (rootId: string) => (p: CostPeriod): boolean => p.id === rootId || p.parentId === rootId;
+const toChainPeriod = (p: CostPeriod): ChainPeriod => ({
+  id: p.id, startDate: p.startDate || null, durationYears: p.years, durationMonths: p.months,
+});
+
+/** dvopt CB-01, `OPEX_GUARD`: one existence read of the row an edit updates and the followers it re-chains; `RecordGoneError`, nothing sent. */
+async function guardOpexUpdates(rowId: string, followerIds: readonly string[], enabled: boolean = OPEX_GUARD): Promise<void> {
+  if (!enabled) return;
+  await assertRowsExist("update OPEX period", ES_PLANT.opexProjectCosts, [rowId, ...followerIds]);
+}
+
 export async function saveOpexPeriod(
   ctx: PeriodWriteContext,
   period: CostPeriod,
@@ -434,6 +451,18 @@ export async function saveOpexPeriod(
   extras?: OpexSaveExtras,
 ): Promise<CostPeriod> {
   const mode = period.mode as "om" | "other";
+  // dvopt CB-01 (`OPEX_GUARD`) + CB-09 (`OPEX_WRITES_TOGETHER`): the periods that follow the edited one are re-chained further down. The plan
+  // is pure (it reads `extras` and `period` only), so it is worked out FIRST: the row, its followers and nothing else are checked in ONE read
+  // before the first write, and that read starts beside the currency and group lookups instead of after them (it needs neither).
+  const rechainPlan = extras && !isNew && extras.before
+    ? planFollowingPeriodStarts({
+      chain: extras.bookPeriods.filter(inChainOf(period.parentId ?? period.id)).map(toChainPeriod),
+      saved: toChainPeriod(period),
+      previous: toChainPeriod(extras.before),
+    })
+    : [];
+  const guardRead = OPEX_WRITES_TOGETHER && !isNew ? guardOpexUpdates(period.id, rechainPlan.map((step) => step.id)) : null;
+  guardRead?.catch(() => undefined); // a lookup failure below is thrown first, as before; this one must not stay unhandled
   const [currencyId, target] = await Promise.all([
     resolveCurrencyId(period.currency),
     resolveOpexGroupTarget(ctx.projectId, mode, period.group, period.deviceId, ctx.opexCatalog),
@@ -460,10 +489,22 @@ export async function saveOpexPeriod(
       ? { "owningbusinessunit@odata.bind": bind("businessunits", ctx.owningBusinessUnitId) } : {}),
   };
 
+  // An UPDATE is a PATCH with no If-Match (an upsert): on a row another user deleted it would create a project-less row. Refused first.
+  if (!isNew) await (guardRead ?? guardOpexUpdates(period.id, rechainPlan.map((step) => step.id)));
+
+  // dvopt CB-09: an existing HEAD's children are asked for beside its PATCH, not after it. The PATCH never changes a row's `vsb_parentcost`,
+  // so the answer is the same; the cascade below still starts only after the PATCH succeeded (no cascade without the head). Started only
+  // after the guard, so a refused save sends nothing. A failure of the read is thrown where the children are awaited, as before.
+  const childrenRead = OPEX_WRITES_TOGETHER && !isNew && !period.parentId ? childrenOfChain(period.id) : null;
+  childrenRead?.catch(() => undefined); // a failed PATCH below is thrown instead; this one must not stay unhandled
+
   let savedId = period.id;
   if (isNew) {
-    const created = unwrap(
-      await Vsb_opexprojectcostsService.create({
+    const created = await createWithStableId({
+      operation: "create OPEX period",
+      entitySet: ES_PLANT.opexProjectCosts,
+      idField: "vsb_opexprojectcostid",
+      payload: {
         ...fields,
         ...bindings,
         "vsb_Project@odata.bind": bind("vsb_projects", ctx.projectId),
@@ -474,13 +515,15 @@ export async function saveOpexPeriod(
         ...(period.parentId
           ? { "vsb_ParentCost@odata.bind": bind("vsb_opexprojectcosts", period.parentId) }
           : {}),
-      } as never),
-      "create OPEX period",
-    );
-    savedId = created.vsb_opexprojectcostid;
+      },
+      create: (p) => costWrite("create", ES_PLANT.opexProjectCosts, () =>
+        Vsb_opexprojectcostsService.create(p as never) as unknown as Promise<IOperationResult<Record<string, unknown>>>),
+    });
+    savedId = created.id;
   } else {
     unwrap(
-      await Vsb_opexprojectcostsService.update(period.id, { ...fields, ...bindings } as never),
+      await costWrite("patchAbsolute", ES_PLANT.opexProjectCosts, () =>
+        Vsb_opexprojectcostsService.update(period.id, { ...fields, ...bindings } as never)),
       "update OPEX period",
     );
   }
@@ -489,14 +532,14 @@ export async function saveOpexPeriod(
   // filter simply returns nothing, because the chain is a star and only heads have children.
   // OPT-11: a period that points at a head (`parentId`), and a row created a moment ago, have no children of their own, so the query
   // is not sent for them (it always came back empty: the chain is a star). Only an existing head asks.
-  const children = period.parentId || isNew ? [] : await childrenOfChain(savedId);
+  const children = period.parentId || isNew ? [] : await (childrenRead ?? childrenOfChain(savedId));
   const cascade = cascadeFields(fields);
   // The canvas wraps the ForAll in `IfError(…, Notify("Error: the child periods could not be
   // updated. …"); Blank())`: every child is tried, the first failure is shown, the save goes on.
   // OPT-11: the children are patched side by side (`WRITE_CONCURRENCY`); each is still tried, and the failure shown is the first IN ORDER.
   const childFailure = await firstFailureOf(children, async (child) => {
     unwrap(
-      await Vsb_opexprojectcostsService.update(child.id, cascade as never),
+      await costWrite("patchAbsolute", ES_PLANT.opexProjectCosts, () => Vsb_opexprojectcostsService.update(child.id, cascade as never)),
       "cascade OPEX inflation to a child period",
     );
   });
@@ -516,20 +559,12 @@ export async function saveOpexPeriod(
   // Edited canvas: when an EXISTING period's Start Date or total months changed, re-chain the
   // periods that follow it (`planFollowingPeriodStarts`), one PATCH per period (side by side, OPT-11).
   if (extras && !isNew && extras.before) {
-    const rootId = period.parentId ?? savedId;
-    const inChain = (p: CostPeriod) => p.id === rootId || p.parentId === rootId;
-    const toChain = (p: CostPeriod): ChainPeriod => ({
-      id: p.id, startDate: p.startDate || null, durationYears: p.years, durationMonths: p.months,
-    });
-    const plan = planFollowingPeriodStarts({
-      chain: extras.bookPeriods.filter(inChain).map(toChain),
-      saved: toChain({ ...period, id: savedId }),
-      previous: toChain(extras.before),
-    });
+    const plan = rechainPlan;
     const rechainFailure = await firstFailureOf(plan, (step) => loggedCall(
       "update", `${ES_PLANT.opexProjectCosts} (re-chain start date)`,
       async () => unwrap(
-        await Vsb_opexprojectcostsService.update(step.id, { vsb_startdate: step.startDate } as never),
+        await costWrite("patchAbsolute", ES_PLANT.opexProjectCosts, () =>
+          Vsb_opexprojectcostsService.update(step.id, { vsb_startdate: step.startDate } as never)),
         "re-chain a following OPEX period",
       ),
       () => 1,
@@ -572,12 +607,14 @@ export async function deleteOpexPeriod(period: CostPeriod): Promise<void> {
   // Through `deleteRecord` (rule 14, CA-27): the generated `delete()` returns nothing, so a refusal looked like success.
   // OPT-11: the children go side by side (`WRITE_CONCURRENCY`), the head only after every one has settled, so the head is never gone
   // while a child still points at it. A failing child stops the rest from starting and the error is the first one IN ORDER, as the loop's.
+  // dvopt CB-03, `GONE_AS_DONE_LEASE_OPEX`: a row already gone (a 404) is a delete that is done, so a retry after a partial delete finishes.
+  const remove = GONE_AS_DONE_LEASE_OPEX ? deleteIfExists : deleteRecord;
   await mapLimitFirstFailure(
     children,
-    (child) => deleteRecord("delete OPEX period", ES_PLANT.opexProjectCosts, child.id),
+    (child) => costWrite("delete", ES_PLANT.opexProjectCosts, () => remove("delete OPEX period", ES_PLANT.opexProjectCosts, child.id)),
     WRITE_CONCURRENCY,
   );
-  await deleteRecord("delete OPEX period", ES_PLANT.opexProjectCosts, period.id);
+  await costWrite("delete", ES_PLANT.opexProjectCosts, () => remove("delete OPEX period", ES_PLANT.opexProjectCosts, period.id));
 }
 
 /* ══════════════════════════════════════════════ Add Standard Contract ══ */
@@ -746,6 +783,19 @@ async function addOpexStandardContract(
   const mode = args.mode as "om" | "other";
   const target = await resolveOpexGroupTarget(ctx.projectId, mode, args.group, args.deviceId, ctx.opexCatalog);
 
+  // dvopt CB-09 (`OPEX_WRITES_TOGETHER`): the existence check (OP-44) and the assumptions read (OP-45) do not depend on each other (both need
+  // only `target`), so the assumptions read starts with the check and the REFUSAL still comes first: an existing standard contract (or a
+  // failed check) is thrown before the assumptions' own answer or failure is looked at, as when they ran one after the other.
+  const readAssumptions = () => loadAssumptions(
+    CONTRACT_TYPE[mode],
+    args,
+    // O&M's catalogue is NOT scoped by sub-account: `:3038-3046` filters on country, technology
+    // and contract type only, because every O&M assumption belongs to the one O&M sub-account.
+    mode === "other" ? "vsb_opexsubaccount" : undefined,
+    mode === "other" ? target.subaccountId : undefined,
+  );
+  const assumptionsRead = OPEX_WRITES_TOGETHER ? readAssumptions() : null;
+  assumptionsRead?.catch(() => undefined); // a refusal or a failed check is thrown first; this one must not stay unhandled
   const existing = await fetchAll(
     "check for an existing OPEX standard contract",
     (o) => Vsb_opexprojectcostsService.getAll(o),
@@ -765,14 +815,7 @@ async function addOpexStandardContract(
     throw new Error(`"${args.group}" already has a standard contract.`);
   }
 
-  const assumptions = await loadAssumptions(
-    CONTRACT_TYPE[mode],
-    args,
-    // O&M's catalogue is NOT scoped by sub-account — `:3038-3046` filters on country, technology
-    // and contract type only, because every O&M assumption belongs to the one O&M sub-account.
-    mode === "other" ? "vsb_opexsubaccount" : undefined,
-    mode === "other" ? target.subaccountId : undefined,
-  );
+  const assumptions = await (assumptionsRead ?? readAssumptions());
   if (assumptions.length === 0) {
     throw new Error(`No standard assumptions are configured for "${args.group}".`);
   }
@@ -866,7 +909,7 @@ async function addOpexStandardContract(
   const createSeed = async (seed: OpexImportSeed, headId: string | undefined): Promise<CostPeriod> => {
     const { a, period, rawDescription, profile } = seed;
     const created = unwrap(
-      await Vsb_opexprojectcostsService.create({
+      await costWrite("create", ES_PLANT.opexProjectCosts, () => Vsb_opexprojectcostsService.create({
         // The assumption's own threshold type and individual value ride on the period and are
         // written by `opexFields`, so there is no longer a second, overriding copy here.
         ...opexFields(period, target, a._vsb_currency_value),
@@ -886,7 +929,7 @@ async function addOpexStandardContract(
         ...(headId ? { "vsb_ParentCost@odata.bind": bind("vsb_opexprojectcosts", headId) } : {}),
         ...(ctx.owningBusinessUnitId
           ? { "owningbusinessunit@odata.bind": bind("businessunits", ctx.owningBusinessUnitId) } : {}),
-      } as never),
+      } as never)),
       "create a standard OPEX period",
     );
     const id = created.vsb_opexprojectcostid;

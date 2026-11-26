@@ -14,6 +14,9 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactElement, ReactNode } from "react";
 import { FIXTURE_ROWS, IDS } from "./fixtures";
+import { ADMIN_OPT } from "@/data/adminFlags";
+
+const ADMIN_OPT_DEFAULTS = { ...ADMIN_OPT };
 
 const client = vi.hoisted(() => ({
   rows: [] as Record<string, unknown>[],
@@ -152,7 +155,7 @@ describe("CAPEXAccountsSettingsScreen", () => {
     client.createRecordAsync.mockResolvedValue({ success: true, data: { vsb_capexaccountlistid: NEW_ID } });
     client.executeAsync.mockResolvedValue({ success: true, data: undefined });
   });
-  afterEach(() => vi.clearAllMocks());
+  afterEach(() => { vi.clearAllMocks(); Object.assign(ADMIN_OPT, ADMIN_OPT_DEFAULTS); });
 
   it("UT-ADCAPEX-901 renders one tab per category in order, first selected", async () => {
     renderScreen();
@@ -689,7 +692,8 @@ describe("CAPEXAccountsSettingsScreen", () => {
 
   /* ── a created row deleted before its Inactive step ── */
 
-  it("UT-ADCAPEX-931 a new account deleted before its Inactive step is reported as gone, not 'still Active', and is not selected", async () => {
+  it("UT-ADCAPEX-931 a new account deleted before its Inactive step is reported as gone, not 'still Active', and is not selected (existence read, ADMIN_NO_REDUNDANT_EXISTS off)", async () => {
+    ADMIN_OPT.ADMIN_NO_REDUNDANT_EXISTS = false;
     client.gone.add(NEW_ID); // deleted by someone else between the POST and the Inactive PATCH
     const user = await openDevelopmentTab();
     await user.click(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-newAccount"));
@@ -704,7 +708,20 @@ describe("CAPEXAccountsSettingsScreen", () => {
     expect(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-editAccount")).toBeDisabled();
   });
 
-  it("UT-ADCAPEX-932 a new subaccount deleted before its Inactive step is reported as gone, not 'still Active'", async () => {
+  it("UT-ADCAPEX-931b AD-08: with no existence read the PATCH 404 of a just-created row that vanished is still reported as gone, not 'still Active'", async () => {
+    client.updateRecordAsync.mockResolvedValueOnce({ success: false, error: { message: "Not Found", status: 404 } });
+    const user = await openDevelopmentTab();
+    await user.click(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-newAccount"));
+    await user.type(await screen.findByTestId("txt_Account_RightPanel_NewEditAccount_BodyContent_Number"), "80020");
+    await user.type(screen.getByTestId("txt_Account_RightPanel_NewEditAccount_BodyContent_Name"), "Roads");
+    await user.click(hiddenButton("Save"));
+    expect(await screen.findByText('Account "Roads" was created but has since been deleted by someone else.')).toBeInTheDocument();
+    expect(screen.queryByText(/still Active/)).not.toBeInTheDocument();
+    expect(client.updateRecordAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it("UT-ADCAPEX-932 a new subaccount deleted before its Inactive step is reported as gone, not 'still Active' (existence read, ADMIN_NO_REDUNDANT_EXISTS off)", async () => {
+    ADMIN_OPT.ADMIN_NO_REDUNDANT_EXISTS = false;
     client.gone.add(NEW_ID);
     const user = await openDevelopmentTab();
     await user.click(screen.getByRole("button", { name: "Expand account 80000 - Land" }));

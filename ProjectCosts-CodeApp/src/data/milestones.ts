@@ -31,7 +31,9 @@ import {
   type MilestoneDates, type MilestoneProject, type PriceInflationRow, type ProjectGenerator,
   type RevenueAssumptionRow, type StandardAssumptionFlags,
 } from "@/features/pm/milestones/rules";
+import { milestonesRepriceTogether } from "@/features/pm/milestones/milestonesPerfFlags";
 import { fetchAll, fetchPage } from "./client";
+import { mapLimit } from "./concurrency";
 import { and, chunk, eq, guid, idIn, lookupEq, or, startsWith } from "./odata";
 import { rowStr as str, rowNum as num, rowBool as bool, formattedColumn as formatted } from "./rowValues";
 
@@ -251,20 +253,22 @@ export async function listProjectGeneratorsForRepricing(projectId: string): Prom
   );
   const generatorIds = [...new Set(types.map((t) => t._vsb_generator_value).filter((v): v is string => !!v))];
   const generators = new Map<string, Raw>();
-  for (const ids of chunk(generatorIds)) {
-    const rows = await fetchAll(
-      "load the generator price ladders",
-      (o) => Vsb_generatorsService.getAll(o),
-      {
-        select: [
-          "vsb_generatorid", "vsb_wtgprice", "vsb_wtgprice2", "vsb_wtgprice3", "vsb_wtgprice4", "vsb_wtgprice5",
-          "vsb_additionalfoundationcost", "vsb_foundationcostincluded",
-        ],
-        filter: idIn("vsb_generatorid", ids),
-      },
-    );
-    for (const g of rows) generators.set(g.vsb_generatorid, g as unknown as Raw);
-  }
+  // PB-12 (MILESTONES_REPRICE_TOGETHER): the 40-id chunks are independent reads, run side by side (the existing pool of 8).
+  const readLadders = async (ids: string[]): Promise<Raw[]> => (await fetchAll(
+    "load the generator price ladders",
+    (o) => Vsb_generatorsService.getAll(o),
+    {
+      select: [
+        "vsb_generatorid", "vsb_wtgprice", "vsb_wtgprice2", "vsb_wtgprice3", "vsb_wtgprice4", "vsb_wtgprice5",
+        "vsb_additionalfoundationcost", "vsb_foundationcostincluded",
+      ],
+      filter: idIn("vsb_generatorid", ids),
+    },
+  )) as unknown as Raw[];
+  const pages = milestonesRepriceTogether()
+    ? await mapLimit(chunk(generatorIds), readLadders)
+    : await (async () => { const out: Raw[][] = []; for (const ids of chunk(generatorIds)) out.push(await readLadders(ids)); return out; })();
+  for (const rows of pages) for (const g of rows) generators.set(g.vsb_generatorid as string, g);
   return types.map((t) => {
     const g = t._vsb_generator_value ? generators.get(t._vsb_generator_value) : undefined;
     return {

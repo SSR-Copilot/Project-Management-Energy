@@ -18,7 +18,19 @@
  * saves that defer the same id (a retry while the first background is still running) keep it
  * hidden until both settled.
  */
+import { holdBeforeUnload } from "@/components/beforeUnload";
 import type { CostBook } from "@/features/cost/costing/model";
+import { CAPEX_OPT } from "./capexOptFlags";
+
+/*
+ * CA-03 / T-06 (dvopt, `HOLD_TAB_FOR_DEFERRED_DELETES` in `./capexOptFlags.ts`): while a deferred contract or cost delete, or the
+ * totals reconcile that follows it, is pending, the browser asks before the tab is closed or reloaded. Closing the tab in that
+ * window stopped the deletes and skipped the reconcile, with no toast possible (the contract totals are written BEFORE the cost
+ * rows they sum change). The hold is the app's one shared `beforeunload` listener (`@/components/beforeUnload`, the same one the
+ * WS-F background Save takes, which stays off with `BACKGROUND_SAVE`); the app's registry takes it when its first Save is
+ * registered and gives it back when the last one is released, so the lifetime is exactly `result.background` of
+ * `useSaveAddCostSheet`. A browser prompt only: no request, no data effect.
+ */
 
 /** Always LOWER-CASED ids (`snapshot` makes them so); the filters lower-case the row side. */
 export interface PendingDeleteIds {
@@ -38,9 +50,15 @@ export const NO_PENDING_DELETES: PendingDeleteIds = Object.freeze({
   costIds: new Set<string>(),
 });
 
-export function createPendingDeletes(): PendingDeletesRegistry {
+export function createPendingDeletes(
+  /** Takes the tab hold and returns its release; `undefined` = no hold (the default for a bare registry). */
+  hold?: () => () => void,
+): PendingDeletesRegistry {
   const contracts = new Map<string, number>();
   const costs = new Map<string, number>();
+  /** Registrations not yet released (a Save counts even when it deferred no id: its reconcile is still pending). */
+  let open = 0;
+  let releaseHold: (() => void) | undefined;
   const bump = (into: Map<string, number>, ids: readonly string[], by: 1 | -1) => {
     for (const raw of ids) {
       const id = raw.toLowerCase();
@@ -54,12 +72,22 @@ export function createPendingDeletes(): PendingDeletesRegistry {
       const k = [...costIds];
       bump(contracts, c, 1);
       bump(costs, k, 1);
+      open += 1;
+      if (open === 1 && hold) {
+        try { releaseHold = hold(); } catch { releaseHold = undefined; /* a prompt that cannot be set must not fail the Save */ }
+      }
       let released = false;
       return () => {
         if (released) return;
         released = true;
         bump(contracts, c, -1);
         bump(costs, k, -1);
+        open -= 1;
+        if (open === 0 && releaseHold) {
+          const give = releaseHold;
+          releaseHold = undefined;
+          try { give(); } catch { /* never throw into the background's settle */ }
+        }
       };
     },
     snapshot() {
@@ -70,7 +98,9 @@ export function createPendingDeletes(): PendingDeletesRegistry {
 }
 
 /** The app's one registry: every Save and every CAPEX read share it. */
-export const pendingDeletes: PendingDeletesRegistry = createPendingDeletes();
+export const pendingDeletes: PendingDeletesRegistry = createPendingDeletes(
+  () => (CAPEX_OPT.HOLD_TAB_FOR_DEFERRED_DELETES ? holdBeforeUnload() : () => undefined),
+);
 
 const isPending = (set: ReadonlySet<string>, id: string | undefined): boolean =>
   id !== undefined && set.size > 0 && set.has(id.toLowerCase());

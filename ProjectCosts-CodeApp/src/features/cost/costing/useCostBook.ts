@@ -1,10 +1,13 @@
-import { useMemo } from "react";
+﻿import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useSession } from "@/app/SessionContext";
 import { qk } from "@/data/keys";
 import { costRepository } from "@/data/costRepository";
+import { COST_READS_RETRY, COST_REFRESH_ON_FAILURE, LEASE_LEAN_RELOAD, OPEX_BOOK_REUSES_CATALOGUE } from "@/data/leaseOpexFlags";
 import { NO_FOCUS_REFETCH } from "@/data/adminQueryPresets";
 import { loadActiveWtgCount, loadStandardAssumptions } from "@/data/standardContracts";
+import { CAPEX_OPT } from "@/data/capexOptFlags";
+import { isPerWtgUnit } from "@/features/cost/capex-costs/standardContracts";
 import { deleteComment, loadComments, saveComment } from "@/data/comments";
 import { loadCapexCategories, loadMilestoneDurations, standardContractExists } from "@/data/costBook";
 import { costStates, projectStatesQueryOptions } from "@/data/projectStates";
@@ -19,11 +22,12 @@ import {
 } from "@/data/addCostSheet";
 import { emitSaveLog } from "@/data/saveLog";
 import type { BackgroundOutcome } from "@/data/addCostSheetBulk";
-import { excludePendingFromBook, excludePendingFromSheet, pendingDeletes } from "@/data/pendingDeletes";
+import { excludePendingFromBook, excludePendingFromSheet, isPendingContract, pendingDeletes } from "@/data/pendingDeletes";
 import type { CostBook, CostLine, CostPeriod, Payment } from "./model";
-import { panelBusyLogLine } from "@/data/capexWrites";
+import { panelBusyLogLine, type PanelSaveWritten } from "@/data/capexWrites";
 import { logAction } from "@/platform/requestLog";
 import { applySavedSheetToBook } from "./savedSheetPatch";
+import { patchBookDeleted, patchBookPaid, patchBookSaved } from "./capexBookPatch";
 import { addCostSaveTimeline } from "./saveTimeline";
 import { beginBackgroundSave, type BackgroundSaveHandle } from "./backgroundSave";
 import { costWriteKey } from "@/domain/writeGuard";
@@ -67,6 +71,16 @@ function periodsEqual(a: CostPeriod, b: CostPeriod): boolean {
 }
 
 /**
+ * dvopt T-14 (CA-11, `COST_READS_RETRY`): the four main Cost reads (book, Land Lease book, CAPEX totals, Add Cost sheet) used
+ * `retry: false` with no recorded reason (a search of the decision log, the bug register and the git history found none), so one
+ * transient 5xx / 429 showed "Cost data is unavailable". They now inherit the app default (`Providers.tsx`: `attempt < 2 &&
+ * isRetryable`, a jittered wait): a transient failure is retried twice, a 403 or any other 4xx shows at once. The Add Cost sheet's
+ * "no refetch while editing" protection (`NO_FOCUS_REFETCH`, `refetchOnReconnect`) is separate and unchanged, and a retry only
+ * ever follows a failed fetch, so it never re-hydrates a grid that holds edits. `false`: `retry: false`, as before.
+ */
+const readRetry = (): { retry?: false } => (COST_READS_RETRY ? {} : { retry: false });
+
+/**
  * @param category DEVEX/CAPEX tab index. Omit it on screens that do not show cost lines —
  *   the Dataverse path then fetches none, instead of the project's whole cost set.
  * @param options.everyVisit re-read the book every time the screen opens, whatever its age (OPEX, D123:
@@ -83,7 +97,7 @@ export function useCostBook(category?: number, options?: { everyVisit?: boolean;
   const scope = options?.scope;
   const queryKey = ["cost-book", projectId, category ?? "none", ...(category === undefined && scope === "opex" ? ["opex"] : [])];
   const query = useQuery({
-    queryKey, enabled: Boolean(projectId), retry: false,
+    queryKey, enabled: Boolean(projectId), ...readRetry(),
     ...(options?.everyVisit ? { refetchOnMount: "always" as const } : {}),
     // Rows a previous Add Cost from Table Save is still deleting in the background stay hidden
     // (D51 §11.19). The snapshot is taken when the read starts: every registry change is followed
@@ -92,6 +106,20 @@ export function useCostBook(category?: number, options?: { everyVisit?: boolean;
       const pending = pendingDeletes.snapshot();
       return excludePendingFromBook(await costRepository().getCostBook(projectId as string, category, {
         ...(scope ? { scope } : {}),
+        // dvopt CB-08 (`OPEX_BOOK_REUSES_CATALOGUE`): the OPEX book's sub-account names come from the catalogue the screen already holds
+        // (`["opex-subaccounts"]`, 30 min: the same ACTIVE rows), so a visit, a focus refetch and a post-write reload do not read
+        // `vsb_opexsubaccounts` again. `ensureQueryData` returns a cached answer, joins one in flight, or reads it once.
+        ...(scope === "opex" && category === undefined && OPEX_BOOK_REUSES_CATALOGUE
+          ? {
+            opexSubaccountNames: async () =>
+              (await queryClient.ensureQueryData(opexSubaccountsOptions(queryClient))).map((s) => ({ id: s.id, name: s.name })),
+          }
+          : {}),
+        // CA-09 (`COMMENTS_WITH_PAYMENTS`): the red comment dots no longer wait for the payments. Once the contract list is in, the
+        // threads of those contracts start under the key the screen reads, in the same wave as the payments. A CAPEX tab only.
+        ...(CAPEX_OPT.COMMENTS_WITH_PAYMENTS && category !== undefined && category >= 0
+          ? { onContracts: (ids: string[]) => prefetchCapexComments(queryClient, ids.filter((id) => !isPendingContract(pending, id))) }
+          : {}),
         // B2 (OPT-07d): the `Project States` a linked contract needs come from the shared D159 cache entry (the same active
         // rows in `Order`) instead of a read of their own; a warm cache costs no request.
         loadStates: async () => costStates(await queryClient.ensureQueryData(projectStatesQueryOptions())),
@@ -174,6 +202,12 @@ export function useCostBook(category?: number, options?: { everyVisit?: boolean;
         void queryClient.invalidateQueries({ queryKey });
       }
     },
+    // dvopt CB-02 (`COST_REFRESH_ON_FAILURE`): a save is several requests (the row, the cascade, the re-chain, the delete of a chain). One that
+    // fails part-way has still written the ones before it, and the cached book would not show them, so a retry (re-adding the period)
+    // ran from stale data and created a duplicate. Refresh on failure too; nothing is patched into the cache (only success knows the book).
+    onError: () => {
+      if (COST_REFRESH_ON_FAILURE) void queryClient.invalidateQueries({ queryKey });
+    },
   });
   return { ...query, save, projectId };
 }
@@ -233,6 +267,15 @@ export function useAddStandardContract() {
         void queryClient.invalidateQueries({ queryKey: ["opex-device-types", projectId ?? "none"] });
       }
     },
+    // dvopt CB-02 (`COST_REFRESH_ON_FAILURE`): an import is a chain of creates; one that fails part-way leaves the rows before it, and the
+    // cached book (and so the next click) must see them. Same keys as success.
+    onError: (_error, args) => {
+      if (!COST_REFRESH_ON_FAILURE) return;
+      void queryClient.invalidateQueries({ queryKey: ["cost-book", projectId, "none"] });
+      if (args.mode === "om") {
+        void queryClient.invalidateQueries({ queryKey: ["opex-device-types", projectId ?? "none"] });
+      }
+    },
   });
 }
 
@@ -253,9 +296,22 @@ export function useLeaseBook(projectId: string | undefined) {
   return useQuery({
     queryKey: leaseBookKey(projectId),
     enabled: Boolean(projectId),
-    retry: false,
+    ...readRetry(),
     queryFn: () => costRepository().getLeaseBook(projectId as string),
   });
+}
+
+/**
+ * What a Land Lease write refreshes. dvopt CB-15 (`LEASE_LEAN_RELOAD`): only the Land Lease book. The shared `["cost-book", p, "none"]` entry is
+ * left alone: since B2 (OPT-04) nothing reads Land Lease periods from it (the OPEX book is scoped to OPEX rows, the CAPEX books are keyed
+ * by category), so the invalidation only marked the OPEX screen's cached book stale, which that screen re-reads on every visit anyway
+ * (`everyVisit`). The lease book's own reload no longer re-reads the nine sub-account rows (`loadLeaseBook`). Off: both books, as before.
+ */
+async function refreshLeaseBooks(client: QueryClient, projectId: string | undefined): Promise<void> {
+  await Promise.all([
+    client.invalidateQueries({ queryKey: leaseBookKey(projectId) }),
+    ...(LEASE_LEAN_RELOAD ? [] : [client.invalidateQueries({ queryKey: ["cost-book", projectId, "none"] })]),
+  ]);
 }
 
 export function useLeaseGenerators(projectId: string | undefined) {
@@ -321,18 +377,16 @@ export function useLeaseWrites(projectId: string | undefined) {
         ? costRepository().applyLeaseWrites(input.writes, { independentSteps: input.independentSteps })
         : costRepository().applyLeaseWrites(input),
     onSuccess: async () => {
-      await Promise.all([
-        client.invalidateQueries({ queryKey: leaseBookKey(projectId) }),
-        client.invalidateQueries({ queryKey: ["cost-book", projectId, "none"] }),
-      ]);
+      await refreshLeaseBooks(client, projectId);
     },
     // A partly failed save has still written the steps that passed (the canvas reloads either way).
+    // dvopt CB-02 (`COST_REFRESH_ON_FAILURE`): ANY failure refreshes, not only a `LeaseStepsError`. A delete or an import is not run with
+    // `independentSteps`, so its failure is a plain error, yet the writes before the failed one have landed (an import's header, a
+    // delete's allocations). The stale book then let a second import create a second standard header and made a retried delete
+    // start at a row that was already gone.
     onError: async (error) => {
-      if (!(error instanceof LeaseStepsError)) return;
-      await Promise.all([
-        client.invalidateQueries({ queryKey: leaseBookKey(projectId) }),
-        client.invalidateQueries({ queryKey: ["cost-book", projectId, "none"] }),
-      ]);
+      if (!COST_REFRESH_ON_FAILURE && !(error instanceof LeaseStepsError)) return;
+      await refreshLeaseBooks(client, projectId);
     },
   });
 }
@@ -347,22 +401,26 @@ export function useLeaseWrites(projectId: string | undefined) {
  * because no loader existed; `selectedAccount` / `defaultSubaccount` / `subaccountsForMode` take
  * exactly these shapes, so the constants were deletable the moment this landed.
  */
+const opexAccountsOptions = {
+  queryKey: ["opex-accounts"] as const,
+  staleTime: 30 * 60 * 1000,
+  queryFn: () => costRepository().listOpexAccounts(),
+};
+
+/** The OPEX sub-account catalogue's query, shared by `useOpexCatalog` and (CB-08) the OPEX book, so the one cached read serves both. */
+const opexSubaccountsOptions = (queryClient: QueryClient) => ({
+  queryKey: ["opex-subaccounts"] as const,
+  staleTime: 30 * 60 * 1000,
+  // B2 (OPT-06): the sub-accounts need the account NAMES, and the accounts query reads them. Pass its PROMISE (the
+  // sub-account read starts at once, beside it), not nothing: with no argument `loadOpexSubaccounts` read the accounts a
+  // second time. `ensureQueryData` joins the accounts read already in flight, so the table is read once.
+  queryFn: () => costRepository().listOpexSubaccounts(queryClient.ensureQueryData(opexAccountsOptions)),
+});
+
 export function useOpexCatalog() {
   const queryClient = useQueryClient();
-  const accountsOptions = {
-    queryKey: ["opex-accounts"] as const,
-    staleTime: 30 * 60 * 1000,
-    queryFn: () => costRepository().listOpexAccounts(),
-  };
-  const accounts = useQuery(accountsOptions);
-  const subaccounts = useQuery({
-    queryKey: ["opex-subaccounts"] as const,
-    staleTime: 30 * 60 * 1000,
-    // B2 (OPT-06): the sub-accounts need the account NAMES, and the accounts query above reads them. Pass its PROMISE (the
-    // sub-account read starts at once, beside it), not nothing: with no argument `loadOpexSubaccounts` read the accounts a
-    // second time. `ensureQueryData` joins the accounts read already in flight, so the table is read once.
-    queryFn: () => costRepository().listOpexSubaccounts(queryClient.ensureQueryData(accountsOptions)),
-  });
+  const accounts = useQuery(opexAccountsOptions);
+  const subaccounts = useQuery(opexSubaccountsOptions(queryClient));
   return {
     accounts: accounts.data ?? [],
     subaccounts: subaccounts.data ?? [],
@@ -417,11 +475,14 @@ export function useCapexTotals(enabled = true) {
   return useQuery({
     queryKey: ["capex-totals", projectId],
     enabled: enabled && Boolean(projectId),
-    retry: false,
+    ...readRetry(),
     // See `useCostBook`: pending background deletes are left out of the sums (D51 §11.19).
     queryFn: () => costRepository().getCapexTotals(projectId as string, pendingDeletes.snapshot()),
   });
 }
+
+/** CA-05: what each panel save wrote, handed from `mutationFn` to `onSuccess` by the mutation's variables object. */
+const panelWritten = new WeakMap<object, PanelSaveWritten>();
 
 /**
  * The DEVEX/CAPEX screen's three writes.
@@ -450,12 +511,40 @@ export function useCapexWrites(
    * pushes every render's options into a pending mutation, so reading the render-time `category`
    * here refreshed the tab the user had since switched TO, and left the one written on stale.
    */
-  const invalidate = async (writtenOn: number | undefined, job: CapexWriteJob = "failed") => {
+  const invalidate = async (writtenOn: number | undefined, job: CapexWriteJob = "failed", skipBook = false) => {
     // B2 (OPT-12): each job refreshes exactly the reads that show what it wrote (`capexInvalidation.ts`). The default is the
-    // full set, for a write that failed part-way.
+    // full set, for a write that failed part-way. `skipBook` (CA-05): the cached book was patched instead, so only the other reads
+    // are refreshed.
     await Promise.all(
-      capexWriteInvalidations(projectId, writtenOn, job).map((queryKey) => client.invalidateQueries({ queryKey })),
+      capexWriteInvalidations(projectId, writtenOn, job)
+        .filter((queryKey) => !(skipBook && queryKey[0] === "cost-book"))
+        .map((queryKey) => client.invalidateQueries({ queryKey })),
     );
+  };
+
+  /**
+   * CA-05 (`CAPEX_PATCH_BOOK`): writes the change into the cached category book instead of reloading it. True when the book was
+   * patched (the reload is then skipped); false when the switch is off, no book is cached for that tab, or `patch` returned
+   * `null` (equality with a reload not provable, `capexBookPatch.ts`): the caller reloads, exactly as before. A read of that
+   * book still in flight would land a pre-write answer over the patch, so it is cancelled first. Never throws.
+   */
+  const patchBook = async (writtenOn: number | undefined, patch: (book: CostBook) => CostBook | null): Promise<boolean> => {
+    if (!CAPEX_OPT.CAPEX_PATCH_BOOK || writtenOn === undefined || writtenOn < 0) return false;
+    const key = ["cost-book", projectId, writtenOn];
+    try {
+      if (client.isFetching({ queryKey: key, exact: true }) > 0) await client.cancelQueries({ queryKey: key, exact: true });
+      let patched = false;
+      client.setQueryData<CostBook>(key, (book) => {
+        if (!book) return book;
+        const next = patch(book);
+        if (!next) return book;
+        patched = true;
+        return next;
+      });
+      return patched;
+    } catch {
+      return false;
+    }
   };
 
   /** Runs at mutate time, from that render's options: the category the write is made on. */
@@ -472,7 +561,14 @@ export function useCapexWrites(
     }) => costRepository().setCostPaid(projectId as string, args),
     // B2 (OPT-12): a paid flag (and a cluster-link clear) is shown by the cost book alone; the totals, the DevCo reads and the
     // comment threads read neither, so they are no longer reloaded (and the spinner no longer waits for them).
-    onSuccess: (_data, _args, context) => invalidate(context.category, "paid"),
+    // CA-05: the book itself is patched from the flag just written (`patchBookPaid`); it is reloaded only when that cannot be done.
+    onSuccess: async (_data, args, context) => {
+      const costId = args.costId;
+      if (costId && await patchBook(context.category, (book) => patchBookPaid(book, {
+        lineId: args.lineId, costId, paid: args.paid, clearLinkedCluster: args.clearLinkedCluster,
+      }))) return;
+      await invalidate(context.category, "paid");
+    },
     onError: (error) => reportError(error),
   });
 
@@ -488,10 +584,14 @@ export function useCapexWrites(
       resetPaidAndPaymentDateComments?: boolean;
       /** See `SaveCostLineArgs` — the months the panel opened with. */
       storedPayments?: readonly Payment[];
+      /** See `SaveCostLineArgs` — the contract as the panel opened it (CA-12). */
+      storedLine?: CostLine;
     }) => costRepository().saveCostLine({
       ...args,
       projectId: projectId as string,
       owningBusinessUnitId: project?.owningBusinessUnitId,
+      // CA-05: what the bulk save wrote, for `patchBookSaved` below (the per-row path reports nothing, so it reloads).
+      ...(CAPEX_OPT.CAPEX_PATCH_BOOK ? { onWritten: (written: PanelSaveWritten) => { panelWritten.set(args, written); } } : {}),
     }),
     /*
      * Still AWAITED (D56 §5): the canvas lowers its spinner only after
@@ -503,7 +603,15 @@ export function useCapexWrites(
       const writesDone = performance.now();
       // B2 (OPT-12): a save writes the contract and its month rows, never a comment (D90). The threads are re-read only when
       // the save deleted a month row, which a payment-date comment may point at.
-      await invalidate(context ? context.category : category, savedMonthsDeleteRows(args.payments) ? "save-deleted" : "save");
+      const writtenOn = context ? context.category : category;
+      const job = savedMonthsDeleteRows(args.payments) ? "save-deleted" : "save";
+      // CA-05: patch the cached book from what the save wrote; the totals / DevCo / comment reads are refreshed as before.
+      const written = panelWritten.get(args);
+      panelWritten.delete(args);
+      const patched = written !== undefined && await patchBook(writtenOn, (book) => patchBookSaved(book, {
+        line: args.line, accountId: args.accountId, isNew: args.isNew, written,
+      }, writtenOn as number));
+      await invalidate(writtenOn, job, patched);
       logAction(panelBusyLogLine(writesDone - (context?.startedAt ?? writesDone), performance.now() - writesDone));
     },
     // A failed save may have landed in part (D56 §2): reload so the grid, and the stored months
@@ -521,9 +629,12 @@ export function useCapexWrites(
     // (D58, see `invalidate`); the refetch is awaited exactly as before.
     onMutate: () => ({ startedAt: performance.now(), ...writtenOn() }),
     mutationFn: (line: CostLine) => costRepository().deleteCostLine(projectId as string, line),
-    onSuccess: async (_data, _line, context) => {
+    onSuccess: async (_data, line, context) => {
       const deletesDone = performance.now();
-      await invalidate(context ? context.category : category, "delete");
+      const writtenOn = context ? context.category : category;
+      // CA-05: the deleted line leaves the cached book; the comment threads, totals and DevCo reads are refreshed as before.
+      const patched = await patchBook(writtenOn, (book) => patchBookDeleted(book, line.id));
+      await invalidate(writtenOn, "delete", patched);
       logAction(panelBusyLogLine(
         deletesDone - (context?.startedAt ?? deletesDone), performance.now() - deletesDone, "delete",
       ));
@@ -551,7 +662,7 @@ export function useAddCostSheet(category: number) {
   return useQuery({
     queryKey: ["add-cost-sheet", projectId, category],
     enabled: Boolean(projectId),
-    retry: false,
+    ...readRetry(),
     // The sheet is an editor: a refetch re-hydrates the grid (dropping unsaved edits) and clears the
     // Screen's retry-id cache, so after a failed save a focus or reconnect refetch would turn a safe
     // "Save again" into a silent partial save. It still loads fresh on entry and after a save.
@@ -581,9 +692,10 @@ export function useAddCostSheet(category: number) {
  *  1. registers the deferred delete ids in `pendingDeletes` (every CAPEX read hides them);
  *  2. patches the cached book with what the Save applied (`applySavedSheetToBook`; the legacy
  *     path returns no `applied`, so it is only refetched);
- *  3. invalidates the DEVEX/CAPEX book and the Summary totals with `refetchType: "all"`, so the
- *     confirming read starts now, while the CAPEX screen is still unmounted, instead of on its
- *     mount (the Contracts screen's DevCo keys keep the default, see `invalidate`);
+ *  3. invalidates the DEVEX/CAPEX book with `refetchType: "all"`, so the confirming read starts now,
+ *     while the CAPEX screen is still unmounted, instead of on its mount, and the Summary totals with
+ *     `"active"` (CA-06, dvopt: they are not displayed where the Save returns; `"all"` with
+ *     `ADDCOST_LEAN_REFRESH` off). The Contracts screen's DevCo keys keep the default, see `invalidate`;
  *  4. when the background settles (success or failure), releases the ids FIRST, then invalidates
  *     again, so a row whose delete failed shows again.
  * Steps 1–2 are synchronous; the network part stays fire-and-forget (D51 §11: the Save must not
@@ -622,7 +734,11 @@ export function useSaveAddCostSheet(category: number) {
       client.invalidateQueries({ queryKey: bookKey, refetchType: "all" }),
       // The period screens' book (no CAPEX lines): refetched only if one is showing.
       client.invalidateQueries({ queryKey: ["cost-book", projectId, "none"] }),
-      client.invalidateQueries({ queryKey: ["capex-totals", projectId], refetchType: "all" }),
+      // CA-06 (`ADDCOST_LEAN_REFRESH`): the Summary totals are not displayed where the Save returns (a category tab), yet `"all"`
+      // re-read every contract and cost row of the project, twice (here and again after the deferred deletes). `"active"` marks
+      // the entry stale and refetches it only while a Summary tab is mounted, which is also the only time the second call can
+      // matter; otherwise the next visit reads once. Off: `"all"`, as before.
+      client.invalidateQueries({ queryKey: ["capex-totals", projectId], refetchType: CAPEX_OPT.ADDCOST_LEAN_REFRESH ? "active" : "all" }),
       // The Contracts screen's DevCo reads: that screen is not where the Save returns to, and
       // they do not consult `pendingDeletes`, so they keep the default (refetch only if showing;
       // otherwise on that screen's mount, after the second invalidation in the usual case).
@@ -758,16 +874,25 @@ export function useStandardAssumptions(subaccountIds: readonly string[]) {
     staleTime: 30 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
-  const wtgCount = useQuery({
-    queryKey: ["active-wtg-count", projectId],
-    enabled: Boolean(projectId),
+  // CA-16 (`WTG_COUNT_STANDARD_ONLY`): the count is only the multiplier of a per-WTG standard contract, so it is read only when
+  // this category offers one (`ensureActiveWtgCount` below covers a click that comes before the read has landed). Off: read on
+  // every CAPEX tab visit, as before.
+  const needsWtgCount = !CAPEX_OPT.WTG_COUNT_STANDARD_ONLY || (assumptions.data ?? []).some((a) => isPerWtgUnit(a.unit));
+  const wtgCountOptions = {
+    queryKey: ["active-wtg-count", projectId] as const,
     staleTime: 5 * 60 * 1000,
     queryFn: () => loadActiveWtgCount(projectId as string),
-  });
+  };
+  const wtgCount = useQuery({ ...wtgCountOptions, enabled: Boolean(projectId) && needsWtgCount });
+  const queryClient = useQueryClient();
   const extras = useProjectExtras(projectId);
   return {
     assumptions: assumptions.data ?? [],
     activeWtgCount: wtgCount.data ?? 0,
+    /** CA-16: false until the (lazily enabled) count has landed; a per-WTG amount must not be computed before. */
+    activeWtgCountReady: wtgCount.data !== undefined,
+    /** CA-16: the count now, from the cache or one read (a click that beat the lazy read). */
+    ensureActiveWtgCount: (): Promise<number> => queryClient.ensureQueryData(wtgCountOptions),
     totalCapacity: project?.totalCapacity ?? 0,
     countryId: extras.data?.countryId,
     technology: extras.data?.technology,
@@ -825,6 +950,26 @@ export function useMilestoneDurations(
   });
 }
 
+/** The second element of the `["capex-comments", key]` query key: the contract ids, sorted and joined (one definition, CA-09). */
+export function capexCommentsKey(contractIds: readonly string[]): string {
+  return [...contractIds].sort().join(",");
+}
+
+/**
+ * CA-09: starts the comment threads of `contractIds` under the key `useCapexComments` reads, unless that key already holds data.
+ * `staleTime: Infinity` makes this a "fetch only when missing": a book reload never re-reads threads the cache already has (their
+ * own freshness stays with `useCapexComments`: 30 s and the focus refetch). Fire-and-forget; `prefetchQuery` never rejects, so a
+ * failed warm-up leaves the screen's own query to read on mount.
+ */
+function prefetchCapexComments(client: QueryClient, contractIds: readonly string[]): void {
+  if (contractIds.length === 0) return;
+  void client.prefetchQuery({
+    queryKey: ["capex-comments", capexCommentsKey(contractIds)],
+    queryFn: () => loadComments(contractIds),
+    staleTime: Infinity,
+  });
+}
+
 /**
  * The comment threads for a set of contracts.
  *
@@ -843,7 +988,7 @@ export function useMilestoneDurations(
 export function useCapexComments(contractIds: readonly string[]) {
   // B2 (OPT-25): the key (a sorted, joined id list; about 20 KB at 500+ contracts) is rebuilt when the id list changes, not on
   // every render. The CAPEX screen memoises its list on the book, so that is once per book; the panel passes one id.
-  const key = useMemo(() => [...contractIds].sort().join(","), [contractIds]);
+  const key = useMemo(() => capexCommentsKey(contractIds), [contractIds]);
   return useQuery({
     queryKey: ["capex-comments", key],
     enabled: contractIds.length > 0,
