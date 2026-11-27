@@ -1,0 +1,166 @@
+
+ RUN  v5.0.0 C:/Personal/Code App Mordenization/Project-Management-Energy-WorkDev1-BottleneckOptimization/ProjectCosts-CodeApp
+
+stderr | src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [OFF] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-060 S1 a usual visit: mount to a usable screen (40 tasks), then everything quiet
+Keyborg instance k1 is being disposed incorrectly.
+
+ ✓ src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [OFF] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-060 S1 a usual visit: mount to a usable screen (40 tasks), then everything quiet 6055ms
+stdout | src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [OFF] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-061 S2 first visit to an empty cluster with 10 templates: mount, copy, reload, quiet
+[VSB] DATA create vsb_projectchecklists: 10 rows, 10 calls, 258 ms in total (average 132 ms, slowest 135 ms)
+
+stdout | src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [OFF] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-061 S2 first visit to an empty cluster with 10 templates: mount, copy, reload, quiet
+[VSB] DATA create vsb_projectchecklists: 10 rows, 10 calls, 252 ms in total (average 124 ms, slowest 130 ms)
+
+stdout | src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [OFF] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-061 S2 first visit to an empty cluster with 10 templates: mount, copy, reload, quiet
+[VSB] DATA create vsb_projectchecklists: 10 rows, 10 calls, 252 ms in total (average 125 ms, slowest 128 ms)
+
+ ✓ src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [OFF] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-061 S2 first visit to an empty cluster with 10 templates: mount, copy, reload, quiet 5344ms
+stdout | src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [OFF] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-061 S2 first visit to an empty cluster with 40 templates: mount, copy, reload, quiet
+[VSB] DATA create vsb_projectchecklists: 40 rows, 40 calls, 619 ms in total (average 124 ms, slowest 125 ms)
+
+stdout | src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [OFF] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-061 S2 first visit to an empty cluster with 40 templates: mount, copy, reload, quiet
+[VSB] DATA create vsb_projectchecklists: 40 rows, 40 calls, 636 ms in total (average 127 ms, slowest 135 ms)
+
+stdout | src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [OFF] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-061 S2 first visit to an empty cluster with 40 templates: mount, copy, reload, quiet
+[VSB] DATA create vsb_projectchecklists: 40 rows, 40 calls, 642 ms in total (average 128 ms, slowest 135 ms)
+
+ ✓ src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [OFF] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-061 S2 first visit to an empty cluster with 40 templates: mount, copy, reload, quiet 7693ms
+stdout | src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [OFF] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-063 S3 Complete one task (40 tasks): click to the overlay gone, then quiet
+[VSB] DATA read The state of task 'Task 0' will be changed, please wait...: Task 0 (existence check): 1 row, 142 ms
+[VSB] DATA update vsb_projectchecklists: 1 row, 194 ms
+
+stdout | src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [OFF] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-063 S3 Complete one task (40 tasks): click to the overlay gone, then quiet
+[VSB] DATA read The state of task 'Task 0' will be changed, please wait...: Task 0 (existence check): 1 row, 149 ms
+[VSB] DATA update vsb_projectchecklists: 1 row, 145 ms
+
+stdout | src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [OFF] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-063 S3 Complete one task (40 tasks): click to the overlay gone, then quiet
+[VSB] DATA read The state of task 'Task 0' will be changed, please wait...: Task 0 (existence check): 1 row, 138 ms
+[VSB] DATA update vsb_projectchecklists: 1 row, 136 ms
+
+ ✓ src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [OFF] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-063 S3 Complete one task (40 tasks): click to the overlay gone, then quiet 8129ms
+stdout | src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [OFF] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-064 S4 Move to next cluster (no gate; the next cluster is empty, 10 templates): Save to a settled screen
+[VSB] DATA read Cluster data 'Draft' will be save, please wait...: Draft → Completed (existence check): 1 row, 124 ms
+[VSB] DATA update vsb_projectstatetrackings: 2 rows, 2 calls, 386 ms in total (average 129 ms, slowest 132 ms)
+[VSB] DATA read Cluster data 'Draft' will be save, please wait...: Cluster 1 → In Progress (existence check): 1 row, 127 ms
+[VSB] DATA create vsb_projectstatetrackingnotes: 1 row, 139 ms
+[VSB] DATA update vsb_projects: 1 row, 121 ms
+
+stdout | src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [OFF] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-064 S4 Move to next cluster (no gate; the next cluster is empty, 10 templates): Save to a settled screen
+[VSB] DATA create vsb_projectchecklists: 10 rows, 10 calls, 251 ms in total (average 126 ms, slowest 126 ms)
+
+stdout | src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [OFF] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-064 S4 Move to next cluster (no gate; the next cluster is empty, 10 templates): Save to a settled screen
+[VSB] DATA read Cluster data 'Draft' will be save, please wait...: Draft → Completed (existence check): 1 row, 122 ms
+[VSB] DATA update vsb_projectstatetrackings: 2 rows, 2 calls, 374 ms in total (average 124 ms, slowest 125 ms)
+[VSB] DATA read Cluster data 'Draft' will be save, please wait...: Cluster 1 → In Progress (existence check): 1 row, 124 ms
+[VSB] DATA create vsb_projectstatetrackingnotes: 1 row, 125 ms
+[VSB] DATA update vsb_projects: 1 row, 125 ms
+
+stdout | src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [OFF] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-064 S4 Move to next cluster (no gate; the next cluster is empty, 10 templates): Save to a settled screen
+[VSB] DATA create vsb_projectchecklists: 10 rows, 10 calls, 257 ms in total (average 125 ms, slowest 133 ms)
+
+stdout | src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [OFF] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-064 S4 Move to next cluster (no gate; the next cluster is empty, 10 templates): Save to a settled screen
+[VSB] DATA read Cluster data 'Draft' will be save, please wait...: Draft → Completed (existence check): 1 row, 124 ms
+[VSB] DATA update vsb_projectstatetrackings: 2 rows, 2 calls, 373 ms in total (average 124 ms, slowest 125 ms)
+[VSB] DATA read Cluster data 'Draft' will be save, please wait...: Cluster 1 → In Progress (existence check): 1 row, 125 ms
+[VSB] DATA create vsb_projectstatetrackingnotes: 1 row, 125 ms
+[VSB] DATA update vsb_projects: 1 row, 123 ms
+
+stdout | src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [OFF] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-064 S4 Move to next cluster (no gate; the next cluster is empty, 10 templates): Save to a settled screen
+[VSB] DATA create vsb_projectchecklists: 10 rows, 10 calls, 253 ms in total (average 125 ms, slowest 129 ms)
+
+ ✓ src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [OFF] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-064 S4 Move to next cluster (no gate; the next cluster is empty, 10 templates): Save to a settled screen 14253ms
+ ✓ src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [OFF] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-065 S5 the Refresh icon (40 tasks): click to a quiet screen 6245ms
+ ✓ src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [OFF] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-066 S6 typing 20 characters into a task's comment box (40 tasks): React commits and render time per keystroke 2097ms
+ ✓ src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [ON] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-060 S1 a usual visit: mount to a usable screen (40 tasks), then everything quiet 3358ms
+stdout | src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [ON] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-061 S2 first visit to an empty cluster with 10 templates: mount, copy, reload, quiet
+[VSB] DATA create vsb_projectchecklists: 10 rows, 10 calls, 124 ms in total (average 124 ms, slowest 124 ms)
+
+stdout | src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [ON] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-061 S2 first visit to an empty cluster with 10 templates: mount, copy, reload, quiet
+[VSB] DATA create vsb_projectchecklists: 10 rows, 10 calls, 124 ms in total (average 124 ms, slowest 124 ms)
+
+stdout | src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [ON] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-061 S2 first visit to an empty cluster with 40 templates: mount, copy, reload, quiet
+[VSB] DATA create vsb_projectchecklists: 10 rows, 10 calls, 124 ms in total (average 124 ms, slowest 124 ms)
+
+ ✓ src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [ON] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-061 S2 first visit to an empty cluster with 10 templates: mount, copy, reload, quiet 3030ms
+stdout | src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [ON] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-061 S2 first visit to an empty cluster with 40 templates: mount, copy, reload, quiet
+[VSB] DATA create vsb_projectchecklists: 40 rows, 40 calls, 372 ms in total (average 124 ms, slowest 126 ms)
+
+stdout | src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [ON] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-061 S2 first visit to an empty cluster with 40 templates: mount, copy, reload, quiet
+[VSB] DATA create vsb_projectchecklists: 40 rows, 40 calls, 387 ms in total (average 130 ms, slowest 136 ms)
+
+stdout | src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [ON] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-063 S3 Complete one task (40 tasks): click to the overlay gone, then quiet
+[VSB] DATA create vsb_projectchecklists: 40 rows, 40 calls, 371 ms in total (average 124 ms, slowest 125 ms)
+
+ ✓ src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [ON] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-061 S2 first visit to an empty cluster with 40 templates: mount, copy, reload, quiet 3717ms
+stdout | src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [ON] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-063 S3 Complete one task (40 tasks): click to the overlay gone, then quiet
+[VSB] DATA read The state of task 'Task 0' will be changed, please wait...: Task 0 (existence check): 1 row, 143 ms
+[VSB] DATA update vsb_projectchecklists: 1 row, 141 ms
+
+stdout | src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [ON] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-063 S3 Complete one task (40 tasks): click to the overlay gone, then quiet
+[VSB] DATA read The state of task 'Task 0' will be changed, please wait...: Task 0 (existence check): 1 row, 148 ms
+[VSB] DATA update vsb_projectchecklists: 1 row, 131 ms
+
+stdout | src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [ON] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-063 S3 Complete one task (40 tasks): click to the overlay gone, then quiet
+[VSB] DATA read The state of task 'Task 0' will be changed, please wait...: Task 0 (existence check): 1 row, 147 ms
+[VSB] DATA update vsb_projectchecklists: 1 row, 129 ms
+
+ ✓ src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [ON] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-063 S3 Complete one task (40 tasks): click to the overlay gone, then quiet 5524ms
+stdout | src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [ON] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-064 S4 Move to next cluster (no gate; the next cluster is empty, 10 templates): Save to a settled screen
+[VSB] DATA read Cluster data 'Draft' will be save, please wait...: Draft → Completed (existence check): 1 row, 141 ms
+[VSB] DATA update vsb_projectstatetrackings: 2 rows, 2 calls, 371 ms in total (average 123 ms, slowest 125 ms)
+[VSB] DATA read Cluster data 'Draft' will be save, please wait...: Cluster 1 → In Progress (existence check): 1 row, 124 ms
+[VSB] DATA create vsb_projectstatetrackingnotes: 1 row, 124 ms
+[VSB] DATA update vsb_projects: 1 row, 125 ms
+
+stdout | src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [ON] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-064 S4 Move to next cluster (no gate; the next cluster is empty, 10 templates): Save to a settled screen
+[VSB] DATA create vsb_projectchecklists: 10 rows, 10 calls, 125 ms in total (average 124 ms, slowest 124 ms)
+
+stdout | src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [ON] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-064 S4 Move to next cluster (no gate; the next cluster is empty, 10 templates): Save to a settled screen
+[VSB] DATA read Cluster data 'Draft' will be save, please wait...: Draft → Completed (existence check): 1 row, 132 ms
+[VSB] DATA update vsb_projectstatetrackings: 2 rows, 2 calls, 381 ms in total (average 128 ms, slowest 131 ms)
+[VSB] DATA read Cluster data 'Draft' will be save, please wait...: Cluster 1 → In Progress (existence check): 1 row, 125 ms
+[VSB] DATA create vsb_projectstatetrackingnotes: 1 row, 124 ms
+[VSB] DATA update vsb_projects: 1 row, 123 ms
+
+stdout | src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [ON] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-064 S4 Move to next cluster (no gate; the next cluster is empty, 10 templates): Save to a settled screen
+[VSB] DATA create vsb_projectchecklists: 10 rows, 10 calls, 123 ms in total (average 123 ms, slowest 123 ms)
+
+stdout | src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [ON] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-064 S4 Move to next cluster (no gate; the next cluster is empty, 10 templates): Save to a settled screen
+[VSB] DATA read Cluster data 'Draft' will be save, please wait...: Draft → Completed (existence check): 1 row, 124 ms
+[VSB] DATA update vsb_projectstatetrackings: 2 rows, 2 calls, 374 ms in total (average 124 ms, slowest 124 ms)
+[VSB] DATA read Cluster data 'Draft' will be save, please wait...: Cluster 1 → In Progress (existence check): 1 row, 126 ms
+[VSB] DATA create vsb_projectstatetrackingnotes: 1 row, 124 ms
+[VSB] DATA update vsb_projects: 1 row, 123 ms
+
+stdout | src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [ON] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-065 S5 the Refresh icon (40 tasks): click to a quiet screen
+[VSB] DATA create vsb_projectchecklists: 10 rows, 10 calls, 126 ms in total (average 126 ms, slowest 126 ms)
+
+ ✓ src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [ON] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-064 S4 Move to next cluster (no gate; the next cluster is empty, 10 templates): Save to a settled screen 8949ms
+ ✓ src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [ON] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-065 S5 the Refresh icon (40 tasks): click to a quiet screen 5252ms
+stdout | src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost: the table > UT-CHKPERF-099 prints the results (MODELLED: logical round trips, no server time; CPU is jsdom + dev build, relative only)
+
+CHECKLIST VISIT BENCH (modelled, LAT 120 ms/hop)
+OFF      S1 usual visit (mount)             rounds= 6  requests= 10  usable@6
+OFF      S2 first visit, 10 templates       rounds=11  requests= 29
+OFF      S2 first visit, 40 templates       rounds=14  requests= 59
+OFF      S3 Complete a task                 rounds= 4  requests= 11  overlay-gone@4
+OFF      S4 Move to next cluster            rounds=16  requests= 43
+OFF      S5 Refresh                         rounds= 3  requests= 10
+OFF      S6 typing (per keystroke)          rounds= 0  requests=  0  {"samples":20,"commitsMedian":1,"commitsP95":1,"renderMsMedian":10.71,"renderMsP95":11.78}
+ON       S1 usual visit (mount)             rounds= 4  requests=  9  usable@4
+ON       S2 first visit, 10 templates       rounds= 6  requests= 22
+ON       S2 first visit, 40 templates       rounds= 8  requests= 52
+ON       S3 Complete a task                 rounds= 3  requests=  3  overlay-gone@3
+ON       S4 Move to next cluster            rounds=11  requests= 37
+ON       S5 Refresh                         rounds= 2  requests=  9
+ON       S6 typing (per keystroke)          rounds= 0  requests=  0  {"samples":20,"commitsMedian":1,"commitsP95":1,"renderMsMedian":8.67,"renderMsP95":10.31}
+
+
+ ✓ src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [ON] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-066 S6 typing 20 characters into a task's comment box (40 tasks): React commits and render time per keystroke 1645ms
+ ✓ src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost: the table > UT-CHKPERF-099 prints the results (MODELLED: logical round trips, no server time; CPU is jsdom + dev build, relative only) 4ms
+
+ Test Files  1 passed (1)
+      Tests  15 passed (15)
+   Start at  12:15:26
+   Duration  141.75s (tests 58%, import 27%, environment 10%, setup 3%, transform 2%)
+

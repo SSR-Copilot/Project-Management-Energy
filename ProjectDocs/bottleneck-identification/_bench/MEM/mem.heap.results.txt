@@ -1,0 +1,4 @@
+TYPICAL: 20 accounts, 180 contracts, 21600 cost rows, grid 261 rows x 126 cols = 32886 cells, loadedRows 1800, roundTripped 1800
+  retained MB (forced GC): query data 4.7 | + loadedRows 0.6 | + grid 1.7 | + roundTripped 0.9 | + currentRows 0.4 | TOTAL 8.2
+LARGE: 100 accounts, 1500 contracts, 180000 cost rows, grid 1901 rows x 126 cols = 239526 cells, loadedRows 15000, roundTripped 15000
+  retained MB (forced GC): query data 36.7 | + loadedRows 4.7 | + grid 11.8 | + roundTripped 6.8 | + currentRows 3.8 | TOTAL 63.8

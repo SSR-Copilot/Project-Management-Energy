@@ -1,0 +1,318 @@
+app\deepLinks.ts:138->139  const entry = source.find(([key]) => key.toLowerCase() === "pmscreen");
+app\deepLinks.ts:172->173  const entry = source.find(([key]) => key.toLowerCase() === "costscreen");
+appInsights\diagnostics.ts:40->41  const eq = part.indexOf("=");
+components\ChoiceField.tsx:155->156  : options.find((o) => o.value === value)?.label ?? valueLabel ?? "";
+components\CommandBar.tsx:240->241  const childrenOf = (key: string) => shown.filter((c) => c.parentKey === key);
+components\CommandBar.tsx:241->244  {shown.filter((c) => !c.parentKey).map((c) => {
+components\LeftNav.tsx:239->242  const roots = visible.filter((i) => !i.parentKey);
+components\LeftNav.tsx:298->299  const children = visible.filter((c) => c.parentKey === item.key);
+components\SettingsAccordion.tsx:86->87  const open = openItems.includes(item.id);
+data\addCostSheet.ts:122->127  const subaccounts: AddCostSheetSubaccount[] = inCategory.filter((a) => a.parentId).map(named);
+data\addCostSheet.ts:127->129  .filter((a) => !a.parentId)
+data\addCostSheet.ts:129->132  subaccounts: inCategory.filter((s) => s.parentId === a.id).map(named),
+data\addCostSheet.ts:130->132  subaccounts: inCategory.filter((s) => s.parentId === a.id).map(named),
+data\addCostSheet.ts:1505->1507  plan.deletes.map((id) => existingById.get(id)).filter((c): c is ExistingCost => c !== undefined),
+data\addCostSheetBulk.ts:444->450  if (groups.some((g) => g.costs.length > limits.maxCosts)) return undefined;
+data\addCostSheetBulk.ts:717->720  && !others.some((o) => o.status === "failed") && !needsReconcile(others)) {
+data\addCostSheetBulk.ts:790->791  const failures = settled.filter((o): o is Extract<OpOutcome, { status: "failed" }> => o.status === "failed");
+data\addCostSheetBulk.ts:791->793  const costCause = failures.find((o) => o.key !== "contractDeletes");
+data\addCostSheetBulk.ts:901->904  const ifExist = distinct(plan.costDeletesIfExist).filter((id) => !deletedNow.has(id.toLowerCase()));
+data\addCostSheetBulk.ts:903->904  const ifExist = distinct(plan.costDeletesIfExist).filter((id) => !deletedNow.has(id.toLowerCase()));
+data\addCostSheetBulk.ts:1024->1025  return feeding.some(mayHaveLanded) && feeding.some((o) => o.status === "failed" || o.status === "skipped");
+data\addCostSheetBulk.ts:1057->1059  .filter((id) => !deleted.has(id.toLowerCase()) && !exclude.has(id.toLowerCase()));
+data\addCostSheetBulk.ts:1059->1061  const isNew = new Set(rows.filter((r) => r.isNew).map((r) => r.id.toLowerCase()));
+data\adminCost.ts:236->238  const root = rows.find((r) => r.number === CAPEX_ROOT_NUMBER);
+data\adminCost.ts:725->729  .filter((r) => (r.id === tail.id ? !r.isLast : r.isLast))
+data\adminCost.ts:727->729  .filter((r) => (r.id === tail.id ? !r.isLast : r.isLast))
+data\adminCost.ts:927->929  const heads = rows.filter((r) => r.period === 1);
+data\adminCost.ts:965->967  remaining = before.filter((r) => r.id !== id);
+data\adminMilestones.ts:134->135  failed: outcomes.filter((o) => !o.ok).map((o) => ({ patch: o.patch, error: o.error })),
+data\bulkSend.ts:524->527  const missing = rows.filter((r) => !found.has(r.id.toLowerCase()));
+data\bulkSend.ts:693->694  update: rows.filter((r) => !r.isNew),
+data\bulkSend.ts:970->971  const failedIds = groups.filter((_, i) => settled[i]?.status !== "fulfilled").map((g) => g.contract.id);
+data\bulkSend.ts:976->981  const missing = nested.filter((id) => !found.has(id.toLowerCase())).length;
+data\capexWrites.ts:309->315  ...(error ? this.planned.filter((n) => !recorded.has(n)).map((label): SaveLogStep => ({ label, status: "skippe
+data\capexWrites.ts:311->315  ...(error ? this.planned.filter((n) => !recorded.has(n)).map((label): SaveLogStep => ({ label, status: "skippe
+data\capexWrites.ts:793->795  const createsNow = plan.creates.filter((c) => !landedMonths.has(c.id.toLowerCase()));
+data\capexWrites.ts:795->796  const createsLanded = plan.creates.filter((c) => landedMonths.has(c.id.toLowerCase()));
+data\capexWrites.ts:844->845  const failed = settled.find((s): s is PromiseRejectedResult => s.status === "rejected");
+data\costBook.ts:531->535  costRows.map((r) => r._vsb_devicetypeinproject_value).filter((v): v is string => Boolean(v)),
+data\costBook.ts:532->535  costRows.map((r) => r._vsb_devicetypeinproject_value).filter((v): v is string => Boolean(v)),
+data\costBook.ts:676->677  .filter((r) => (r.vsb_name ?? "") !== EXCLUDED_CATEGORY_NAME)
+data\costBook.ts:715->716  const category = CATEGORIES.indexOf(level1.name as (typeof CATEGORIES)[number]);
+data\costBook.ts:976->982  const hasLinkedCluster = contracts.some((c) => c._vsb_linkedcluster_value);
+data\costRepository.ts:360->363  return costs.filter((c) => contractIds.has(c.contractId));
+data\costUpdateGuard.ts:67->73  const missing = unique.find((id) => !present.has(id.toLowerCase()));
+data\currentUser.ts:120->122  .filter((name): name is string => Boolean(name));
+data\currentUser.ts:121->122  .filter((name): name is string => Boolean(name));
+data\currentUser.ts:122->126  isProjectDataAllCountries: distinct.some((r) => r.name === ROLE_ALL_COUNTRIES),
+data\currentUser.ts:126->127  isApplicationAdministrator: distinct.some((r) => r.name === ROLE_APPLICATION_ADMINISTRATOR),
+data\currentUser.ts:127->128  isControllerOwnData: distinct.some((r) => r.name === ROLE_CONTROLLER_OWN_DATA),
+data\executePlan.ts:511->515  if (result.ids.length !== rows.length || result.ids.some((id) => typeof id !== "string" || !id)) {
+data\executePlan.ts:583->585  stillPresent.push(...items.filter((i) => present.has(i.id.toLowerCase())));
+data\executePlan.ts:628->630  ? stepIds.filter((id) => !confirmed.has(`${write.entitySet}|${id.toLowerCase()}`))
+data\generators.ts:609->614  const ofType = rows.filter((r) => r.vsb_devicetype === type);
+data\generators.ts:614->615  const own = countryId ? ofType.find((r) => str(r._vsb_country_value)?.toLowerCase() === countryId.toLowerCase(
+data\generatorsBulk.ts:435->437  const missing = ids.filter((id) => !found.has(id.toLowerCase()));
+data\landLease.ts:166->168  costRows.map((r) => r._vsb_currency_value).filter((v): v is string => Boolean(v)),
+data\landLease.ts:580->581  const inStep = writes.filter((w) => leaseStepOf(w.entitySet) === step);
+data\landLease.ts:612->613  return tier.some((w) => w.entitySet === LEASE_ENTITY_SET.cost) ? CASCADE_DELETE_CONCURRENCY : LEAF_DELETE_CONC
+data\milestones.ts:203->207  .filter((r) => isInRevenueSlice(r.country, countryName));
+data\odata.ts:52->58  const kept = clauses.filter((c): c is string => typeof c === "string" && c.length > 0);
+data\odata.ts:54->58  const kept = clauses.filter((c): c is string => typeof c === "string" && c.length > 0);
+data\opexCatalog.ts:142->148  generatorTypes.map((g) => g._vsb_generator_value).filter((v): v is string => Boolean(v)),
+data\opexCatalog.ts:143->148  generatorTypes.map((g) => g._vsb_generator_value).filter((v): v is string => Boolean(v)),
+data\ownerBindGuard.ts:54->58  if ((w.rows ?? []).some((r) => bindsToProject(r.data as Record<string, unknown>) && !hasOwnerBind(r.data as Re
+data\pendingDeletes.ts:117->119  if (pending.costIds.size > 0 && line.payments.some((p) => isPending(pending.costIds, p.id))) {
+data\pendingDeletes.ts:119->121  lines.push({ ...line, payments: line.payments.filter((p) => !isPending(pending.costIds, p.id)) });
+data\production.ts:363->366  countryInflation: inflation.find((r) => r.year === year)?.inflation ?? null,
+data\production.ts:364->366  countryInflation: inflation.find((r) => r.year === year)?.inflation ?? null,
+data\project.ts:102->104  if (!name || !ENV_VAR_NAMES.includes(name)) continue;
+data\projectStates.ts:31->36  return rows.filter((s) => s.active).map((s) => ({ id: s.id, name: s.name, order: s.order }));
+data\revenues.ts:250->252  const c = rows.find((x) => x.code === code);
+data\saveLog.ts:191->194  ...extras.filter((e) => e !== ""),
+data\saveLog.ts:238->239  const failed = ordered.filter((s) => s.status === "failed").map((s) => s.label);
+data\saveLog.ts:239->240  const notSent = ordered.filter((s) => s.status === "skipped").map((s) => s.label);
+data\verifyGone.ts:75->80  return unique.filter((id) => present.has(id.toLowerCase()));
+domain\contractStandards.ts:207->209  toDelete: ownChildren.filter((r) => !selected.has(r.accountId)).map((r) => r.id),
+domain\contractStandards.ts:209->210  toCreate: selectedAccountIds.filter((id) => !existing.has(id)),
+domain\countryPicker.ts:94->95  if (PICKER_EXCLUDED_COUNTRIES.includes(cfg.name)) continue;
+domain\countryPicker.ts:109->111  const cfg = PICKER_COUNTRIES.find((c) => c.name === r.name);
+domain\countryPicker.ts:110->111  const cfg = PICKER_COUNTRIES.find((c) => c.name === r.name);
+domain\countryPicker.ts:196->202  const offers = (c: PickerCountry) => technologiesFor(c).some((t) => t.code === policy.technology);
+domain\countryPicker.ts:202->203  const preferred = countries.find((c) => c.name === policy.countryName);
+domain\formChanged.ts:19->25  return keys.length === Object.keys(rb).length && keys.every((k) => k in rb && sameValue(ra[k], rb[k]));
+domain\priceCurve.ts:40->43  const exact = dated.find((p) => p.year === year);
+domain\session.ts:87->89  return all.filter((r) => {
+domain\session.ts:103->105  if (!COUNTRY_SCOPED_ROLES.includes(r.name)) continue;
+domain\session.ts:112->113  const has = (n: string) => names.includes(n);
+features\admin\admin-capex-accounts\Screen.tsx:497->498  onCommand={(key) => accountBar.find((c) => c.key === key)?.run()}
+features\admin\admin-contract\rules.ts:201->202  const construction = contracts.filter((c) => c.contractType === CONTRACT_TYPE.Construction).length;
+features\admin\admin-contract\rules.ts:485->486  const stale = root.children.filter((c) => isStaleSelection(c.id, selected, classes)).map((c) => c.id);
+features\admin\admin-contract\rules.ts:486->487  const selectedCount = available.filter((id) => selected.has(id)).length;
+features\admin\admin-cost\OpexContractTable.tsx:165->170  description: v.description, start: v.startDate, duration: [v.years, v.months].filter(Boolean).join(" "),
+features\admin\admin-cost\rules.ts:260->261  const rows = sorted.filter((c) => c.categoryId === category.id).map(view);
+features\admin\admin-cost\rules.ts:261->264  const orphans = sorted.filter((c) => !c.categoryId || !known.has(c.categoryId)).map(view);
+features\admin\admin-cost\rules.ts:288->289  .filter((s) => s.id === keepId || (counts.get(s.id) ?? 0) < DEVEX_SUBACCOUNT_LIMIT)
+features\admin\admin-cost\rules.ts:297->299  .filter((c) => hierarchy.subaccounts.some((s) => s.categoryId === c.id && available.has(s.id)))
+features\admin\admin-cost\rules.ts:666->668  const numbered = sorted.filter((r) => r.period !== undefined);
+features\admin\admin-cost\rules.ts:858->862  : opexSubaccounts.filter((s) => (type === CONTRACT_TYPE.oAndM ? s.isOAndM : !s.isOAndM));
+features\admin\admin-default-checklists\rules.ts:371->372  return snapshot.some((s) => !liveOrder.has(s.id) || liveOrder.get(s.id) !== s.order);
+features\admin\admin-gates-approvals\rules.ts:221->223  .filter((t) => t.stateId !== null && t.stateId.toLowerCase() === state.id.toLowerCase())
+features\admin\admin-gates-approvals\rules.ts:359->365  .filter((p) => p.entraId || p.name || p.mail);
+features\admin\admin-gates-approvals\rules.ts:360->365  .filter((p) => p.entraId || p.name || p.mail);
+features\admin\admin-gates-approvals\rules.ts:411->412  return hits.filter((p) => p.entraId && !selectedIds.has(p.entraId.toLowerCase()));
+features\admin\admin-gates-approvals\rules.ts:568->570  : MODE_OPTIONS.filter((o) => o.value === MODE.OnlyNotifications);
+features\admin\admin-milestones\rules.ts:415->416  ...[...durationErrors].filter((m) => m !== MSG.durationInvalid),
+features\admin\admin-milestones\Screen.tsx:195->200  setOpenItems((open) => (open.includes(id) ? open.filter((x) => x !== id) : [...open, id]));
+features\cost\add-costs-from-table\rules.ts:481->487  return rows.filter((_, i) => firstId.get(keys[i] as string) === MANY);
+features\cost\add-costs-from-table\rules.ts:487->493  .filter((r) => r.subAccountId === null)
+features\cost\add-costs-from-table\rules.ts:525->530  .filter((_, i) => (costCountRows.get(keys[i] as string) ?? 0) > 1)
+features\cost\add-costs-from-table\rules.ts:528->530  .filter((_, i) => (costCountRows.get(keys[i] as string) ?? 0) > 1)
+features\cost\add-costs-from-table\rules.ts:531->537  .filter((r) => isBlank(r.depreciation) || isBlank(r.applyVat) || isBlank(r.costPaidBy))
+features\cost\add-costs-from-table\rules.ts:547->548  .filter((r) => r.projectContractId === null)
+features\cost\add-costs-from-table\rules.ts:554->559  hasCost.set(k, r.months.some((m) => m !== null && m !== 0));
+features\cost\add-costs-from-table\rules.ts:556->559  hasCost.set(k, r.months.some((m) => m !== null && m !== 0));
+features\cost\add-costs-from-table\rules.ts:559->562  .filter((_, i) => hasCost.get(keys[i] as string) === false)
+features\cost\add-costs-from-table\rules.ts:688->693  return sheetRows.filter((r) => {
+features\cost\add-costs-from-table\rules.ts:879->884  .filter((x): x is string => x !== null && !stillPresent.has(x)),
+features\cost\add-costs-from-table\rules.ts:883->884  .filter((x): x is string => x !== null && !stillPresent.has(x)),
+features\cost\add-costs-from-table\rules.ts:892->895  const blocked = removed.filter((id) => withPastCosts.has(id));
+features\cost\add-costs-from-table\rules.ts:895->899  deleteIds: removed.filter((id) => !blockedSet.has(id)),
+features\cost\add-costs-from-table\rules.ts:912->917  .filter((x): x is string => x !== null && !stillPresent.has(x)),
+features\cost\add-costs-from-table\rules.ts:916->917  .filter((x): x is string => x !== null && !stillPresent.has(x)),
+features\cost\add-costs-from-table\savePlan.ts:284->289  .filter((r) => r.subAccountId === u.subaccountId && r.description === u.name)
+features\cost\add-costs-from-table\spreadsheet\columnWidths.ts:45->49  a === b || (!!a && !!b && a.length === b.length && a.every((w, i) => w === b[i]));
+features\cost\add-costs-from-table\spreadsheet\SpreadSheet.tsx:157->163  const match = options.find((o) => o.trim().toLowerCase() === value.trim().toLowerCase());
+features\cost\capex-costs\clusters.ts:158->159  .filter(usable);
+features\cost\capex-costs\clusters.ts:160->161  .filter(usable);
+features\cost\capex-costs\comments.ts:429->430  remaining: renumberThreads(threads.filter((t) => t.root.id !== rootId)),
+features\cost\capex-costs\comments.ts:518->521  return drafts.some((d) => d.isDirty || d.isModified) || deletedIds.length > 0;
+features\cost\capex-costs\CommentsPanel.tsx:413->415  ? [...working.filter((c) => c.parentId === id).map((c) => c.id), id]
+features\cost\capex-costs\CommentsPanel.tsx:415->417  setWorking((w) => w.filter((c) => !ids.includes(c.id)));
+features\cost\capex-costs\CommentsPanel.tsx:417->418  setDeletedIds((d) => [...d, ...ids.filter((x) => !isTemp(x))]);
+features\cost\capex-costs\CommentsPanel.tsx:483->484  const c = working.find((x) => x.id === id);
+features\cost\capex-costs\CommentsPanel.tsx:643->646  <DraftCard comment={working.find((c) => c.id === thread.root.id) as Working}
+features\cost\capex-costs\CommentsPanel.tsx:666->669  <DraftCard comment={working.find((c) => c.id === reply.id) as Working}
+features\cost\capex-costs\pcf\services\DatasetParser.js:52->58  if (["rowid", "id", "vsbcapexaccountlistid", "capexaccountlist", "capexprojectcontract"].includes(normalizedNa
+features\cost\capex-costs\pcf\services\DatasetParser.js:575->579  .filter(option => option.id && option.name);
+features\cost\capex-costs\pcf\services\DatasetParser.js:695->696  .filter(monthNo => Number.isInteger(monthNo) && monthNo >= 1 && monthNo <= 12)
+features\cost\capex-costs\pcf\ui\GridRenderer.js:377->381  contracts: subaccount.contracts.filter(contract => this.contractMatchesCostPaidBy(contract, expectedCostPaidBy
+features\cost\capex-costs\pcf\ui\GridRenderer.js:379->381  contracts: subaccount.contracts.filter(contract => this.contractMatchesCostPaidBy(contract, expectedCostPaidBy
+features\cost\capex-costs\pcf\ui\GridRenderer.js:402->403  const subaccounts = account.subaccounts.filter(subaccount => subaccount.contracts.length > 0 || this.hasAnyCos
+features\cost\capex-costs\pcf\ui\GridRenderer.js:403->409  .filter(account => account.subaccounts.length > 0 || this.hasAnyCost(account));
+features\cost\capex-costs\PcfGrid.tsx:40->42  a.length === b.length && a.every((x, i) => x.id === b[i]?.id && x.subaccountId === b[i]?.subaccountId && x.nam
+features\cost\capex-costs\rules.ts:1145->1147  return clusters.filter((c) =>
+features\cost\capex-costs\rules.ts:1147->1148  live.some((r) =>
+features\cost\capex-costs\savePlan.ts:125->131  return payments.filter((p) => p.paid && p.id).map((p) => p.id as string);
+features\cost\capex-costs\Screen.tsx:625->630  .filter(o => !(staleStandard.lines === book.lines && staleStandard.keys.has(`${o.assumption.subaccountId}|${o.
+features\cost\capex-costs\Screen.tsx:626->630  .filter(o => !(staleStandard.lines === book.lines && staleStandard.keys.has(`${o.assumption.subaccountId}|${o.
+features\cost\capex-costs\Screen.tsx:630->636  const option = standardOptions.find(o => o.assumption.id === assumptionId);
+features\cost\capex-costs\Screen.tsx:631->636  const option = standardOptions.find(o => o.assumption.id === assumptionId);
+features\cost\capex-costs\Screen.tsx:756->758  const deletingLine = book.lines.find(c => c.id === deleting);
+features\cost\capex-costs\Screen.tsx:883->885  const hit = milestones.find(m => m.name === v);
+features\cost\capex-costs\Screen.tsx:1017->1020  <td>{formatSummaryAmount(totals.data?.find(t => t.category === i)?.total, locale)} {currency}</td>
+features\cost\capex-costs\Screen.tsx:1167->1171  clusterNo, startClusterNo, edit.clusters.includes(clusterNo),
+features\cost\capex-costs\Screen.tsx:1266->1268  const stored = galleryPayments.find(p => p.year === y && p.month === month);
+features\cost\capex-costs\standardContracts.ts:137->141  .filter((a) => inCategory.has(a.subaccountId))
+features\cost\capex-costs\standardContracts.ts:138->141  .filter((a) => inCategory.has(a.subaccountId))
+features\cost\capex-costs\standardContracts.ts:141->142  .filter((a) => a.countryId === args.project.countryId)
+features\cost\capex-costs\standardContracts.ts:142->143  .filter((a) => a.technology === args.project.technology)
+features\cost\capex-costs\standardContracts.ts:143->144  .filter((a) => !used.has(`${a.subaccountId}|${a.id}`))
+features\cost\capex-costs\standardContracts.ts:144->147  .filter((a) => isOfferedByStartCluster(a, args.project.startClusterNo))
+features\cost\contracts\hooks.ts:365->367  ...keysOf(projectId).filter((key) => !isLazy(key)).map((key) => queryClient.invalidateQueries({ queryKey: key 
+features\cost\contracts\rules.ts:511->516  const rootAccount = accounts.find((a) => a.number === CAPEX_ROOT_NUMBER);
+features\cost\contracts\rules.ts:598->603  return tree.filter((n) => n.level === 3 && n.selected);
+features\cost\contracts\rules.ts:628->633  return { create: [...wanted.values()].filter((account) => !kept.has(account.id)), remove };
+features\cost\contracts\rules.ts:691->692  const available = pool.filter((n) => !n.used);
+features\cost\contracts\rules.ts:692->694  const selected = available.filter((n) => n.selected);
+features\cost\contracts\rules.ts:722->723  const kept = selectedAccountIds.filter((id) => !targetIds.has(id));
+features\cost\contracts\rules.ts:723->724  const anySelected = targets.some((n) => n.selected);
+features\cost\contracts\Screen.tsx:782->784  visibleAccountIds: tree.filter((n) => n.level === 3).map((n) => n.id),
+features\cost\contracts\Screen.tsx:953->957  open={expanded.includes(contract.id)}
+features\cost\costing\capexBookPatch.ts:109->110  if (!previous.some((p) => same(p.id, u.id))) return null;
+features\cost\costing\capexBookPatch.ts:110->115  const kept = cells.size === 0 ? next : next.filter((p) => !cells.has(`${p.year}|${p.month}`));
+features\cost\costing\capexBookPatch.ts:114->115  const kept = cells.size === 0 ? next : next.filter((p) => !cells.has(`${p.year}|${p.month}`));
+features\cost\costing\capexBookPatch.ts:130->136  if (isNew && !book.accounts.some((a) => a.category === category && same(a.id, save.accountId))) return null;
+features\cost\costing\useCostBook.ts:65->69  return PERIOD_FIELDS.every((key) => a[key] === b[key])
+features\cost\costing\useCostBook.ts:115->121  ? { onContracts: (ids: string[]) => prefetchCapexComments(queryClient, ids.filter((id) => !isPendingContract(p
+features\cost\periods\landLeaseRules.ts:1554->1556  return generators.filter((g) => allocated.has(g.id));
+features\cost\periods\landLeaseRules.ts:1594->1599  toCreate: selectedGeneratorIds.filter((id) => !have.has(id)),
+features\cost\periods\landLeaseRules.ts:1599->1603  .filter((id) => have.has(id))
+features\cost\periods\landLeaseRules.ts:1603->1606  .filter((a) => a.generatorInProjectId === null || !want.has(a.generatorInProjectId))
+features\cost\periods\landLeaseRules.ts:1604->1606  .filter((a) => a.generatorInProjectId === null || !want.has(a.generatorInProjectId))
+features\cost\periods\landLeaseRules.ts:2412->2418  ].some((v) => v !== null && v !== undefined);
+features\cost\periods\landLeaseRules.ts:3492->3496  const headers = args.assumptions.filter((a) => a.period === OPEX_LAND_LEASE_PERIOD.period1);
+features\cost\periods\LandLeaseScreen.tsx:778->781  () => periods.find((p) => p.id === selection.periodId) ?? null,
+features\cost\periods\opexRules.ts:411->415  return sortCosts(costs.filter((c) => c.subaccountId === subaccountId));
+features\cost\periods\opexRules.ts:465->471  .filter((c) => c.parentCostId === root.id)
+features\cost\periods\opexRules.ts:466->471  .filter((c) => c.parentCostId === root.id)
+features\cost\periods\opexRules.ts:536->541  return chains.find((c) => c.periods.some((p) => p.id === costId)) ?? null;
+features\cost\periods\opexRules.ts:541->547  return costs.find((c) => c.id === selected.parentCostId) ?? selected;
+features\cost\periods\opexRules.ts:1642->1648  for (const a of ordered.filter((x) => x.period !== STANDARD_PERIOD.period1)) {
+features\cost\periods\opexRules.ts:1787->1788  const period1 = sortedAssumptions(assumptions).find((a) => a.period === STANDARD_PERIOD.period1);
+features\cost\periods\opexRules.ts:1881->1886  return costs.filter((c) => c.parentCostId === parentId);
+features\cost\periods\opexRules.ts:2019->2020  const notAligned = lastPeriods.filter((p) => !p.alignWithProjectDuration);
+features\cost\periods\opexRules.ts:2020->2023  const alignedMissing = alignedCount - aligned.filter(lands).length;
+features\cost\periods\opexRules.ts:2736->2739  const at = ordered.findIndex((p) => p.id === saved.id);
+features\cost\periods\opexRules.ts:2738->2739  const at = ordered.findIndex((p) => p.id === saved.id);
+features\cost\periods\opexRules.ts:3012->3018  if (selected === null && scope.some((c) => sameDescription(c.description, description))) return false;
+features\cost\periods\OpexScreen.tsx:904->906  (book?.periods ?? []).filter((p) => p.mode === "other").map((p) => p.group),
+features\cost\periods\OpexScreen.tsx:906->907  )].filter((name) => !names.has(name));
+features\cost\periods\OpexScreen.tsx:945->948  const orphanIds = new Set(orphans.filter((o) => o.id !== o.name).map((o) => o.id));
+features\cost\periods\OpexScreen.tsx:948->950  [...generators, ...orphans.filter((d) => addPeriodRecordType(d.name) === "Generator")],
+features\cost\periods\OpexScreen.tsx:950->951  [...pvModules, ...orphans.filter((d) => addPeriodRecordType(d.name) !== "Generator")],
+features\cost\periods\OpexScreen.tsx:1272->1275  if (plan.ids.includes(selection.selectedId ?? "")) setSelection(NO_SELECTION);
+features\cost\periods\OpexScreen.tsx:1290->1294  return [card.id, scopes.some((a) => matchesStandardAssumption(a, filter))] as const;
+features\pm\checklist\hooks.ts:395->399  if (existing.length === 0 || existing.some(copyProbeRowTouched)) return [];
+features\pm\checklist\rules.ts:820->821  return templates.filter((t) => !have.has(t.id.toLowerCase()));
+features\pm\checklist\rules.ts:872->873  const t = trackings.find((x) => x.clusterStateId === s.id);
+features\pm\checklist\rules.ts:2911->2912  .filter(Boolean).join("\r") || "None";
+features\pm\checklist\rules.ts:2957->2958  const done = relevant.filter((r) => r.taskState === TASK.completed).length;
+features\pm\checklist\rules.ts:3039->3040  .filter((cells) => cells.length > 0);
+features\pm\checklist\rules.ts:3117->3119  return failed.some((q) => q.hasData !== true) ? "blocking" : "banner";
+features\pm\finance\perf.ts:157->158  const mine = children.filter((w) => w.entitySet === entitySet);
+features\pm\finance\perf.ts:158->159  const creates = mine.filter((w) => w.op === "create");
+features\pm\finance\perf.ts:159->160  const updates = mine.filter((w) => w.op === "update" && w.id !== undefined);
+features\pm\finance\perf.ts:160->161  const bulkCreates = flags.bulkSchedules && creates.length >= min && creates.every(hasOwner);
+features\pm\finance\rules.ts:177->179  debt: rows.filter((r) => has(DEBT_TYPES.debt, r.debttype)),
+features\pm\finance\rules.ts:179->180  decommissioning: rows.filter((r) => has(DEBT_TYPES.decommissioning, r.debttype)),
+features\pm\finance\rules.ts:180->181  dsra: rows.filter((r) => has(DEBT_TYPES.dsra, r.debttype)),
+features\pm\finance\rules.ts:1099->1103  toDelete: stored.filter((s) => !years.has(s.year)).map((s) => s.id),
+features\pm\finance\rules.ts:1101->1103  toDelete: stored.filter((s) => !years.has(s.year)).map((s) => s.id),
+features\pm\finance\rules.ts:1103->1109  recordId: stored.find((s) => s.year === r.year)?.id ?? null,
+features\pm\finance\rules.ts:1104->1109  recordId: stored.find((s) => s.year === r.year)?.id ?? null,
+features\pm\finance\rules.ts:1264->1266  toDelete: stored.map((s) => s.id).filter((x): x is string => Boolean(x) && !keep.has(x)),
+features\pm\finance\rules.ts:1896->1897  if (form.stepUpEnabled && form.stepUpRows.some((r) => !r.valid)) return false;
+features\pm\finance\rules.ts:1950->1953  .filter((i) => i.categoryOrder === CATEGORY_ORDER.seniorDebt)
+features\pm\finance\rules.ts:1951->1953  .filter((i) => i.categoryOrder === CATEGORY_ORDER.seniorDebt)
+features\pm\finance\rules.ts:1953->1959  .filter((i) => i.categoryOrder === CATEGORY_ORDER.dsraDsrf)
+features\pm\finance\rules.ts:1954->1959  .filter((i) => i.categoryOrder === CATEGORY_ORDER.dsraDsrf)
+features\pm\finance\rules.ts:2423->2424  repaymentIds: repayments.filter((r) => r.financingInputId === trancheId).map((r) => r.id),
+features\pm\finance\rules.ts:3586->3591  const amount = valueOrNull(form.repaymentRows.find((x) => x.year === r.year)?.value ?? "", lang);
+features\pm\finance\rules.ts:3588->3591  const amount = valueOrNull(form.repaymentRows.find((x) => x.year === r.year)?.value ?? "", lang);
+features\pm\finance\rules.ts:3590->3591  const amount = valueOrNull(form.repaymentRows.find((x) => x.year === r.year)?.value ?? "", lang);
+features\pm\finance\rules.ts:3607->3612  const stored = ownStepUps.find((x) => x.id === s.id);
+features\pm\finance\rules.ts:3609->3612  const stored = ownStepUps.find((x) => x.id === s.id);
+features\pm\finance\rules.ts:4070->4075  stepUpFromStorage(stored.filter((r) => r.financingInputId === trancheId), lang);
+features\pm\finance\rules.ts:4071->4075  stepUpFromStorage(stored.filter((r) => r.financingInputId === trancheId), lang);
+features\pm\finance\Screen.tsx:1183->1184  const cards = useMemo(() => categories.filter((c) => c.order !== CATEGORY_ORDER.cashSweep), [categories]);
+features\pm\finance\Screen.tsx:1184->1186  const selectedTrancheInput = trancheInputs.find((t) => t.id === selectedTrancheId) ?? null;
+features\pm\finance\Screen.tsx:1341->1342  ...(form?.bankId && !banks.some((b) => b.id === form.bankId)
+features\pm\finance\Screen.tsx:1342->1347  ...(form?.kfwValue && !kfwQ.data.includes(form.kfwValue) ? [{ value: form.kfwValue, name: form.kfwValue }] : [
+features\pm\finance\Screen.tsx:1346->1347  ...(form?.kfwValue && !kfwQ.data.includes(form.kfwValue) ? [{ value: form.kfwValue, name: form.kfwValue }] : [
+features\pm\finance\Screen.tsx:1378->1379  <Text key={b} className={s.lockText} data-testid={`${LOCK_LINE_ID[Math.max(0, LOCK_BULLETS.indexOf(b))]}`}>{b}
+features\pm\general-data\rules.ts:1101->1102  return all.filter((c) => editable.some((e) => e.id === c.id));
+features\pm\general-data\Screen.tsx:463->468  countryInScope: isNewProject || (user?.editableCountries ?? []).includes(snapshot?.countryName ?? ""),
+features\pm\generators\bulkPlans.testkit.ts:105->110  writes.every((w) => !(w.op === "createMany" || w.op === "updateMany") || (!w.concurrent && w.concurrencyGroup 
+features\pm\generators\captions.ts:69->72  if (key === "addOthers") out.push(...GENERATOR_COMMAND_KEYS.filter((k) => nested.has(k)));
+features\pm\generators\display.ts:92->93  const first = lists[family].find((r) => r.id !== removedId);
+features\pm\generators\loadGate.ts:105->107  if (!input.gateByList) return { loading: reads.some((q) => q.isLoading), reads, lazyWaiting: false };
+features\pm\generators\loadGate.ts:107->109  loading: input.list.some((q) => q.isLoading),
+features\pm\generators\loadGate.ts:109->111  lazyWaiting: input.lazy.some((l) => lazyPending(l.needed, l.read)),
+features\pm\generators\plans.ts:685->690  writes.push(projectWtgRollup(args.project.id, args.allTypes.filter((t) => t.id !== args.type.id)));
+features\pm\generators\reload.ts:157->158  return FAMILY_ORDER.filter((f) => wanted.has(f));
+features\pm\generators\replacePlans.ts:289->290  removeAllWtg: allocations.filter((a) => a.allWtgAllocated).map((a) => a.id),
+features\pm\generators\rollback.ts:151->152  writes.push(projectWtgRollup(args.project.id, args.remainingTypes.filter((t) => !(t.id && gone.has(t.id)))));
+features\pm\generators\rollback.ts:207->208  .filter((k) => k.count > 0);
+features\pm\generators\rollback.ts:279->281  const costs = g.others.filter((r) => setOf(r) === ES_PLANT.landLeaseProjectCosts);
+features\pm\generators\rollback.ts:281->282  const opex = g.others.filter((r) => setOf(r) === ES_PLANT.opexProjectCosts);
+features\pm\generators\rollback.ts:282->283  const rest = g.others.filter((r) => setOf(r) !== ES_PLANT.landLeaseProjectCosts && setOf(r) !== ES_PLANT.opexP
+features\pm\generators\rollback.ts:296->299  return parts.filter(([n]) => n > 0).map(([, text]) => text);
+features\pm\generators\rollback.ts:525->526  const substructures = args.family === "substructure" ? args.substructures.filter((r) => r.id !== args.row.id) 
+features\pm\generators\rulesCore.ts:387->388  return joined.includes(countryName ?? "");
+features\pm\generators\rulesCore.ts:461->465  scoped.map((m) => m.supplier).filter((s): s is string => Boolean(s)),
+features\pm\generators\rulesCore.ts:465->469  ? scoped.filter((m) => m.supplier === sel.supplier)
+features\pm\generators\rulesCore.ts:469->472  bySupplier.map((m) => m.turbineType).filter((t): t is string => Boolean(t)),
+features\pm\generators\rulesCore.ts:472->476  ? bySupplier.filter((m) => m.turbineType === sel.turbineType)
+features\pm\generators\rulesCore.ts:476->479  byType.map((m) => m.hubHeight).filter((h): h is number => typeof h === "number"),
+features\pm\generators\rulesCore.ts:1276->1278  return failed.some((q) => q.hasData !== true) ? "blocking" : "banner";
+features\pm\generators\rulesCore.ts:1447->1449  removeAllWtg: args.allocations.filter((a) => a.allWtgAllocated).map((a) => a.id),
+features\pm\generators\rulesCore.ts:1448->1449  removeAllWtg: args.allocations.filter((a) => a.allWtgAllocated).map((a) => a.id),
+features\pm\generators\rulesCore.ts:2487->2488  return ordered.filter((r) => !(r.displayName ?? "").includes("Imported"));
+features\pm\generators\Screen.tsx:137->138  const generatorIds = useMemo(() => types.map((t) => t.generatorId).filter((v): v is string => Boolean(v)), [ty
+features\pm\grid-operator\rules.ts:342->347  return FIELDS.map((f) => validity[f].message).filter((m): m is string => Boolean(m));
+features\pm\milestones\rules.ts:922->925  return region ? prices.filter((r) => r.country === region) : [];
+features\pm\milestones\rules.ts:977->979  pick(changes.find((r) => r.category === category), technology);
+features\pm\milestones\rules.ts:1111->1113  pick(inflation.find((r) => r.category === category), technology);
+features\pm\milestones\rules.ts:1451->1452  log: steps.map((s) => s.log).filter((l): l is string => l !== null),
+features\pm\planning\rules.ts:584->587  PLANNING_FIELDS.map((f) => v[f].message).filter((m): m is string => Boolean(m));
+features\pm\planning\rules.ts:1243->1246  types.filter((t) => t.type === LLA_TYPE_VALUE[lla] && !have.has(t.id)).sort(byOrder));
+features\pm\planning\rules.ts:1245->1246  types.filter((t) => t.type === LLA_TYPE_VALUE[lla] && !have.has(t.id)).sort(byOrder));
+features\pm\planning\Screen.tsx:495->497  const selectedPermit = permitsQ.data.find((p) => p.id === selectedPermitId) ?? null;
+features\pm\planning\Screen.tsx:496->497  const selectedPermit = permitsQ.data.find((p) => p.id === selectedPermitId) ?? null;
+features\pm\planning\Screen.tsx:906->907  onChange={(v) => setPermitDraft({ submissionDateType: PERMIT_DATE_TYPES.find((t) => t.label === v)?.value ?? n
+features\pm\planning\Screen.tsx:923->924  onChange={(v) => setPermitDraft({ approvalDateType: PERMIT_DATE_TYPES.find((t) => t.label === v)?.value ?? nul
+features\pm\production\rules.ts:947->951  if (f.considerNegativePrices && args.negativePrices.some((r) => validateCellPercent(r.text, lang) !== null)) r
+features\pm\production\rules.ts:966->967  const row = standard.find((s) => s.month === i + 1);
+features\pm\production\rules.ts:1141->1142  const upserts = base.upserts.filter((u) => {
+features\pm\production\rules.ts:1142->1147  return { upserts, deletes: stored.filter((s) => !covered.has(s.year)).map((s) => s.id) };
+features\pm\production\rules.ts:1146->1147  return { upserts, deletes: stored.filter((s) => !covered.has(s.year)).map((s) => s.id) };
+features\pm\production\rules.ts:1172->1173  const editable = args.revenues.filter((r) => !r.manualOverride);
+features\pm\production\rules.ts:1173->1175  ? editable.filter((r) => !r.considerNegativePrices).map((r) => ({ id: r.id, considerNegativePrices: true }))
+features\pm\production\rules.ts:1175->1176  : editable.filter((r) => r.considerNegativePrices).map((r) => ({ id: r.id, considerNegativePrices: false }));
+features\pm\production\rules.ts:1216->1218  .filter((x) => (x.r.category ?? "").trim() !== "" && Number.isFinite(x.key))
+features\pm\production\rules.ts:1217->1218  .filter((x) => (x.r.category ?? "").trim() !== "" && Number.isFinite(x.key))
+features\pm\production\rules.ts:1305->1311  return [...yields.filter((y) => y.id !== saved.id), saved];
+features\pm\production\rules.ts:1306->1311  return [...yields.filter((y) => y.id !== saved.id), saved];
+features\pm\production\rules.ts:1374->1379  const after = [...args.yields.filter((y) => y.id !== saved.id), saved]
+features\pm\production\rules.ts:1379->1380  .map((y) => (superseded.includes(y.id) ? { ...y, status: 1 } : y));
+features\pm\production\rules.ts:1454->1455  const pv = yields.filter((y) => y.status === 0 && y.type === CHOICE_PRODUCTION.yieldType.pv);
+features\pm\production\rules.ts:1700->1706  for (const a of scoped.filter((x) => x.period === P1)) {
+features\pm\production\rules.ts:1791->1797  const own = options.otherOpexChain === "canvasParity" ? periods : periods.filter((p) => p.key === key);
+features\pm\production\rules.ts:1829->1833  for (const a of scoped.filter((x) => x.period !== P1)) {
+features\pm\project-main\rules.ts:310->316  return keys.some((k) => filter[k] !== EMPTY_FILTER[k]);
+features\pm\project-main\rules.ts:1098->1100  return words.every((w) => haystack.includes(w));
+features\pm\project-main\Screen.tsx:634->635  .filter((c) => c.visible)
+features\pm\revenues\rules.ts:331->332  if (countryName === "Italy") return region ? prices.filter((r) => r.country === region) : [];
+features\pm\revenues\rules.ts:1701->1702  if (form.hedge.individual.some((r) => !validateVolumeMwh(r.value, form.netYieldP50).valid)) {
+features\pm\revenues\Screen.tsx:1006->1008  data-testid={`${LOCK_LINE_ID[Math.max(0, LOCK_BULLETS.indexOf(b))]}`}>{b}</Text>
+features\pm\revenues\Screen.tsx:1461->1464  .find((t) => HEDGE_TYPE_LABEL[t] === label) ?? "percentage";
+features\pm\revenues\Screen.tsx:1568->1574  months: balancing.months !== null && months.includes(balancing.months) ? balancing.months : (months[0] ?? 0),
+features\shared\useToggleSet.ts:39->41  ...[...prev].filter((key) => !inScope(key)),
+features\shared\useToggleSet.ts:41->45  () => new Set([...raw].filter(inScope).map((key) => key.slice(prefix.length) as T)) as ReadonlySet<T>,
+features\shared\useToggleSet.ts:42->45  () => new Set([...raw].filter(inScope).map((key) => key.slice(prefix.length) as T)) as ReadonlySet<T>,
+platform\powerClient.ts:131->133  const values = PROJECT_ID_KEYS.filter((key) => source.has(key))
+platform\powerClient.ts:132->133  const values = PROJECT_ID_KEYS.filter((key) => source.has(key))
+platform\powerClient.ts:133->136  if (values.some((value) => !isGuid(value))) return { status: "invalid" };
+platform\powerClient.ts:134->136  if (values.some((value) => !isGuid(value))) return { status: "invalid" };

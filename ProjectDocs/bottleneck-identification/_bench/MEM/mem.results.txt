@@ -1,0 +1,7 @@
+MEM PcfGrid: add button present = true; rows=8; buttons=pcf-toggle pcf-toggle-expanded,pcf-toggle pcf-toggle-expanded,pcf-dots-btn,pcf-add-btn pcf-add-menu-btn,pcf-dropdown-item,pcf-dropdown-item,pcf-dropdown-item
+MEM PcfGrid: add dropdown open = 1; row-action menu open (class show) = 0
+MEM PcfGrid: 25 mount/unmount cycles | listeners 0 -> 1 | ResizeObservers 0 -> 0 | pending timers 0 -> 0 | pending rAF 0 -> 0 | body children 0 -> 0 | setInterval started 0
+MEM PcfGrid: listeners still registered: document#1|selectionchange|1|false
+MEM SpreadSheetComp: 25 mount/unmount cycles | listeners 1 -> 1 | ResizeObservers 0 -> 0 | pending timers 0 -> 0 | pending rAF 0 -> 0 | body children 0 -> 0 | setInterval started 0
+MEM small hooks: 25 mount/unmount cycles | listeners 1 -> 1 | ResizeObservers 0 -> 0 | pending timers 0 -> 0 | pending rAF 0 -> 0 | body children 0 -> 50 | setInterval started 0
+MEM useGeneratorsWarmup: 25 mount/unmount cycles | listeners 1 -> 1 | ResizeObservers 0 -> 0 | pending timers 0 -> 0 | pending rAF 0 -> 0 | body children 0 -> 25 | setInterval started 0

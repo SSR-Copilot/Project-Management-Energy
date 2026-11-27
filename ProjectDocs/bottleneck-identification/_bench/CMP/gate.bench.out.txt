@@ -1,0 +1,6 @@
+gate n=   500 reads-mixed=false  submit-loop 6.3 ms  total 20.9 ms  (41.7 us/task incl. setImmediate)
+gate n=   500 reads-mixed=true  submit-loop 2.5 ms  total 8.6 ms  (17.2 us/task incl. setImmediate)
+gate n=  3500 reads-mixed=false  submit-loop 80.8 ms  total 228.3 ms  (65.2 us/task incl. setImmediate)
+gate n=  3500 reads-mixed=true  submit-loop 3.6 ms  total 56.9 ms  (16.2 us/task incl. setImmediate)
+gate n= 15000 reads-mixed=false  submit-loop 1138.7 ms  total 3478.5 ms  (231.9 us/task incl. setImmediate)
+gate n= 15000 reads-mixed=true  submit-loop 17.6 ms  total 1299.8 ms  (86.7 us/task incl. setImmediate)

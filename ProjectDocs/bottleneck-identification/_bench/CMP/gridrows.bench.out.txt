@@ -1,0 +1,3 @@
+gridRows 40 accounts, 90 lines x 150 payments (13500 payments)                         median 2.8 ms  min 1.0 max 3.6
+gridRows 120 accounts, 450 lines x 200 payments (90000 payments)                       median 6.7 ms  min 5.3 max 11.1
+gridRows 120 accounts, 1080 lines x 200 payments (216000 payments)                     median 20.2 ms  min 14.7 max 22.6

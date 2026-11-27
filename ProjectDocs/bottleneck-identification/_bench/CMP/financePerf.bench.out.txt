@@ -1,0 +1,497 @@
+
+ RUN  v5.0.0 C:/Personal/Code App Mordenization/Project-Management-Energy-WorkDev1-BottleneckOptimization/ProjectCosts-CodeApp
+
+stdout | src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-001 a visit: the reads the screen sends
+[VSB] DATA read load the project: 1 row, 32 ms
+[VSB] DATA read list project states: 1 row, 35 ms
+[VSB] DATA read load the financing categories: 6 rows, 37 ms
+[VSB] DATA read load the project's repayment amounts: 0 rows, 35 ms
+[VSB] DATA read load the project's step-up margins: 0 rows, 35 ms
+[VSB] DATA read read the banks (Fabric SQL): 1 row, 35 ms
+[VSB] DATA read read the KfW tranches (Fabric SQL): 1 row, 35 ms
+[VSB] DATA read load the project's CAPEX contracts: 85 rows, 35 ms
+[VSB] DATA read load the project's CAPEX costs: 3 rows, 3 calls, 88 ms in total (average 29 ms, slowest 32 ms)
+[VSB] DATA read read the debt assumptions (Fabric SQL): 1 row, 29 ms
+[VSB] DATA read load the project's financing inputs: 6 rows, 29 ms
+
+ ✓ src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-001 a visit: the reads the screen sends 1336ms
+stderr | src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-002 tranche SAVE, edit: 1 tranche + 25 repayments + 4 step-ups, reload included
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-002 tranche SAVE, edit: 1 tranche + 25 repayments + 4 step-ups, reload included
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-002 tranche SAVE, edit: 1 tranche + 25 repayments + 4 step-ups, reload included
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stdout | src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-002 tranche SAVE, edit: 1 tranche + 25 repayments + 4 step-ups, reload included
+[VSB] DATA read load the project's generator type ids: 9 rows, 3 calls, 1,531 ms in total (average 34 ms, slowest 41 ms)
+[VSB] DATA read count the project's active turbines: 3 rows, 3 calls, 1,535 ms in total (average 31 ms, slowest 33 ms)
+[VSB] DATA read load the project: 5 rows, 5 calls, 1,869 ms in total (average 36 ms, slowest 41 ms)
+[VSB] DATA read list project states: 5 rows, 5 calls, 1,868 ms in total (average 35 ms, slowest 41 ms)
+[VSB] DATA read load the financing categories: 24 rows, 4 calls, 1,868 ms in total (average 33 ms, slowest 36 ms)
+[VSB] DATA read load the project's financing inputs: 36 rows, 6 calls, 1,868 ms in total (average 34 ms, slowest 41 ms)
+[VSB] DATA read load the project's repayment amounts: 0 rows, 6 calls, 1,869 ms in total (average 35 ms, slowest 42 ms)
+[VSB] DATA read load the project's step-up margins: 0 rows, 6 calls, 1,869 ms in total (average 35 ms, slowest 42 ms)
+[VSB] DATA read read the banks (Fabric SQL): 4 rows, 4 calls, 1,869 ms in total (average 34 ms, slowest 36 ms)
+[VSB] DATA read read the KfW tranches (Fabric SQL): 4 rows, 4 calls, 1,869 ms in total (average 34 ms, slowest 36 ms)
+[VSB] DATA read read the debt assumptions (Fabric SQL): 3 rows, 3 calls, 1,542 ms in total (average 30 ms, slowest 33 ms)
+[VSB] DATA read load the project's CAPEX contracts: 170 rows, 2 calls, 1,240 ms in total (average 38 ms, slowest 42 ms)
+[VSB] DATA read load the project's CAPEX costs: 6 rows, 6 calls, 1,309 ms in total (average 32 ms, slowest 40 ms)
+[VSB] DATA update vsb_financinginputs: 2 rows, 2 calls, 1,318 ms in total (average 34 ms, slowest 37 ms)
+[VSB] DATA update vsb_financinginputsrepaymentamounts: 50 rows, 50 calls, 1,347 ms in total (average 32 ms, slowest 39 ms)
+[VSB] DATA update vsb_financinginputstepupmarginses: 8 rows, 8 calls, 571 ms in total (average 31 ms, slowest 40 ms)
+
+stderr | src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-002 tranche SAVE, edit: 1 tranche + 25 repayments + 4 step-ups, reload included
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-002 tranche SAVE, edit: 1 tranche + 25 repayments + 4 step-ups, reload included
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stdout | src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-002 tranche SAVE, edit: 1 tranche + 25 repayments + 4 step-ups, reload included
+[FINPERF] D149 tranche save EDIT: 34 requests, 9 rounds (8 wide) -> 7 rounds (16 wide); bulk path 11 requests, 8 rounds
+
+ ✓ src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-002 tranche SAVE, edit: 1 tranche + 25 repayments + 4 step-ups, reload included 2367ms
+stderr | src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-003 tranche SAVE, new: 1 tranche + 25 repayments + 4 step-ups, reload included
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-003 tranche SAVE, new: 1 tranche + 25 repayments + 4 step-ups, reload included
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stdout | src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-003 tranche SAVE, new: 1 tranche + 25 repayments + 4 step-ups, reload included
+[VSB] DATA read read the debt assumptions (Fabric SQL): 4 rows, 4 calls, 1,980 ms in total (average 29 ms, slowest 32 ms)
+[VSB] DATA update vsb_financinginputs: 2 rows, 2 calls, 357 ms in total (average 31 ms, slowest 31 ms)
+[VSB] DATA update vsb_financinginputstepupmarginses: 8 rows, 8 calls, 450 ms in total (average 32 ms, slowest 32 ms)
+[VSB] DATA read load the project's financing inputs: 36 rows, 6 calls, 1,716 ms in total (average 29 ms, slowest 32 ms)
+[VSB] DATA read load the project's repayment amounts: 0 rows, 6 calls, 1,716 ms in total (average 29 ms, slowest 31 ms)
+[VSB] DATA read load the project's step-up margins: 0 rows, 6 calls, 1,716 ms in total (average 29 ms, slowest 32 ms)
+[VSB] DATA read load the project: 4 rows, 4 calls, 1,681 ms in total (average 28 ms, slowest 30 ms)
+[VSB] DATA read list project states: 4 rows, 4 calls, 1,681 ms in total (average 28 ms, slowest 30 ms)
+[VSB] DATA read load the financing categories: 18 rows, 3 calls, 1,681 ms in total (average 27 ms, slowest 28 ms)
+[VSB] DATA read read the banks (Fabric SQL): 3 rows, 3 calls, 1,681 ms in total (average 27 ms, slowest 28 ms)
+[VSB] DATA read read the KfW tranches (Fabric SQL): 3 rows, 3 calls, 1,680 ms in total (average 27 ms, slowest 28 ms)
+[VSB] DATA update vsb_financinginputsrepaymentamounts: 25 rows, 25 calls, 124 ms in total (average 31 ms, slowest 32 ms)
+[VSB] DATA read load the project's CAPEX contracts: 170 rows, 2 calls, 1,189 ms in total (average 29 ms, slowest 30 ms)
+[VSB] DATA read load the project's generator type ids: 6 rows, 2 calls, 1,188 ms in total (average 29 ms, slowest 30 ms)
+[VSB] DATA read load the project's CAPEX costs: 6 rows, 6 calls, 1,253 ms in total (average 30 ms, slowest 31 ms)
+[VSB] DATA read count the project's active turbines: 2 rows, 2 calls, 1,190 ms in total (average 30 ms, slowest 30 ms)
+[VSB] DATA create vsb_financinginputs: 2 rows, 2 calls, 1,267 ms in total (average 36 ms, slowest 40 ms)
+[VSB] DATA create vsb_financinginputsrepaymentamounts: 25 rows, 25 calls, 774 ms in total (average 31 ms, slowest 32 ms)
+[VSB] DATA create vsb_financinginputstepupmarginses: 4 rows, 4 calls, 125 ms in total (average 31 ms, slowest 32 ms)
+
+stderr | src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-003 tranche SAVE, new: 1 tranche + 25 repayments + 4 step-ups, reload included
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-003 tranche SAVE, new: 1 tranche + 25 repayments + 4 step-ups, reload included
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-003 tranche SAVE, new: 1 tranche + 25 repayments + 4 step-ups, reload included 1885ms
+stderr | src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-004 tranche DELETE: 4 step-ups + 25 repayments + the tranche, reload included
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-004 tranche DELETE: 4 step-ups + 25 repayments + the tranche, reload included
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-004 tranche DELETE: 4 step-ups + 25 repayments + the tranche, reload included
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stdout | src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-005 financing option switch to All Equity: project + VAT + 3 tranches + DSRA, reload included
+[VSB] DATA create vsb_financinginputsrepaymentamounts: 25 rows, 25 calls, 63 ms in total (average 31 ms, slowest 32 ms)
+[VSB] DATA create vsb_financinginputstepupmarginses: 8 rows, 8 calls, 293 ms in total (average 31 ms, slowest 31 ms)
+[VSB] DATA read load the project's financing inputs: 42 rows, 7 calls, 1,895 ms in total (average 31 ms, slowest 44 ms)
+[VSB] DATA read load the project's repayment amounts: 0 rows, 8 calls, 1,974 ms in total (average 34 ms, slowest 44 ms)
+[VSB] DATA read load the project's step-up margins: 0 rows, 8 calls, 1,974 ms in total (average 34 ms, slowest 44 ms)
+[VSB] DATA read load the project: 5 rows, 5 calls, 1,933 ms in total (average 35 ms, slowest 44 ms)
+[VSB] DATA read list project states: 5 rows, 5 calls, 1,933 ms in total (average 35 ms, slowest 43 ms)
+[VSB] DATA read load the financing categories: 24 rows, 4 calls, 1,939 ms in total (average 38 ms, slowest 44 ms)
+[VSB] DATA read read the banks (Fabric SQL): 4 rows, 4 calls, 1,939 ms in total (average 38 ms, slowest 44 ms)
+[VSB] DATA read read the KfW tranches (Fabric SQL): 4 rows, 4 calls, 1,939 ms in total (average 36 ms, slowest 44 ms)
+[VSB] DATA read read the debt assumptions (Fabric SQL): 3 rows, 3 calls, 1,644 ms in total (average 34 ms, slowest 42 ms)
+[VSB] DATA create vsb_financinginputs: 1 row, 29 ms
+[VSB] DATA read load the project's CAPEX contracts: 255 rows, 3 calls, 1,642 ms in total (average 34 ms, slowest 39 ms)
+[VSB] DATA read load the project's generator type ids: 9 rows, 3 calls, 1,645 ms in total (average 35 ms, slowest 38 ms)
+[VSB] DATA read load the project's CAPEX costs: 6 rows, 6 calls, 1,239 ms in total (average 33 ms, slowest 40 ms)
+[VSB] DATA read count the project's active turbines: 2 rows, 2 calls, 1,174 ms in total (average 36 ms, slowest 41 ms)
+[VSB] DATA delete vsb_financinginputstepupmarginses: 8 rows, 8 calls, 1,272 ms in total (average 31 ms, slowest 32 ms)
+[VSB] DATA delete vsb_financinginputsrepaymentamounts: 50 rows, 50 calls, 1,179 ms in total (average 32 ms, slowest 49 ms)
+[VSB] DATA delete vsb_financinginputs: 2 rows, 2 calls, 414 ms in total (average 36 ms, slowest 41 ms)
+
+ ✓ src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-004 tranche DELETE: 4 step-ups + 25 repayments + the tranche, reload included 1595ms
+stderr | src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-005 financing option switch to All Equity: project + VAT + 3 tranches + DSRA, reload included
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-005 financing option switch to All Equity: project + VAT + 3 tranches + DSRA, reload included
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-005 financing option switch to All Equity: project + VAT + 3 tranches + DSRA, reload included
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-005 financing option switch to All Equity: project + VAT + 3 tranches + DSRA, reload included 781ms
+stderr | src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-006 first visit of a new project: the option patch + 5 seeds, reload included
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-006 first visit of a new project: the option patch + 5 seeds, reload included
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-006 first visit of a new project: the option patch + 5 seeds, reload included
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-006 first visit of a new project: the option patch + 5 seeds, reload included
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-006 first visit of a new project: the option patch + 5 seeds, reload included
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-006 first visit of a new project: the option patch + 5 seeds, reload included
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-006 first visit of a new project: the option patch + 5 seeds, reload included
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-006 first visit of a new project: the option patch + 5 seeds, reload included
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-006 first visit of a new project: the option patch + 5 seeds, reload included
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-006 first visit of a new project: the option patch + 5 seeds, reload included
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-006 first visit of a new project: the option patch + 5 seeds, reload included
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-006 first visit of a new project: the option patch + 5 seeds, reload included
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stdout | src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-006 first visit of a new project: the option patch + 5 seeds, reload included
+[VSB] DATA read load the project's CAPEX costs: 27 rows, 27 calls, 1,873 ms in total (average 31 ms, slowest 39 ms)
+[VSB] DATA read count the project's active turbines: 9 rows, 9 calls, 1,807 ms in total (average 31 ms, slowest 33 ms)
+[VSB] DATA read read the debt assumptions (Fabric SQL): 4 rows, 4 calls, 1,926 ms in total (average 30 ms, slowest 31 ms)
+[VSB] DATA read load the project's financing inputs: 72 rows, 12 calls, 1,893 ms in total (average 30 ms, slowest 36 ms)
+[VSB] DATA update vsb_projects: 4 rows, 4 calls, 1,884 ms in total (average 33 ms, slowest 38 ms)
+[VSB] DATA update vsb_financinginputs: 10 rows, 10 calls, 491 ms in total (average 32 ms, slowest 45 ms)
+[VSB] DATA read load the project: 11 rows, 11 calls, 1,539 ms in total (average 29 ms, slowest 32 ms)
+[VSB] DATA read list project states: 10 rows, 10 calls, 1,539 ms in total (average 29 ms, slowest 31 ms)
+[VSB] DATA read load the project's repayment amounts: 0 rows, 10 calls, 1,540 ms in total (average 30 ms, slowest 31 ms)
+[VSB] DATA read load the project's step-up margins: 0 rows, 10 calls, 1,540 ms in total (average 30 ms, slowest 31 ms)
+[VSB] DATA read load the project's CAPEX contracts: 680 rows, 8 calls, 1,416 ms in total (average 30 ms, slowest 31 ms)
+[VSB] DATA read load the project's generator type ids: 24 rows, 8 calls, 1,416 ms in total (average 29 ms, slowest 31 ms)
+[VSB] DATA read load the financing categories: 18 rows, 3 calls, 1,414 ms in total (average 29 ms, slowest 30 ms)
+[VSB] DATA read read the banks (Fabric SQL): 3 rows, 3 calls, 1,415 ms in total (average 29 ms, slowest 30 ms)
+[VSB] DATA read read the KfW tranches (Fabric SQL): 3 rows, 3 calls, 1,415 ms in total (average 29 ms, slowest 30 ms)
+[VSB] DATA create vsb_financinginputs: 10 rows, 10 calls, 942 ms in total (average 30 ms, slowest 34 ms)
+
+stderr | src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-006 first visit of a new project: the option patch + 5 seeds, reload included
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-006 first visit of a new project: the option patch + 5 seeds, reload included 1348ms
+stderr | src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-007 a status toggle or a panel save: 1 write + the reload
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-007 a status toggle or a panel save: 1 write + the reload
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-007 a status toggle or a panel save: 1 write + the reload
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-007 a status toggle or a panel save: 1 write + the reload 559ms
+stdout | src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-099 prints the table
+
+FINANCE PERF, BEFORE / AFTER (modelled: 25 ms per call; bulk = bulkSchedules on)
+scenario                                                                                             | before              | after               | after + bulk
+visit reads (13 services before, 9 after: the CAPEX total and turbines wait for their card)          |  15 req / 42 rounds |   9 req /  3 rounds |                   -
+tranche save, EDIT (duplicate read + 30 writes + reload)                                             |  42 req / 46 rounds |  34 req /  7 rounds |  11 req /  8 rounds
+tranche save, NEW (duplicate read + 30 writes + reload)                                              |  42 req / 44 rounds |  34 req /  6 rounds |  10 req /  6 rounds
+tranche delete (30 deletes + reload)                                                                 |  41 req / 44 rounds |  33 req /  6 rounds |                   -
+financing option switch (6 writes + reload)                                                          |  17 req / 13 rounds |   8 req /  4 rounds |                   -
+visit seeds on a new project (6 writes: 6 jobs, 6 reloads before; 1 job, 1 reload after)             |  72 req / 37 rounds |   8 req /  2 rounds |                   -
+one toggle / panel save (1 write + reload)                                                           |  12 req /  6 rounds |   2 req /  2 rounds |                   -
+
+
+ ✓ src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-008 the CAPEX total is the same sum read in order or together, and never more than 8 chunk reads at once 445ms
+ ✓ src/features/pm/finance/financePerf.bench.test.ts > UT-FINPERF before / after (modelled round trips, see the file header) > UT-FINPERF-099 prints the table 3ms
+
+ Test Files  1 passed (1)
+      Tests  9 passed (9)
+   Start at  12:12:38
+   Duration  30.28s (tests 34%, environment 32%, setup 15%, transform 13%, import 5%)
+

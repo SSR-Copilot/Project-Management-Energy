@@ -1,0 +1,31 @@
+# Stage 2 agent brief — root-cause validation and remediation strategy (PLANNING ONLY)
+
+Worktree (the only tree you may touch): `c:\Personal\Code App Mordenization\Project-Management-Energy-WorkDev1-BottleneckOptimization`, branch `feature/bottleneck-identification-optimization`, base `dde9e92`. App code: `ProjectCosts-CodeApp/`.
+
+## Inputs (read first)
+- `ProjectDocs/bottleneck-identification/_register/AGENT-BRIEF.md` — the Stage 1 rules still apply (evidence labels CONFIRMED / HIGH / SUSPECTED, MEASURED vs DERIVED vs ESTIMATED, never fabricate numbers).
+- `14-consolidated-bottleneck-register.md` — the 113 unique findings. The ID cell shows `(<theme>; <origin>)`. `02` (by theme), `12` (dependency map: roots R1–R9, conflicts, decision gates), `13` (baseline and what is NOT measured), and the area docs `03–09`, `10a–10d`, `11`. `_register/<PREFIX>.md` holds the original per-agent rows (finding IDs of merged duplicates are listed in doc 14 section 4).
+- Prior programmes: `ProjectDocs/app-docs/frontend-optimization/` (D162), `ProjectDocs/app-docs/dataverse-network-performance-optimization/` (D165; doc 22 backlog, 27 tracker, 28 baseline), `GENERATORS-BULK-DEV-TEST-PLAN`, `ProjectDocs/instructions/CONVENTIONS.md` (rules 1–23 bind any change: OData helpers, `unwrap`, owning-BU bind, rules.ts purity, canvas parity `DIVERGENCE:` / `…CanvasParity` twin + decision log, aria-label/data-testid, trace lines, etc.).
+
+## Hard rules
+1. **Planning only.** Do not edit anything under `ProjectCosts-CodeApp/`. No git state changes. Do not touch the other worktree. Write only under `ProjectDocs/bottleneck-identification/_stage2/` (and throwaway scripts under `_bench/S2<letter>/`).
+2. Re-open the code. For every P1 finding (and any P2 you rank as important) **re-verify the execution path in the current source** and decide an RCA verdict, not just repeat Stage 1:
+   - `ACTUAL` (a real bottleneck with the stated cause), `SYMPTOM` (caused by another finding: name it), `SHARED-ROOT` (several findings share one cause: name the root and the group), `OVERSTATED` (smaller than Stage 1 said: say why), `NOT-A-BOTTLENECK` (explain), `UNRESOLVED` (cannot decide without a measurement or probe: say exactly which).
+   - Also state whether it is architecture / execution order / data volume / network latency / implementation, and whether it is isolated or cross-screen.
+3. **Preserve business behaviour.** Do not propose removing validations, calculations or business checks. Do not propose Dataverse schema, security-role, permission or Power Automate flow changes (flows are out of scope; a UI-side change around a flow is allowed only if marked DECISION). No unbounded concurrency. No stale-data caching without a stated freshness rule. No blind retry of non-idempotent operations. Anything that diverges from canvas behaviour is marked `DECISION:` with who must decide (it needs a `DIVERGENCE:` marker, a `…CanvasParity` twin, a test and a 02-OPEN-DECISIONS entry in Stage 3).
+4. Be honest about unknowns: if the benefit can only be measured in a browser or on DEV, say so and put the measurement into the acceptance criteria; do not promise seconds you cannot support. Express expected benefit as requests / rounds / bytes / renders / ms-derived-from-recorded-unit-costs, with the basis.
+5. Prefer the smallest change that removes the root cause; prefer shared fixes over per-screen ones; do not invent new infrastructure when a switch, helper or existing pattern in the repo already does it (search `src/data`, `src/components`, `src/app` first, and the D165 switches that already exist but are OFF — turning on an existing, tested switch after a DEV check is often the whole remediation).
+
+## Per-finding specification (all 12 fields; one block per finding you own)
+For P1 and any finding you recommend ACTING on: write all of — (1) Current implementation (file:line), (2) Root cause (validated), (3) Proposed implementation (concrete: files, functions, the shape of the change), (4) Expected technical benefit (counted/derived, with basis), (5) Expected user-visible benefit, (6) Dependencies (other findings, switches, probes, decisions), (7) Functional risks, (8) Performance risks, (9) Implementation complexity (Low/Med/High + rough size), (10) Required tests (named existing test files to extend + new test ids in the `UT-<AREA>-NNN` style), (11) Acceptance criteria (measurable, before/after metric and how it is captured), (12) Rollback approach (switch name / revert unit). For P2/P3 you recommend DEFERRING or leaving, a 3-line block is enough (verdict, why not now, what would change that).
+Group findings that should be fixed by one task into a **proposed Stage 3 task** `T-<letter><nn>` with: title, findings covered, files touched, shared-file conflicts, order constraints.
+
+## Deliverables
+A. `_stage2/<LETTER>-rca-and-strategy.md` — sections: scope (findings owned), RCA verdict table (ID | verdict | classification | isolated/cross-screen | note), per-finding specifications, proposed tasks, conflicts with other areas (name the finding IDs of other agents you collide with), what you could not determine.
+B. `_stage2/<LETTER>-scores.md` — ONE pipe table, header exactly:
+`ID | Verdict | Action | Task | Impact | Frequency | Screens | Journey | RootConf | Effort | Regression | DepImpact | Basis`
+ - `Action` ∈ FIX / FIX-AFTER-DECISION / FIX-AFTER-PROBE / MEASURE-FIRST / DEFER / ACCEPT (no action) ; `Task` = task id or `-`.
+ - Scores are integers 1–5: Impact (user-visible/time saved if fixed, 5 = seconds on a frequent action), Frequency (5 = every session/every action), Screens (5 = cross-cutting), Journey (5 = critical journey: start-up, load a screen, save), RootConf (5 = root cause proven), Effort (5 = very high effort), Regression (5 = high risk of behaviour regression), DepImpact (5 = fixing it unblocks or resolves several others). `Basis` = one short phrase of evidence per score group.
+C. Final reply ≤ 300 words: files, counts by verdict and action, your five most valuable proposed tasks (id + one line + expected effect), the findings you downgraded/upgraded and why, what needs a measurement/decision from the user.
+
+Quality bar: ten well-reasoned verdicts that changed or confirmed Stage 1 for a stated reason beat a restatement of 30 findings. Cite code.

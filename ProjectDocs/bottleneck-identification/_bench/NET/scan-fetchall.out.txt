@@ -1,0 +1,18 @@
+fetchAll call sites: 157; with maxPageSize 5000: 5; without any filter text: 17
+data/adminCapexAccounts.ts:72 list CAPEX account tree (admin)
+data/adminGatesApprovals.ts:176 list countries for gate approvals
+data/adminGatesApprovals.ts:189 list project states for gate approvals
+data/bulkSend.ts:180 undefined
+data/bulkSend.ts:183 undefined
+data/contracts.ts:295 list CAPEX accounts
+data/currencies.ts:38 list transaction currencies (Cost reads)
+data/currentUser.ts:184 read the country list for the user's business units
+data/finance.ts:74 load the financing categories
+data/finance.ts:288 read the banks (Fabric SQL)
+data/finance.ts:301 read the KfW tranches (Fabric SQL)
+data/generalData.ts:120 list countries
+data/generalData.ts:168 list project states
+data/generators.ts:380 load the PV module catalogue
+data/generators.ts:523 load the inverter catalogue
+data/generators.ts:530 load the substructure catalogue
+data/team.ts:100 load the project member descriptions

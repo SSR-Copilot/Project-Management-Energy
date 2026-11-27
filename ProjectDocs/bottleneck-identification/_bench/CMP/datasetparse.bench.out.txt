@@ -1,0 +1,4 @@
+parseDatasetToTree 96 records (6 acc x 3 sub x 4 contracts), 62 columns        median 6.8 ms  min 5.3 max 10.4
+parseDatasetToTree 570 records (30 acc x 3 sub x 5 contracts), 62 columns      median 32.1 ms  min 29.9 max 33.6
+parseDatasetToTree 1200 records (30 acc x 3 sub x 12 contracts), 62 columns    median 58.3 ms  min 52.6 max 75.0
+parseDatasetToTree 1900 records (100 acc x 3 sub x 5 contracts), 62 columns    median 112.1 ms  min 97.0 max 143.7

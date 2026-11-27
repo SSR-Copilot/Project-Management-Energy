@@ -1,0 +1,6 @@
+gate       n=   500 taskMs=5 total    331 ms  longest loop gap 16.8 ms
+simple     n=   500 taskMs=5 total    325 ms  longest loop gap 16.2 ms
+gate       n=  3500 taskMs=5 total   2268 ms  longest loop gap 20.8 ms
+simple     n=  3500 taskMs=5 total   2278 ms  longest loop gap 19.0 ms
+gate       n= 15000 taskMs=5 total  10203 ms  longest loop gap 305.8 ms
+simple     n= 15000 taskMs=5 total   9879 ms  longest loop gap 33.8 ms

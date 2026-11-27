@@ -1,0 +1,272 @@
+[
+  {
+    "scenario": "S1 usual visit (mount)",
+    "variant": "OFF",
+    "rounds": 6,
+    "requests": 10,
+    "usableRounds": 6,
+    "extra": {
+      "read project": 1,
+      "read states": 1,
+      "read trackings": 2,
+      "read gates#1": 1,
+      "read gates#2": 1,
+      "read rows": 1,
+      "read count": 1,
+      "read approvals#1": 1,
+      "read approvals#2": 1
+    },
+    "order": "read project@1;read states@1;read trackings@1;read gates#1@2;read gates#2@3;read rows@4;read trackings@4;read count@4;read approvals#1@5;read approvals#2@6"
+  },
+  {
+    "scenario": "S2 first visit, 10 templates",
+    "variant": "OFF",
+    "rounds": 11,
+    "requests": 29,
+    "extra": {
+      "read project": 2,
+      "read states": 1,
+      "read trackings": 3,
+      "read gates#1": 1,
+      "read gates#2": 1,
+      "read rows": 2,
+      "read count": 1,
+      "read templates#1": 1,
+      "read templates#2": 1,
+      "create vsb_projectchecklists": 10,
+      "session project#1": 1,
+      "session project#2": 3,
+      "read approvals#1": 1,
+      "read approvals#2": 1
+    },
+    "order": "read project@1;read states@1;read trackings@1;read gates#1@2;read gates#2@3;read rows@4;read trackings@4;read count@4;read templates#1@5;read templates#2@6;create vsb_projectchecklists@7;create vsb_projectchecklists@7;create vsb_projectchecklists@7;create vsb_projectchecklists@7;create vsb_projectchecklists@7;create vsb_projectchecklists@7;create vsb_projectchecklists@7;create vsb_projectchecklists@7;create vsb_projectchecklists@8;create vsb_projectchecklists@8;read project@9;read trackings@9;read rows@9;session project#1@9;session project#2@10;session project#2@10;session project#2@10;read approvals#1@10;read approvals#2@11"
+  },
+  {
+    "scenario": "S2 first visit, 40 templates",
+    "variant": "OFF",
+    "rounds": 14,
+    "requests": 59,
+    "extra": {
+      "read project": 2,
+      "read states": 1,
+      "read trackings": 3,
+      "read gates#1": 1,
+      "read gates#2": 1,
+      "read rows": 2,
+      "read count": 1,
+      "read templates#1": 1,
+      "read templates#2": 1,
+      "create vsb_projectchecklists": 40,
+      "session project#1": 1,
+      "session project#2": 3,
+      "read approvals#1": 1,
+      "read approvals#2": 1
+    },
+    "order": "read project@1;read states@1;read trackings@1;read gates#1@2;read gates#2@3;read rows@4;read trackings@4;read count@4;read templates#1@5;read templates#2@6;create vsb_projectchecklists@7;create vsb_projectchecklists@7;create vsb_projectchecklists@7;create vsb_projectchecklists@7;create vsb_projectchecklists@7;create vsb_projectchecklists@7;create vsb_projectchecklists@7;create vsb_projectchecklists@7;create vsb_projectchecklists@8;create vsb_projectchecklists@8;create vsb_projectchecklists@8;create vsb_projectchecklists@8;create vsb_projectchecklists@8;create vsb_projectchecklists@8;create vsb_projectchecklists@8;create vsb_projectchecklists@8;create vsb_projectchecklists@9;create vsb_projectchecklists@9;create vsb_projectchecklists@9;create vsb_projectchecklists@9;create vsb_projectchecklists@9;create vsb_projectchecklists@9;create vsb_projectchecklists@9;create vsb_projectchecklists@9;create vsb_projectchecklists@10;create vsb_projectchecklists@10;create vsb_projectchecklists@10;create vsb_projectchecklists@10;create vsb_projectchecklists@10;create vsb_projectchecklists@10;create vsb_projectchecklists@10;create vsb_projectchecklists@10;create vsb_projectchecklists@11;create vsb_projectchecklists@11;create vsb_projectchecklists@11;create vsb_projectchecklists@11;create vsb_projectchecklists@11;create vsb_projectchecklists@11;create vsb_projectchecklists@11;create vsb_projectchecklists@11;read project@12;read trackings@12;read rows@12;session project#1@12;session project#2@13;session project#2@13;session project#2@13;read approvals#1@13;read approvals#2@14"
+  },
+  {
+    "scenario": "S3 Complete a task",
+    "variant": "OFF",
+    "rounds": 4,
+    "requests": 11,
+    "uiRounds": 4,
+    "extra": {
+      "read vsb_projectchecklists": 1,
+      "update vsb_projectchecklists": 1,
+      "read project": 1,
+      "read trackings": 1,
+      "read rows": 1,
+      "read approvals#1": 1,
+      "session project#1": 1,
+      "read approvals#2": 1,
+      "session project#2": 3
+    },
+    "order": "read vsb_projectchecklists@1;update vsb_projectchecklists@2;read project@3;read trackings@3;read rows@3;read approvals#1@3;session project#1@3;read approvals#2@4;session project#2@4;session project#2@4;session project#2@4"
+  },
+  {
+    "scenario": "S4 Move to next cluster",
+    "variant": "OFF",
+    "rounds": 16,
+    "requests": 43,
+    "extra": {
+      "read history": 2,
+      "read trackings": 4,
+      "read rows": 4,
+      "read vsb_projectstatetrackings": 2,
+      "update vsb_projectstatetrackings": 2,
+      "create vsb_projectstatetrackingnotes": 1,
+      "update vsb_projects": 1,
+      "read project": 2,
+      "read approvals#1": 2,
+      "session project#1": 2,
+      "read approvals#2": 2,
+      "session project#2": 6,
+      "read count": 1,
+      "read templates#1": 1,
+      "read templates#2": 1,
+      "create vsb_projectchecklists": 10
+    },
+    "order": "read history@1;read trackings@1;read rows@1;read vsb_projectstatetrackings@2;update vsb_projectstatetrackings@3;read vsb_projectstatetrackings@4;update vsb_projectstatetrackings@5;create vsb_projectstatetrackingnotes@6;update vsb_projects@7;read project@8;read trackings@8;read rows@8;read approvals#1@8;read history@8;session project#1@8;read approvals#2@9;session project#2@9;session project#2@9;session project#2@9;read trackings@9;read count@9;read rows@9;read templates#1@10;read templates#2@11;create vsb_projectchecklists@12;create vsb_projectchecklists@12;create vsb_projectchecklists@12;create vsb_projectchecklists@12;create vsb_projectchecklists@12;create vsb_projectchecklists@12;create vsb_projectchecklists@12;create vsb_projectchecklists@12;create vsb_projectchecklists@13;create vsb_projectchecklists@13;read project@14;read trackings@14;read rows@14;session project#1@14;session project#2@15;session project#2@15;session project#2@15;read approvals#1@15;read approvals#2@16"
+  },
+  {
+    "scenario": "S5 Refresh",
+    "variant": "OFF",
+    "rounds": 3,
+    "requests": 10,
+    "extra": {
+      "read project": 1,
+      "read states": 1,
+      "read trackings": 2,
+      "read gates#1": 1,
+      "read rows": 1,
+      "read approvals#1": 1,
+      "read gates#2": 1,
+      "read approvals#2": 1,
+      "read count": 1
+    },
+    "order": "read project@1;read states@1;read trackings@1;read gates#1@1;read rows@1;read approvals#1@1;read gates#2@2;read approvals#2@2;read trackings@3;read count@3"
+  },
+  {
+    "scenario": "S6 typing (per keystroke)",
+    "variant": "OFF",
+    "rounds": 0,
+    "requests": 0,
+    "extra": {
+      "samples": 20,
+      "commitsMedian": 1,
+      "commitsP95": 1,
+      "renderMsMedian": 10.71,
+      "renderMsP95": 11.78
+    }
+  },
+  {
+    "scenario": "S1 usual visit (mount)",
+    "variant": "ON",
+    "rounds": 4,
+    "requests": 9,
+    "usableRounds": 4,
+    "extra": {
+      "read project": 1,
+      "read states": 1,
+      "read trackings": 1,
+      "read gates#1": 1,
+      "read rows": 1,
+      "read count": 1,
+      "read gates#2": 1,
+      "read approvals#1": 1,
+      "read approvals#2": 1
+    },
+    "order": "read project@1;read states@1;read trackings@1;read gates#1@2;read rows@2;read count@2;read gates#2@3;read approvals#1@3;read approvals#2@4"
+  },
+  {
+    "scenario": "S2 first visit, 10 templates",
+    "variant": "ON",
+    "rounds": 6,
+    "requests": 22,
+    "extra": {
+      "read project": 1,
+      "read states": 1,
+      "read trackings": 1,
+      "read gates#1": 1,
+      "read rows": 2,
+      "read count": 1,
+      "read gates#2": 1,
+      "read templates#1": 1,
+      "read templates#2": 1,
+      "read approvals#1": 1,
+      "create vsb_projectchecklists": 10,
+      "read approvals#2": 1
+    },
+    "order": "read project@1;read states@1;read trackings@1;read gates#1@2;read rows@2;read count@2;read gates#2@3;read templates#1@3;read templates#2@4;read approvals#1@5;create vsb_projectchecklists@5;create vsb_projectchecklists@5;create vsb_projectchecklists@5;create vsb_projectchecklists@5;create vsb_projectchecklists@5;create vsb_projectchecklists@5;create vsb_projectchecklists@5;create vsb_projectchecklists@5;create vsb_projectchecklists@5;create vsb_projectchecklists@5;read approvals#2@6;read rows@6"
+  },
+  {
+    "scenario": "S2 first visit, 40 templates",
+    "variant": "ON",
+    "rounds": 8,
+    "requests": 52,
+    "extra": {
+      "read project": 1,
+      "read states": 1,
+      "read trackings": 1,
+      "read gates#1": 1,
+      "read rows": 2,
+      "read count": 1,
+      "read gates#2": 1,
+      "read templates#1": 1,
+      "read templates#2": 1,
+      "read approvals#1": 1,
+      "create vsb_projectchecklists": 40,
+      "read approvals#2": 1
+    },
+    "order": "read project@1;read states@1;read trackings@1;read gates#1@2;read rows@2;read count@2;read gates#2@3;read templates#1@3;read templates#2@4;read approvals#1@5;create vsb_projectchecklists@5;create vsb_projectchecklists@5;create vsb_projectchecklists@5;create vsb_projectchecklists@5;create vsb_projectchecklists@5;create vsb_projectchecklists@5;create vsb_projectchecklists@5;create vsb_projectchecklists@5;create vsb_projectchecklists@5;create vsb_projectchecklists@5;create vsb_projectchecklists@5;create vsb_projectchecklists@5;create vsb_projectchecklists@5;create vsb_projectchecklists@5;create vsb_projectchecklists@5;create vsb_projectchecklists@5;read approvals#2@6;create vsb_projectchecklists@6;create vsb_projectchecklists@6;create vsb_projectchecklists@6;create vsb_projectchecklists@6;create vsb_projectchecklists@6;create vsb_projectchecklists@6;create vsb_projectchecklists@6;create vsb_projectchecklists@6;create vsb_projectchecklists@6;create vsb_projectchecklists@6;create vsb_projectchecklists@6;create vsb_projectchecklists@6;create vsb_projectchecklists@6;create vsb_projectchecklists@6;create vsb_projectchecklists@6;create vsb_projectchecklists@6;create vsb_projectchecklists@7;create vsb_projectchecklists@7;create vsb_projectchecklists@7;create vsb_projectchecklists@7;create vsb_projectchecklists@7;create vsb_projectchecklists@7;create vsb_projectchecklists@7;create vsb_projectchecklists@7;read rows@8"
+  },
+  {
+    "scenario": "S3 Complete a task",
+    "variant": "ON",
+    "rounds": 3,
+    "requests": 3,
+    "uiRounds": 3,
+    "extra": {
+      "read vsb_projectchecklists": 1,
+      "update vsb_projectchecklists": 1,
+      "read rows": 1
+    },
+    "order": "read vsb_projectchecklists@1;update vsb_projectchecklists@2;read rows@3"
+  },
+  {
+    "scenario": "S4 Move to next cluster",
+    "variant": "ON",
+    "rounds": 11,
+    "requests": 37,
+    "extra": {
+      "read history": 2,
+      "read count": 2,
+      "read trackings": 2,
+      "read rows": 4,
+      "read templates#1": 1,
+      "read vsb_projectstatetrackings": 2,
+      "read templates#2": 1,
+      "update vsb_projectstatetrackings": 2,
+      "create vsb_projectstatetrackingnotes": 1,
+      "update vsb_projects": 1,
+      "read project": 1,
+      "read approvals#1": 2,
+      "session project#1": 1,
+      "read approvals#2": 2,
+      "session project#2": 3,
+      "create vsb_projectchecklists": 10
+    },
+    "order": "read history@1;read count@1;read trackings@1;read rows@1;read templates#1@2;read vsb_projectstatetrackings@2;read templates#2@3;update vsb_projectstatetrackings@3;read vsb_projectstatetrackings@4;update vsb_projectstatetrackings@5;create vsb_projectstatetrackingnotes@6;update vsb_projects@7;read project@8;read trackings@8;read rows@8;read approvals#1@8;read history@8;session project#1@8;read approvals#2@9;session project#2@9;session project#2@9;session project#2@9;read count@9;read rows@9;read approvals#1@10;create vsb_projectchecklists@10;create vsb_projectchecklists@10;create vsb_projectchecklists@10;create vsb_projectchecklists@10;create vsb_projectchecklists@10;create vsb_projectchecklists@10;create vsb_projectchecklists@10;create vsb_projectchecklists@10;create vsb_projectchecklists@10;create vsb_projectchecklists@10;read approvals#2@11;read rows@11"
+  },
+  {
+    "scenario": "S5 Refresh",
+    "variant": "ON",
+    "rounds": 2,
+    "requests": 9,
+    "extra": {
+      "read project": 1,
+      "read trackings": 1,
+      "read rows": 1,
+      "read approvals#1": 1,
+      "read states": 1,
+      "read gates#1": 1,
+      "read approvals#2": 1,
+      "read gates#2": 1,
+      "read count": 1
+    },
+    "order": "read project@1;read trackings@1;read rows@1;read approvals#1@1;read states@1;read gates#1@1;read approvals#2@2;read gates#2@2;read count@2"
+  },
+  {
+    "scenario": "S6 typing (per keystroke)",
+    "variant": "ON",
+    "rounds": 0,
+    "requests": 0,
+    "extra": {
+      "samples": 20,
+      "commitsMedian": 1,
+      "commitsP95": 1,
+      "renderMsMedian": 8.67,
+      "renderMsP95": 10.31
+    }
+  }
+]

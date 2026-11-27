@@ -1,0 +1,15 @@
+control: 7112 td + 7112 div plain jsdom elements = 60.80 MB
+grid 261 rows x 126 cols = 32886 cells (held by the test the whole time)
+baseline heap (grid held, nothing mounted): 58.71 MB
+mounted DOM: 14696 elements, 7056 td
+cycle 1: while mounted 213.65 MB above baseline | after unmount 78.90 MB above baseline
+cycle 2: while mounted 214.24 MB above baseline | after unmount 79.35 MB above baseline
+cycle 3: while mounted 214.38 MB above baseline | after unmount 79.50 MB above baseline
+cycle 4: while mounted 211.70 MB above baseline | after unmount 76.87 MB above baseline
+cycle 5: while mounted 207.84 MB above baseline | after unmount 72.93 MB above baseline
+cycle 6: while mounted 207.01 MB above baseline | after unmount 72.09 MB above baseline
+cycle 7: while mounted 206.97 MB above baseline | after unmount 72.12 MB above baseline
+cycle 8: while mounted 207.09 MB above baseline | after unmount 72.18 MB above baseline
+cycle 9: while mounted 207.30 MB above baseline | after unmount 72.39 MB above baseline
+cycle 10: while mounted 207.28 MB above baseline | after unmount 72.43 MB above baseline
+growth cycle 3 -> cycle 10 after unmount: -7.08 MB

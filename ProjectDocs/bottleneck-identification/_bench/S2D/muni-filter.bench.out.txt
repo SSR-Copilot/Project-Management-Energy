@@ -1,0 +1,10 @@
+2000 rows, term "g": 0.053 ms median, 2000 kept
+2000 rows, term "ge": 0.057 ms median, 2000 kept
+2000 rows, term "gem": 0.056 ms median, 2000 kept
+2000 rows, term "sonnenberg 3": 0.083 ms median, 286 kept
+2000 rows, term "zzz": 0.088 ms median, 0 kept
+5000 rows, term "g": 0.124 ms median, 5000 kept
+5000 rows, term "ge": 0.141 ms median, 5000 kept
+5000 rows, term "gem": 0.144 ms median, 5000 kept
+5000 rows, term "sonnenberg 3": 0.212 ms median, 714 kept
+5000 rows, term "zzz": 0.227 ms median, 0 kept

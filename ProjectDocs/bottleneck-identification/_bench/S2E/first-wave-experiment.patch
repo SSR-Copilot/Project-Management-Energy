@@ -1,0 +1,809 @@
+diff
+--- a/src/data/addCostSheetBulk.ts
++++ b/src/data/addCostSheetBulk.ts
+@@ -101,17 +101,8 @@
+ 
+ /* ═════════════════════════════════════════════════════════════════════ tables ══ */
+ 
+-export const CAPEX_CONTRACTS: BulkTableInfo = {
+-  entitySetName: ES.capexProjectContracts,
+-  logicalName: "vsb_capexprojectcontract",
+-  primaryKey: "vsb_capexprojectcontractid",
+-};
+-
+-export const CAPEX_COSTS: BulkTableInfo = {
+-  entitySetName: ES_ADMIN.capexCosts,
+-  logicalName: "vsb_capexcost",
+-  primaryKey: "vsb_capexcostid",
+-};
++export { CAPEX_CONTRACTS, CAPEX_COSTS } from "./bulkTables";
++import { CAPEX_CONTRACTS, CAPEX_COSTS } from "./bulkTables";
+ 
+ /** The cost row's contract bind, as the planner writes it on a new cost row. */
+ const CONTRACT_BIND = "vsb_Contract@odata.bind";
+diff
+--- a/src/data/bulkSend.ts
++++ b/src/data/bulkSend.ts
+@@ -45,7 +45,7 @@
+ import type {
+   BulkTableInfo, BulkUpsertTransport, DeepInsertGroup, ExistingIdsReader, UpsertTarget,
+ } from "./bulkTypes";
+-import { CAPEX_CONTRACTS, CAPEX_COSTS } from "./addCostSheetBulk";
++import { CAPEX_CONTRACTS, CAPEX_COSTS } from "./bulkTables";
+ 
+ /**
+  * How the bulk writes of a save are cut into requests and how many may be in flight. ONE set, so
+diff
+--- a/src/data/bulkTables.ts
++++ b/src/data/bulkTables.ts
+@@ -0,0 +1,15 @@
++import { ES, ES_ADMIN } from "./dataverseNames";
++import type { BulkTableInfo } from "./bulkTypes";
++
++export const CAPEX_CONTRACTS: BulkTableInfo = {
++  entitySetName: ES.capexProjectContracts,
++  logicalName: "vsb_capexprojectcontract",
++  primaryKey: "vsb_capexprojectcontractid",
++};
++
++export const CAPEX_COSTS: BulkTableInfo = {
++  entitySetName: ES_ADMIN.capexCosts,
++  logicalName: "vsb_capexcost",
++  primaryKey: "vsb_capexcostid",
++};
++
+diff
+--- a/src/data/checklist.ts
++++ b/src/data/checklist.ts
+@@ -21,14 +21,14 @@
+ import { Vsb_projectdefaultapprovalsesService } from "@/generated/services/Vsb_projectdefaultapprovalsesService";
+ import { Vsb_projectstatetrackingnotesService } from "@/generated/services/Vsb_projectstatetrackingnotesService";
+ import { Vsb_projectchecklisttrackingnotesService } from "@/generated/services/Vsb_projectchecklisttrackingnotesService";
+-import { PROJECT_COL } from "@/features/pm/general-data/rules";
++import { PROJECT_COL } from "@/features/pm/general-data/projectColumns";
+ import {
+   CHECKLIST_COL, NOTE_COL, TRACKING_COL,
+   type ChecklistApprovalSetting, type ChecklistProject, type ChecklistRow, type CopyProbeRow, type DefaultChecklistTemplate,
+   type GateSetting, type HistoryQueryDescriptor, type ProjectStateRef, type TrackingRow,
+ } from "@/features/pm/checklist/rules";
+ import { fetchAll, fetchPage } from "./client";
+-import { listProjectStates } from "./generalData";
++import { listProjectStates } from "./projectStates";
+ import { findScopeCountryTechId, getEntraPeople, listChecklistApprovals, listGateApprovals } from "./adminGatesApprovals";
+ import type { Persona } from "./adminGatesApprovals";
+ import { ACTIVE, and, chunk, eq, guid, idIn, lookupEq } from "./odata";
+diff
+--- a/src/data/costBook.ts
++++ b/src/data/costBook.ts
+@@ -784,116 +784,8 @@
+ 
+ /* ═══════════════════════════════════════════════ milestone assumptions ══ */
+ 
+-/**
+- * `Name` on the one `Milestones Standard Assumptions` row the cluster chain uses.
+- *
+- * The table holds two rows per Country+Technology — `"average duration [months]"` and
+- * `"success rate [-]"` — with the same six numeric columns meaning entirely different things
+- * (17 months versus 0.2 probability). The canvas' `LookUp` names it explicitly
+- * (`CapexScreenCode.txt:18139-18142`) and so must this: reading the wrong row would back-date
+- * clusters by a fraction of a month and look almost right.
+- */
+-const AVERAGE_DURATION_NAME = "average duration [months]";
+-
+-/**
+- * The cluster durations for a project's country and technology, for `synthesiseClusterDates`.
+- *
+- *     LookUp('Milestones Standard Assumptions',
+- *            Name = "average duration [months]"
+- *            && Country.Country = gblSelectedProject.Country.Country
+- *            && Technology = gblSelectedProject.Technology)
+- *
+- * — `CapexScreenCode.txt:18138-18143`. The canvas compares `Country.Country`, i.e. the country
+- * row's primary key, which is `_vsb_country_value` here; `Technology` is the same global option
+- * set on both tables (952850000 Wind, 952850001 PV, 952850002 Hybrid, 952850003 BESS …), so the
+- * numbers compare directly with no mapping.
+- *
+- * `undefined` when nothing matches, which `synthesiseClusterDates` treats exactly as the canvas'
+- * `Coalesce(varMilestoneDurations.'Cluster N', 0)` does — see its doc comment. That is not rare:
+- * measured 16 Sep, the table has 19 "average duration [months]" rows covering DE/IT/PL/ES/FR/FI/
+- * HR/GR/RO against Wind/PV/BESS only, so a Hydro or Substation project matches nothing at all.
+- *
+- * `countryId` and `technology` come from `loadProjectExtras` (`./project.ts`); neither is on
+- * `ProjectContext`. This lives here rather than in `project.ts` because the only thing that
+- * consumes it is the CAPEX cluster timeline, next to `loadProjectStates` above.
+- */
+-export async function loadMilestoneDurations(
+-  countryId: string | undefined,
+-  technology: number | undefined,
+-): Promise<MilestoneDurations | undefined> {
+-  const row = await loadMilestoneAssumptionValues(countryId, technology);
+-  if (!row) return undefined;
+-  const months = (value: number | null) => value ?? 0;
+-  return {
+-    cluster1: months(row.cluster1),
+-    cluster2: months(row.cluster2),
+-    cluster3: months(row.cluster3),
+-    cluster4: months(row.cluster4),
+-    cluster5: months(row.cluster5),
+-    finalInvestmentDecision: months(row.finalInvestmentDecision),
+-  };
+-}
+-
+-/**
+- * Every duration column of the same `"average duration [months]"` row, a blank kept as `null`.
+- * `loadMilestoneDurations` above coalesces them to 0 for the CAPEX timeline; PM Milestones (D26)
+- * needs the blanks, because its CalendarAdd buttons treat a blank duration differently from 0
+- * (`Coalesce('Operational Lifetime', 30 * 12)` for the End Date). One query, one place.
+- */
+-export interface MilestoneAssumptionValues {
+-  cluster1: number | null;
+-  cluster2: number | null;
+-  cluster3: number | null;
+-  cluster4: number | null;
+-  cluster5: number | null;
+-  /** `'Final Investment Decision'` — the FID → Cluster 5 duration. */
+-  finalInvestmentDecision: number | null;
+-  /** `'Operational Lifetime'`, in months. */
+-  operationalLifetime: number | null;
+-  /** `'Sales Start'` — Cluster 4 → Sales Start Date. */
+-  salesStart: number | null;
+-  /** `'Sales End'` (`vsb_salesduration`) — FID → Sales Completion Date. */
+-  salesEnd: number | null;
+-}
+-
+-export async function loadMilestoneAssumptionValues(
+-  countryId: string | undefined,
+-  technology: number | undefined,
+-): Promise<MilestoneAssumptionValues | undefined> {
+-  if (!countryId || technology === undefined) return undefined;
+-  const rows = await fetchAll(
+-    "load milestone standard assumptions",
+-    (o) => Vsb_milestonesstandardassumptionsesService.getAll(o),
+-    {
+-      select: [
+-        "vsb_milestonesstandardassumptionsid",
+-        "vsb_cluster1", "vsb_cluster2", "vsb_cluster3", "vsb_cluster4", "vsb_cluster5",
+-        "vsb_finalinvestmentdecision", "vsb_operationallifetime", "vsb_salesstart", "vsb_salesduration",
+-      ],
+-      filter: and(
+-        eq("vsb_name", AVERAGE_DURATION_NAME),
+-        lookupEq("vsb_country", countryId),
+-        eq("vsb_technology", technology),
+-        ACTIVE,
+-      ),
+-      top: 1,
+-    },
+-  );
+-  const row = rows[0];
+-  if (!row) return undefined;
+-  const value = (v: number | undefined) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+-  return {
+-    cluster1: value(row.vsb_cluster1),
+-    cluster2: value(row.vsb_cluster2),
+-    cluster3: value(row.vsb_cluster3),
+-    cluster4: value(row.vsb_cluster4),
+-    cluster5: value(row.vsb_cluster5),
+-    finalInvestmentDecision: value(row.vsb_finalinvestmentdecision),
+-    operationalLifetime: value(row.vsb_operationallifetime),
+-    salesStart: value(row.vsb_salesstart),
+-    salesEnd: value(row.vsb_salesduration),
+-  };
+-}
++export { loadMilestoneDurations, loadMilestoneAssumptionValues, type MilestoneAssumptionValues } from "./milestoneDurations";
++import { loadMilestoneDurations as _lmd } from "./milestoneDurations";
+ 
+ /* ═════════════════════════════════════════════════════════════════ lines ══ */
+ 
+@@ -1086,11 +978,11 @@
+             "vsb_capexcostid", "_vsb_contract_value", "vsb_year", "vsb_month",
+             "vsb_cost", "vsb_costpaid",
+           ],
+-          filter: lookupIn("vsb_contract", ids),
+-          // B2 (OPT-08a): six narrow columns, so the platform's page ceiling (5000) is safe and a large category's cost rows
+-          // (the project docs record 579 on Wirmighausen, tens of thousands elsewhere) arrive in one request per chunk instead
+-          // of one per 500 rows. Same rows and order; only the number of round trips changes (as `loadContractCostSums`).
+-          maxPageSize: 5000,
++          filter: lookupIn("vsb_contract", ids),
++          // B2 (OPT-08a): six narrow columns, so the platform's page ceiling (5000) is safe and a large category's cost rows
++          // (the project docs record 579 on Wirmighausen, tens of thousands elsewhere) arrive in one request per chunk instead
++          // of one per 500 rows. Same rows and order; only the number of round trips changes (as `loadContractCostSums`).
++          maxPageSize: 5000,
+         },
+       ),
+     ),
+diff
+--- a/src/data/finance.ts
++++ b/src/data/finance.ts
+@@ -39,7 +39,7 @@
+ import { ACTIVE, and, chunk, eq, guid, lookupEq, lookupIn } from "./odata";
+ import { rowStr as str, rowNum as num } from "./rowValues";
+ import { PROJECT_SELECT, toRevenueProject } from "./pmProjectRow";
+-import { listProjectStates } from "./generalData";
++import { listProjectStates } from "./projectStates";
+ 
+ /** Cost-chunk reads in flight at once (`parallelReads`): a read shares the 52-request ceiling with the screen's other reads. */
+ const READ_CONCURRENCY = 8;
+diff
+--- a/src/data/generalData.ts
++++ b/src/data/generalData.ts
+@@ -151,43 +151,7 @@
+     .sort((a, b) => a.name.localeCompare(b.name));
+ }
+ 
+-/**
+- * A `'Project States'` row as the ONE shared read returns it (D159). The first five fields are what General Data, the
+- * Check List, Revenues and Milestones always used. `active` (statecode 0), `orderRaw` (null when the row has no `Order`) and
+- * `businessUnitId` are what Project Overview, the Cost screens and the Admin gate screen each used to read through their own
+- * query: they now take their own view of this one list (`data/projectStates.ts`) instead of reading the table again.
+- */
+-export interface SharedProjectState extends ProjectStateRef {
+-  active: boolean;
+-  orderRaw: number | null;
+-  businessUnitId: string | null;
+-}
+-
+-/** `'Project States'` — the panel labels and the tracking rebuild (Y:223-235, Y:5253), and (D159) every other screen's states. */
+-export async function listProjectStates(): Promise<SharedProjectState[]> {
+-  const rows = await fetchAll(
+-    "list project states",
+-    (o) => Vsb_projectstatesService.getAll(o),
+-    {
+-      select: [
+-        "vsb_projectstateid", "vsb_name", "vsb_order", "vsb_isvisibleonchecklist", "vsb_clusterdescription",
+-        "statecode", "_owningbusinessunit_value",
+-      ],
+-    },
+-  );
+-  return rows
+-    .map((r) => ({
+-      id: r.vsb_projectstateid,
+-      name: r.vsb_name ?? "",
+-      order: typeof r.vsb_order === "number" ? r.vsb_order : 0,
+-      isVisibleOnChecklist: r.vsb_isvisibleonchecklist === true,
+-      clusterDescription: r.vsb_clusterdescription ?? null,
+-      active: r.statecode === 0,
+-      orderRaw: typeof r.vsb_order === "number" ? r.vsb_order : null,
+-      businessUnitId: r._owningbusinessunit_value ?? null,
+-    }))
+-    .sort((a, b) => a.order - b.order);
+-}
++export { listProjectStates, type SharedProjectState } from "./projectStates";
+ 
+ /** A `Custom Choice Values` terrain-utilization option. */
+ export interface UtilizationOption { id: string; label: string; order: number }
+diff
+--- a/src/data/milestoneDurations.ts
++++ b/src/data/milestoneDurations.ts
+@@ -0,0 +1,116 @@
++import { Vsb_milestonesstandardassumptionsesService } from "@/generated/services/Vsb_milestonesstandardassumptionsesService";
++import type { MilestoneDurations } from "@/features/cost/capex-costs/clusters";
++import { fetchAll } from "./client";
++import { ACTIVE, and, eq, lookupEq } from "./odata";
++
++/**
++ * `Name` on the one `Milestones Standard Assumptions` row the cluster chain uses.
++ *
++ * The table holds two rows per Country+Technology — `"average duration [months]"` and
++ * `"success rate [-]"` — with the same six numeric columns meaning entirely different things
++ * (17 months versus 0.2 probability). The canvas' `LookUp` names it explicitly
++ * (`CapexScreenCode.txt:18139-18142`) and so must this: reading the wrong row would back-date
++ * clusters by a fraction of a month and look almost right.
++ */
++const AVERAGE_DURATION_NAME = "average duration [months]";
++
++/**
++ * The cluster durations for a project's country and technology, for `synthesiseClusterDates`.
++ *
++ *     LookUp('Milestones Standard Assumptions',
++ *            Name = "average duration [months]"
++ *            && Country.Country = gblSelectedProject.Country.Country
++ *            && Technology = gblSelectedProject.Technology)
++ *
++ * — `CapexScreenCode.txt:18138-18143`. The canvas compares `Country.Country`, i.e. the country
++ * row's primary key, which is `_vsb_country_value` here; `Technology` is the same global option
++ * set on both tables (952850000 Wind, 952850001 PV, 952850002 Hybrid, 952850003 BESS …), so the
++ * numbers compare directly with no mapping.
++ *
++ * `undefined` when nothing matches, which `synthesiseClusterDates` treats exactly as the canvas'
++ * `Coalesce(varMilestoneDurations.'Cluster N', 0)` does — see its doc comment. That is not rare:
++ * measured 16 Sep, the table has 19 "average duration [months]" rows covering DE/IT/PL/ES/FR/FI/
++ * HR/GR/RO against Wind/PV/BESS only, so a Hydro or Substation project matches nothing at all.
++ *
++ * `countryId` and `technology` come from `loadProjectExtras` (`./project.ts`); neither is on
++ * `ProjectContext`. This lives here rather than in `project.ts` because the only thing that
++ * consumes it is the CAPEX cluster timeline, next to `loadProjectStates` above.
++ */
++export async function loadMilestoneDurations(
++  countryId: string | undefined,
++  technology: number | undefined,
++): Promise<MilestoneDurations | undefined> {
++  const row = await loadMilestoneAssumptionValues(countryId, technology);
++  if (!row) return undefined;
++  const months = (value: number | null) => value ?? 0;
++  return {
++    cluster1: months(row.cluster1),
++    cluster2: months(row.cluster2),
++    cluster3: months(row.cluster3),
++    cluster4: months(row.cluster4),
++    cluster5: months(row.cluster5),
++    finalInvestmentDecision: months(row.finalInvestmentDecision),
++  };
++}
++
++/**
++ * Every duration column of the same `"average duration [months]"` row, a blank kept as `null`.
++ * `loadMilestoneDurations` above coalesces them to 0 for the CAPEX timeline; PM Milestones (D26)
++ * needs the blanks, because its CalendarAdd buttons treat a blank duration differently from 0
++ * (`Coalesce('Operational Lifetime', 30 * 12)` for the End Date). One query, one place.
++ */
++export interface MilestoneAssumptionValues {
++  cluster1: number | null;
++  cluster2: number | null;
++  cluster3: number | null;
++  cluster4: number | null;
++  cluster5: number | null;
++  /** `'Final Investment Decision'` — the FID → Cluster 5 duration. */
++  finalInvestmentDecision: number | null;
++  /** `'Operational Lifetime'`, in months. */
++  operationalLifetime: number | null;
++  /** `'Sales Start'` — Cluster 4 → Sales Start Date. */
++  salesStart: number | null;
++  /** `'Sales End'` (`vsb_salesduration`) — FID → Sales Completion Date. */
++  salesEnd: number | null;
++}
++
++export async function loadMilestoneAssumptionValues(
++  countryId: string | undefined,
++  technology: number | undefined,
++): Promise<MilestoneAssumptionValues | undefined> {
++  if (!countryId || technology === undefined) return undefined;
++  const rows = await fetchAll(
++    "load milestone standard assumptions",
++    (o) => Vsb_milestonesstandardassumptionsesService.getAll(o),
++    {
++      select: [
++        "vsb_milestonesstandardassumptionsid",
++        "vsb_cluster1", "vsb_cluster2", "vsb_cluster3", "vsb_cluster4", "vsb_cluster5",
++        "vsb_finalinvestmentdecision", "vsb_operationallifetime", "vsb_salesstart", "vsb_salesduration",
++      ],
++      filter: and(
++        eq("vsb_name", AVERAGE_DURATION_NAME),
++        lookupEq("vsb_country", countryId),
++        eq("vsb_technology", technology),
++        ACTIVE,
++      ),
++      top: 1,
++    },
++  );
++  const row = rows[0];
++  if (!row) return undefined;
++  const value = (v: number | undefined) => (typeof v === "number" && Number.isFinite(v) ? v : null);
++  return {
++    cluster1: value(row.vsb_cluster1),
++    cluster2: value(row.vsb_cluster2),
++    cluster3: value(row.vsb_cluster3),
++    cluster4: value(row.vsb_cluster4),
++    cluster5: value(row.vsb_cluster5),
++    finalInvestmentDecision: value(row.vsb_finalinvestmentdecision),
++    operationalLifetime: value(row.vsb_operationallifetime),
++    salesStart: value(row.vsb_salesstart),
++    salesEnd: value(row.vsb_salesduration),
++  };
++}
++
+diff
+--- a/src/data/milestones.ts
++++ b/src/data/milestones.ts
+@@ -24,7 +24,7 @@
+ import { Vsb_fabricsyncjobsService } from "@/generated/services/Vsb_fabricsyncjobsService";
+ import { AssumptionsRevenueService } from "@/generated/services/AssumptionsRevenueService";
+ import { technologyLabel, technologyValue } from "@/domain/technology";
+-import { PROJECT_COL } from "@/features/pm/general-data/rules";
++import { PROJECT_COL } from "@/features/pm/general-data/projectColumns";
+ import {
+   FABRIC_JOB_STATUS, FABRIC_JOB_TYPE_MILESTONES, GENERATOR_TYPE_COL, HEDGE_TYPE_INDIVIDUAL_VOLUMES,
+   isInRevenueSlice,
+diff
+--- a/src/data/projectStates.ts
++++ b/src/data/projectStates.ts
+@@ -11,11 +11,51 @@
+  * No React in this file: `app/bootPrefetch.ts` imports it.
+  */
+ import { queryOptions } from "@tanstack/react-query";
+-import { listProjectStates, type SharedProjectState } from "./generalData";
++import { Vsb_projectstatesService } from "@/generated/services/Vsb_projectstatesService";
++import type { ProjectStateRef } from "@/features/pm/general-data/rules";
++import { fetchAll } from "./client";
+ import { qk } from "./keys";
+ import type { ProjectState as AdminProjectState } from "./adminGatesApprovals";
+ import type { ProjectState as CostProjectState } from "./costBook";
+ 
++/**
++ * A `'Project States'` row as the ONE shared read returns it (D159). The first five fields are what General Data, the
++ * Check List, Revenues and Milestones always used. `active` (statecode 0), `orderRaw` (null when the row has no `Order`) and
++ * `businessUnitId` are what Project Overview, the Cost screens and the Admin gate screen each used to read through their own
++ * query: they now take their own view of this one list (`data/projectStates.ts`) instead of reading the table again.
++ */
++export interface SharedProjectState extends ProjectStateRef {
++  active: boolean;
++  orderRaw: number | null;
++  businessUnitId: string | null;
++}
++
++/** `'Project States'` — the panel labels and the tracking rebuild (Y:223-235, Y:5253), and (D159) every other screen's states. */
++export async function listProjectStates(): Promise<SharedProjectState[]> {
++  const rows = await fetchAll(
++    "list project states",
++    (o) => Vsb_projectstatesService.getAll(o),
++    {
++      select: [
++        "vsb_projectstateid", "vsb_name", "vsb_order", "vsb_isvisibleonchecklist", "vsb_clusterdescription",
++        "statecode", "_owningbusinessunit_value",
++      ],
++    },
++  );
++  return rows
++    .map((r) => ({
++      id: r.vsb_projectstateid,
++      name: r.vsb_name ?? "",
++      order: typeof r.vsb_order === "number" ? r.vsb_order : 0,
++      isVisibleOnChecklist: r.vsb_isvisibleonchecklist === true,
++      clusterDescription: r.vsb_clusterdescription ?? null,
++      active: r.statecode === 0,
++      orderRaw: typeof r.vsb_order === "number" ? r.vsb_order : null,
++      businessUnitId: r._owningbusinessunit_value ?? null,
++    }))
++    .sort((a, b) => a.order - b.order);
++}
++
+ /** How long the list counts as fresh: global master data that changes a few times a year. */
+ export const PROJECT_STATES_STALE = 30 * 60 * 1000;
+ 
+diff
+--- a/src/data/revenueLookups.ts
++++ b/src/data/revenueLookups.ts
+@@ -0,0 +1,39 @@
++import { Vsb_revenuesubaccountsService } from "@/generated/services/Vsb_revenuesubaccountsService";
++import { TransactioncurrenciesService } from "@/generated/services/TransactioncurrenciesService";
++import { fetchAll, fetchPage } from "./client";
++import { eq } from "./odata";
++import { loadAllCurrencies } from "./currencies";
++
++/** `locSelectedRevenueSubaccount: First(colRevenueSubaccounts)` — `Sort('Revenue Subaccounts', Order)` (App.pa.yaml:604-609). */
++export async function loadFirstRevenueSubaccount(): Promise<{ id: string; name: string } | null> {
++  const rows = await fetchPage(
++    "load the revenue subaccount",
++    (o) => Vsb_revenuesubaccountsService.getAll(o),
++    { select: ["vsb_revenuesubaccountid", "vsb_name"], orderBy: ["vsb_order asc"], top: 1 },
++  );
++  const r = rows[0];
++  return r ? { id: r.vsb_revenuesubaccountid, name: r.vsb_name ?? "" } : null;
++}
++
++/**
++ * `LookUp(Currencies, 'Currency Code' = <code>)` — through the shared `loadCurrencies` (Land Lease).
++ *
++ * `onlyThisCode` (D136, the Revenue screen passes it): the server filters on the ISO code, so one small read
++ * replaces the whole `transactioncurrencies` table. The same `x.code === code` test then picks the row, so the row
++ * found is the one the unfiltered read finds (the filtered rows keep the table's own order). The Milestones screen
++ * calls this without the option and is unchanged.
++ */
++export async function findCurrency(
++  code: string, opts: { onlyThisCode?: boolean } = {},
++): Promise<{ id: string; name: string } | null> {
++  const rows = opts.onlyThisCode
++    ? (await fetchAll(
++      "find the revenue currency",
++      (o) => TransactioncurrenciesService.getAll(o),
++      { select: ["transactioncurrencyid", "currencyname", "isocurrencycode"], filter: eq("isocurrencycode", code) },
++    )).map((r) => ({ id: r.transactioncurrencyid, name: r.currencyname ?? "", code: r.isocurrencycode ?? "" }))
++    : [...(await loadAllCurrencies())];
++  const c = rows.find((x) => x.code === code);
++  return c ? { id: c.id, name: c.name } : null;
++}
++
+diff
+--- a/src/data/revenues.ts
++++ b/src/data/revenues.ts
+@@ -30,8 +30,9 @@
+ import { fetchAll, fetchPage } from "./client";
+ import { ACTIVE, and, dateOnly, eq, geDate, guid, leDate, lookupEq } from "./odata";
+ import { rowStr as str, rowNum as num } from "./rowValues";
+-import { listProjectStates } from "./generalData";
+-import { loadCountryInflation, loadCurrencies } from "./landLease";
++import { listProjectStates } from "./projectStates";
++import { loadCountryInflation } from "./countryInflation";
++export { findCurrency, loadFirstRevenueSubaccount } from "./revenueLookups";
+ import { listRevenueAssumptions } from "./milestones";
+ // The project-row mapper the PM screens share: moved to `./pmProjectRow` (FE-P2-05, D162) so Finance reads it without this
+ // module; re-exported, so every importer of these names from here is unchanged.
+@@ -209,17 +210,6 @@
+   return rows.length > 0;
+ }
+ 
+-/** `locSelectedRevenueSubaccount: First(colRevenueSubaccounts)` — `Sort('Revenue Subaccounts', Order)` (App.pa.yaml:604-609). */
+-export async function loadFirstRevenueSubaccount(): Promise<{ id: string; name: string } | null> {
+-  const rows = await fetchPage(
+-    "load the revenue subaccount",
+-    (o) => Vsb_revenuesubaccountsService.getAll(o),
+-    { select: ["vsb_revenuesubaccountid", "vsb_name"], orderBy: ["vsb_order asc"], top: 1 },
+-  );
+-  const r = rows[0];
+-  return r ? { id: r.vsb_revenuesubaccountid, name: r.vsb_name ?? "" } : null;
+-}
+-
+ /**
+  * `locCountryRelatedAssumptions` (Add L729-742, Edit L978-991) — the project country's slice of
+  * `Assumptions Revenues SQL` (an Italian project reads every `Italy*` row, 1.21.753), through the
+@@ -232,28 +222,6 @@
+ }
+ 
+ /**
+- * `LookUp(Currencies, 'Currency Code' = <code>)` — through the shared `loadCurrencies` (Land Lease).
+- *
+- * `onlyThisCode` (D136, the Revenue screen passes it): the server filters on the ISO code, so one small read
+- * replaces the whole `transactioncurrencies` table. The same `x.code === code` test then picks the row, so the row
+- * found is the one the unfiltered read finds (the filtered rows keep the table's own order). The Milestones screen
+- * calls this without the option and is unchanged.
+- */
+-export async function findCurrency(
+-  code: string, opts: { onlyThisCode?: boolean } = {},
+-): Promise<{ id: string; name: string } | null> {
+-  const rows = opts.onlyThisCode
+-    ? (await fetchAll(
+-      "find the revenue currency",
+-      (o) => TransactioncurrenciesService.getAll(o),
+-      { select: ["transactioncurrencyid", "currencyname", "isocurrencycode"], filter: eq("isocurrencycode", code) },
+-    )).map((r) => ({ id: r.transactioncurrencyid, name: r.currencyname ?? "", code: r.isocurrencycode ?? "" }))
+-    : await loadCurrencies();
+-  const c = rows.find((x) => x.code === code);
+-  return c ? { id: c.id, name: c.name } : null;
+-}
+-
+-/**
+  * `'Country Inflation Profiles'` for `Country.Country = <project country>` — through the shared
+  * `loadCountryInflation` (Land Lease), each row tagged with that country's key.
+  */
+diff
+--- a/src/features/pm/general-data/hooks.ts
++++ b/src/features/pm/general-data/hooks.ts
+@@ -37,10 +37,9 @@
+ import { usePlanWrite } from "@/data/usePlanWrite";
+ import { useDebouncedValue } from "@/features/shared/useDebouncedValue";
+ import { searchEntraPeople, getEntraPeople } from "@/data/adminGatesApprovals";
+-import { listChecklistGates } from "@/data/checklist";
+ import { checklistPerf } from "@/data/checklistPerfFlags";
+ import { lookupPeopleAll, onePersonCache } from "@/data/personCache";
+-import { loadMilestoneDurations } from "@/data/costBook";
++import { loadMilestoneDurations } from "@/data/milestoneDurations";
+ import { cancelGateApproval } from "@/data/flows";
+ import { trace } from "@/platform/telemetry";
+ import {
+@@ -259,6 +258,7 @@
+     const scope = { countryId: args.project.countryId, technology: args.project.technology ?? null };
+     // PB-15 (`GD_CANCEL_REUSES_CACHE`): the Check List's own gate query (same key and function, so its staleTime applies and a fresh
+     // entry is returned without a request); the step reads only when none is fresh. The key is the Check List's only with `scopedGates`.
++    const { listChecklistGates } = await import("@/data/checklist");
+     const gates = args.queryClient && gdCancelReusesCache() && checklistPerf().scopedGates
+       ? await args.queryClient.fetchQuery({
+         queryKey: qk.checklistGates(scope.countryId ?? "", scope.technology ?? ""),
+diff
+--- a/src/features/pm/general-data/projectColumns.ts
++++ b/src/features/pm/general-data/projectColumns.ts
+@@ -0,0 +1,56 @@
++export const PROJECT_COL = {
++  id: "vsb_projectid",
++  name: "vsb_projectname",
++  originalProjectName: "vsb_originalprojectname",
++  shortName: "vsb_shortname",
++  /** 'Project ID' — the human-readable identifier Dataverse assigns on create. */
++  projectNumber: "vsb_name",
++  internalProjectId: "vsb_internalprojectid",
++  projectType: "vsb_projecttype",
++  district: "vsb_district",
++  municipality: "vsb_municipality",
++  terrainSize: "vsb_terrainsize",
++  latitude: "vsb_latitude",
++  longitude: "vsb_longitude",
++  technology: "vsb_technology",
++  approvalState: "vsb_approvalstates",
++  spvName: "vsb_spvname",
++  spvCompanyCode: "vsb_spvcompanycode",
++  spvLegalStructure: "vsb_spvlegalstructure",
++  taxFactor: "vsb_taxfactor",
++  shareOfFarmdown: "vsb_shareoffarmdown",
++  isStandardShareOfFarmdown: "vsb_isstandardshareoffarmdown",
++  standardCostCreated: "vsb_standardcostcreated",
++  developmentType: "vsb_developmenttype",
++  startCluster: "vsb_startcluster",
++  acquisitionDate: "vsb_acquisitiondate",
++  acquisitionPrice: "vsb_acquisitionprice",
++  plantWtgCost: "vsb_plantwtgcost",
++  totalCapacity: "vsb_totalcapacity",
++  netYieldP50: "vsb_netyieldp50",
++
++  /* the milestone date chain — shared with features/pm/milestones */
++  projectStartDate: "vsb_projectstartdate",
++  feasibilityStudies: "vsb_feasibilitystudies",
++  projectDevelopmentStarted: "vsb_projectdevelopmentstarted",
++  applicationSubmitted: "vsb_applicationsubmitted",
++  legallyBindingPermits: "vsb_legallybindingpermits",
++  fid: "vsb_finalinvestmentdecision",
++  construction: "vsb_construction",
++  cod: "vsb_operationsstartdatecod",
++  endDate: "vsb_enddate",
++  salesStartDate: "vsb_salesstartdate",
++  salesCompleted: "vsb_salescompleted",
++  operationalLifetime: "vsb_operationallifetime",
++
++  /* the "Is ... Standard Assumption?" flags */
++  isProjectDevelopmentStd: "vsb_feasibilitystudiesstandardassumption",
++  isApplicationSubmittedStd: "vsb_is3applicationsubmittedstandardassumption",
++  isLegallyBindingPermitsStd: "vsb_is4legallybindingpermitsstandardassumption",
++  isFidStd: "vsb_isfinalinvestmentdecisionstandardassumption",
++  isConstructionStd: "vsb_is5constructionstandardassumption",
++  isCodStd: "vsb_isoperationsstartdatecodstandardassumption",
++  isEndDateStd: "vsb_isenddatestandardassumption",
++  isSalesStartStd: "vsb_issalesstartdatestandardassumption",
++  isSalesCompletedStd: "vsb_issalescompletiondatestandardassumption",
++} as const;
+diff
+--- a/src/features/pm/general-data/rules.ts
++++ b/src/features/pm/general-data/rules.ts
+@@ -45,62 +45,8 @@
+  * (its solution label is still "1-Feasibility studies Standard Assumption ?";
+  * `References/DataSources.json` carries the renamed display name).
+  */
+-export const PROJECT_COL = {
+-  id: "vsb_projectid",
+-  name: "vsb_projectname",
+-  originalProjectName: "vsb_originalprojectname",
+-  shortName: "vsb_shortname",
+-  /** 'Project ID' — the human-readable identifier Dataverse assigns on create. */
+-  projectNumber: "vsb_name",
+-  internalProjectId: "vsb_internalprojectid",
+-  projectType: "vsb_projecttype",
+-  district: "vsb_district",
+-  municipality: "vsb_municipality",
+-  terrainSize: "vsb_terrainsize",
+-  latitude: "vsb_latitude",
+-  longitude: "vsb_longitude",
+-  technology: "vsb_technology",
+-  approvalState: "vsb_approvalstates",
+-  spvName: "vsb_spvname",
+-  spvCompanyCode: "vsb_spvcompanycode",
+-  spvLegalStructure: "vsb_spvlegalstructure",
+-  taxFactor: "vsb_taxfactor",
+-  shareOfFarmdown: "vsb_shareoffarmdown",
+-  isStandardShareOfFarmdown: "vsb_isstandardshareoffarmdown",
+-  standardCostCreated: "vsb_standardcostcreated",
+-  developmentType: "vsb_developmenttype",
+-  startCluster: "vsb_startcluster",
+-  acquisitionDate: "vsb_acquisitiondate",
+-  acquisitionPrice: "vsb_acquisitionprice",
+-  plantWtgCost: "vsb_plantwtgcost",
+-  totalCapacity: "vsb_totalcapacity",
+-  netYieldP50: "vsb_netyieldp50",
+-
+-  /* the milestone date chain — shared with features/pm/milestones */
+-  projectStartDate: "vsb_projectstartdate",
+-  feasibilityStudies: "vsb_feasibilitystudies",
+-  projectDevelopmentStarted: "vsb_projectdevelopmentstarted",
+-  applicationSubmitted: "vsb_applicationsubmitted",
+-  legallyBindingPermits: "vsb_legallybindingpermits",
+-  fid: "vsb_finalinvestmentdecision",
+-  construction: "vsb_construction",
+-  cod: "vsb_operationsstartdatecod",
+-  endDate: "vsb_enddate",
+-  salesStartDate: "vsb_salesstartdate",
+-  salesCompleted: "vsb_salescompleted",
+-  operationalLifetime: "vsb_operationallifetime",
+-
+-  /* the "Is ... Standard Assumption?" flags */
+-  isProjectDevelopmentStd: "vsb_feasibilitystudiesstandardassumption",
+-  isApplicationSubmittedStd: "vsb_is3applicationsubmittedstandardassumption",
+-  isLegallyBindingPermitsStd: "vsb_is4legallybindingpermitsstandardassumption",
+-  isFidStd: "vsb_isfinalinvestmentdecisionstandardassumption",
+-  isConstructionStd: "vsb_is5constructionstandardassumption",
+-  isCodStd: "vsb_isoperationsstartdatecodstandardassumption",
+-  isEndDateStd: "vsb_isenddatestandardassumption",
+-  isSalesStartStd: "vsb_issalesstartdatestandardassumption",
+-  isSalesCompletedStd: "vsb_issalescompletiondatestandardassumption",
+-} as const;
++export { PROJECT_COL } from "./projectColumns";
++import { PROJECT_COL } from "./projectColumns";
+ 
+ /**
+  * Lookup navigation properties, written as `<Nav>@odata.bind`. Spelled exactly as the
+diff
+--- a/src/features/pm/grid-operator/rules.ts
++++ b/src/features/pm/grid-operator/rules.ts
+@@ -39,7 +39,7 @@
+ import { bind } from "@/data/odata";
+ import { refusePlan, type WritePlan } from "@/data/writePlan";
+ import type { PlanJob } from "@/data/usePlanWrite";
+-import { textFormat } from "@/features/pm/generators/rules";
++import { textFormat } from "@/domain/powerFxNumeric";
+ 
+ /* ═══════════════════════════════════════════════════════════════════ columns ════ */
+ 
+diff
+--- a/src/features/pm/milestones/hooks.ts
++++ b/src/features/pm/milestones/hooks.ts
+@@ -31,13 +31,13 @@
+ import { qk } from "@/data/keys";
+ import type { ScreenData } from "@/data/notConnected";
+ import { usePlanWrite } from "@/data/usePlanWrite";
+-import { listProjectStates } from "@/data/generalData";
+-import { loadMilestoneAssumptionValues } from "@/data/costBook";
++import { listProjectStates } from "@/data/projectStates";
++import { loadMilestoneAssumptionValues } from "@/data/milestoneDurations";
+ import {
+   countIndividualVolumeContracts, countProjectRevenues, isMilestoneRecalculationRunning,
+   listProjectGeneratorsForRepricing, listRevenueAssumptions, loadMilestoneProject, loadPriceInflation,
+ } from "@/data/milestones";
+-import { findCurrency, loadFirstRevenueSubaccount } from "@/data/revenues";
++import { findCurrency, loadFirstRevenueSubaccount } from "@/data/revenueLookups";
+ import { projectSaveErrorText } from "@/features/pm/general-data/rules";
+ import { generalDataCountriesQueryOptions } from "@/features/pm/general-data/queries";
+ import {
+diff
+--- a/src/features/pm/milestones/rules.ts
++++ b/src/features/pm/milestones/rules.ts
+@@ -47,7 +47,7 @@
+ import { dateOnly } from "@/data/odata";
+ import { together, type PlannedWrite, type WritePlan } from "@/data/writePlan";
+ import { milestonesRepriceTogether } from "./milestonesPerfFlags";
+-import type { MilestoneAssumptionValues } from "@/data/costBook";
++import type { MilestoneAssumptionValues } from "@/data/milestoneDurations";
+ import {
+   PROJECT_COL, bind, clearSkippedMilestones, startClusterNo, formatAuditStamp,
+ } from "@/features/pm/general-data/rules";
+diff
+--- a/src/features/pm/planning/rules.ts
++++ b/src/features/pm/planning/rules.ts
+@@ -39,7 +39,7 @@
+ import { bind } from "@/data/odata";
+ import { refusePlan, type WritePlan } from "@/data/writePlan";
+ import type { PlanJob } from "@/data/usePlanWrite";
+-import { forLanguage, textFormat } from "@/features/pm/generators/rules";
++import { forLanguage, textFormat } from "@/domain/powerFxNumeric";
+ 
+ /* ═══════════════════════════════════════════════════════════════════ columns ════ */
+ 
+diff
+--- a/src/features/pm/production/rules.ts
++++ b/src/features/pm/production/rules.ts
+@@ -67,7 +67,7 @@
+ import { bind, dateOnly, owningBusinessUnitBind as ownerBind } from "@/data/odata";
+ import { WIDE_GROUP_CONCURRENCY } from "@/data/concurrency";
+ import { createdRowRef, together, type PlannedWrite, type WritePlan } from "@/data/writePlan";
+-import { textFormat } from "@/features/pm/generators/rules";
++import { textFormat } from "@/domain/powerFxNumeric";
+ 
+ /* ═══════════════════════════════════════════════════════════════════ columns ════ */
+ 
+diff
+--- a/src/features/pm/revenues/hooks.ts
++++ b/src/features/pm/revenues/hooks.ts
+@@ -37,7 +37,7 @@
+  */
+ import { useQuery, useQueryClient } from "@tanstack/react-query";
+ import { ES, ES_FINANCE, ES_PRODUCTION } from "@/data/dataverseNames";
+-import { listProjectStates } from "@/data/generalData";
++import { listProjectStates } from "@/data/projectStates";
+ import { qk } from "@/data/keys";
+ import type { ScreenData } from "@/data/notConnected";
+ import { usePlanWrite } from "@/data/usePlanWrite";
+diff
+--- a/src/features/pm/revenues/rules.ts
++++ b/src/features/pm/revenues/rules.ts
+@@ -66,7 +66,7 @@
+ import { addDays, addMonths, addYears } from "@/domain/dates";
+ import { startsWithStandard } from "@/domain/costStandards";
+ import { numberFormat } from "@/domain/locale";
+-import { forLanguage } from "@/features/pm/generators/rules";
++import { forLanguage } from "@/domain/powerFxNumeric";
+ import { CHOICE_FINANCE, ES, ES_FINANCE } from "@/data/dataverseNames";
+ import { bind, dateOnly, owningBusinessUnitBind as ownerBind } from "@/data/odata";
+ import { createdRowRef, refusePlan, together, type PlannedWrite, type WritePlan } from "@/data/writePlan";

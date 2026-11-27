@@ -1,0 +1,30 @@
+
+ RUN  v5.0.0 C:/Personal/Code App Mordenization/Project-Management-Energy-WorkDev1-BottleneckOptimization/ProjectCosts-CodeApp
+
+stdout | src/features/cost/add-costs-from-table/prepare.bench.test.ts > Add Cost from Table — prepare-before-save on a 15,000-row sheet > UT-ADDPERF-001 times every step and stays far inside a generous bound
+prepare bench (15000 rows, 14650 edited rows):
+  buildInitialSheet                        18.1 ms
+  sheetRowsToGrid                          44.8 ms
+  gridToJson (load)                        15.3 ms
+  outputRowsToSheetRows (load)             12.4 ms
+  gridToJson (edit)                        12.3 ms
+  outputRowsToSheetRows (edit)             10.7 ms
+  validateSheet                            34.3 ms
+  identityRoundTripFailures                1.7 ms
+  alignOriginalRowIds                      2.2 ms
+  diffRows                                 7.8 ms
+  planContractDeletionsCanvasParity        1.3 ms
+  planContractDeletions                    2.0 ms
+  orphan cleanup (as Screen wrote it)      16.1 ms
+  prepareSheetSave (whole Save prepare)    27.0 ms
+prepare bench: 3487 of 14650 rows changed
+
+ ✓ src/features/cost/add-costs-from-table/prepare.bench.test.ts > Add Cost from Table — prepare-before-save on a 15,000-row sheet > UT-ADDPERF-001 times every step and stays far inside a generous bound 1531ms
+ ✓ src/features/cost/add-costs-from-table/prepare.bench.test.ts > Add Cost from Table — prepare-before-save on a 15,000-row sheet > UT-ADDPERF-002 reads each reference array a bounded number of times (no scan per row) 233ms
+ ✓ src/features/cost/add-costs-from-table/prepare.bench.test.ts > Add Cost from Table — prepare-before-save on a 15,000-row sheet > UT-ADDPERF-003 a sheet grid row costs the same at 1x and 4x the size (linear, not quadratic) 184ms
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  12:12:31
+   Duration  2.75s (tests 79%, transform 15%, import 3%, worker 1%, setup 1%)
+

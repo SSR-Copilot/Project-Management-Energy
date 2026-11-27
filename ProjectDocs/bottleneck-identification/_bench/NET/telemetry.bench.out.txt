@@ -1,0 +1,8 @@
+URL length 2668 chars; node v24.22.3
+--- Prod (gate closed)
+logHttp (3.4 kB URL): 20000 calls, total 190.9 ms, 9.54 us/call
+logData (5 targets): 20000 calls, total 13.1 ms, 0.66 us/call
+beginAction+end with 1 open peer: 20000 calls, total 16.3 ms, 0.82 us/call
+redactIds on a 90-char key: 20000 calls, total 6.6 ms, 0.33 us/call
+logHttp with 30 open actions: 20000 calls, total 197.3 ms, 9.87 us/call
+(lines captured by the stub: 0)

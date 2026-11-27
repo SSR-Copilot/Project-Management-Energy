@@ -1,0 +1,27 @@
+
+ RUN  v5.0.0 C:/Personal/Code App Mordenization/Project-Management-Energy-WorkDev1-BottleneckOptimization/ProjectCosts-CodeApp
+
+ ↓ src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [OFF] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-060 S1 a usual visit: mount to a usable screen (40 tasks), then everything quiet
+ ↓ src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [OFF] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-061 S2 first visit to an empty cluster with 10 templates: mount, copy, reload, quiet
+ ↓ src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [OFF] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-061 S2 first visit to an empty cluster with 40 templates: mount, copy, reload, quiet
+ ↓ src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [OFF] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-063 S3 Complete one task (40 tasks): click to the overlay gone, then quiet
+ ↓ src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [OFF] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-064 S4 Move to next cluster (no gate; the next cluster is empty, 10 templates): Save to a settled screen
+ ↓ src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [OFF] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-065 S5 the Refresh icon (40 tasks): click to a quiet screen
+stderr | src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [OFF] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-066 S6 typing 20 characters into a task's comment box (40 tasks): React commits and render time per keystroke
+Keyborg instance k1 is being disposed incorrectly.
+
+ ✓ src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [OFF] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-066 S6 typing 20 characters into a task's comment box (40 tasks): React commits and render time per keystroke 3020ms
+ ↓ src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [ON] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-060 S1 a usual visit: mount to a usable screen (40 tasks), then everything quiet
+ ↓ src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [ON] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-061 S2 first visit to an empty cluster with 10 templates: mount, copy, reload, quiet
+ ↓ src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [ON] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-061 S2 first visit to an empty cluster with 40 templates: mount, copy, reload, quiet
+ ↓ src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [ON] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-063 S3 Complete one task (40 tasks): click to the overlay gone, then quiet
+ ↓ src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [ON] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-064 S4 Move to next cluster (no gate; the next cluster is empty, 10 templates): Save to a settled screen
+ ↓ src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [ON] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-065 S5 the Refresh icon (40 tasks): click to a quiet screen
+ ✓ src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost [ON] (LAT 120 ms per hop, logical rounds) > UT-CHKPERF-066 S6 typing 20 characters into a task's comment box (40 tasks): React commits and render time per keystroke 2085ms
+ ↓ src/features/pm/checklist/checklistVisit.bench.test.tsx > Cluster Check List — modelled visit cost: the table > UT-CHKPERF-099 prints the results (MODELLED: logical round trips, no server time; CPU is jsdom + dev build, relative only)
+
+ Test Files  1 passed (1)
+      Tests  2 passed | 13 skipped (15)
+   Start at  12:16:51
+   Duration  34.53s (import 51%, environment 20%, tests 15%, transform 7%, setup 7%)
+

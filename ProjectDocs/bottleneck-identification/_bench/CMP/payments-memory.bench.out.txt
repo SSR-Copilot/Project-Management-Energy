@@ -1,0 +1,3 @@
+payments=60000  retained heap +7.3 MiB (128 bytes/payment, source JSON object tree released)
+payments=100000  retained heap +12.2 MiB (128 bytes/payment, source JSON object tree released)
+payments=300000  retained heap +36.6 MiB (128 bytes/payment, source JSON object tree released)

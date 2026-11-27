@@ -1,0 +1,21 @@
+ID | Verdict | Action | Task | Impact | Frequency | Screens | Journey | RootConf | Effort | Regression | DepImpact | Basis
+SPA-01 | ACTUAL | FIX | T-A01 | 3 | 5 | 1 | 4 | 5 | 2 | 2 | 2 | MEASURED harness S3 3 rounds/3 requests; canvas YAML has no rows reload (UpdateIf only); 1 of 3 rounds removable (ESTIMATED 0.2-0.5 s per click); guard stays (D127, no If-Match D159)
+SPA-02 | OVERSTATED | FIX-AFTER-DECISION | T-A02 | 2 | 2 | 1 | 4 | 5 | 2 | 3 | 1 | MEASURED harness S4 11 rounds; DERIVED 1 round + 4 requests removable (pre-flight guard, lean reload); write order pinned by UT-CHKPERF-004 and SynchroniseProjectState; floor = 7 sequential server steps
+SPA-03 | SHARED-ROOT | MEASURE-FIRST | T-A03 | 4 | 2 | 2 | 3 | 3 | 3 | 4 | 3 | DERIVED flow depth 5-19 levels from export 1.21.709; flow time unmeasured anywhere; 1 round removable now (rows read beside Run); seconds only via non-modal UX (DECISION)
+NET-17 | ACTUAL | FIX-AFTER-DECISION | T-A09 | 3 | 2 | 2 | 3 | 4 | 3 | 4 | 2 | Source read: no deadline, no retry by design (non-idempotent); reliability not speed; owner wording T-08 required
+SPA-04 | OVERSTATED | DEFER | T-A09 | 2 | 2 | 1 | 3 | 4 | 1 | 2 | 1 | Wait is deliberate (NEW 6 Nov 2026, canvas shows half-way state); poll tuning saves <= 1.5 s quantisation on Only-Notifications gates; only the silent timeout message is actionable (merged NET-18)
+SPA-05 | ACTUAL | FIX-AFTER-PROBE | T-A07 | 3 | 3 | 1 | 4 | 4 | 3 | 3 | 1 | MEASURED harness S1 usable at round 4 with 2 Entra rounds; cold only (30 min cache); Entra latency unmeasured (D156 s4); D156 s6 decision
+SPA-06 | UNRESOLVED | MEASURE-FIRST | - | 3 | 2 | 1 | 3 | 3 | 2 | 3 | 1 | MEASURED harness S2 6 rounds/22 requests (10 templates); bulk 1.2-1.9 s per request recorded D156 s6; needs D138 B1 DEV test
+SPA-07 | NOT-A-BOTTLENECK | DEFER | - | 1 | 3 | 1 | 2 | 3 | 2 | 2 | 1 | DERIVED 3-4 small reads off the critical path, no overlay (empty plan skips the job); D158 product-approved behaviour
+SPA-08 | OVERSTATED | DEFER | T-A07 | 1 | 2 | 1 | 2 | 4 | 1 | 1 | 1 | DERIVED fan-out = distinct Portfolio Managers (a handful); in-flight dedup in personCache; fold into T-A07 if built
+SPA-09 | ACTUAL | FIX | T-A04 | 2 | 5 | 4 | 4 | 4 | 2 | 1 | 2 | DERIVED grep: prefetch only from bootPrefetch; intent pattern already exists for Generators (generatorsWarmup.ts); gain bounded by hover-to-click 0.1-0.4 s (ESTIMATED)
+SPA-10 | ACTUAL | FIX-AFTER-PROBE | T-A04 | 2 | 2 | 2 | 2 | 3 | 1 | 2 | 1 | DERIVED 11 speculative reads at 1.5 s; lazy switch exists and is tested; hit rate unmeasured
+SPA-11 | ACTUAL | MEASURE-FIRST | - | 3 | 5 | 1 | 5 | 4 | 2 | 2 | 1 | RECORDED D119 F4 HAR about 540 kB per page; annotation constant is SDK (F6); page-2 prefetch hit rate unknown; D41-D46 invariants untouched
+SPA-12 | UNRESOLVED | DEFER | - | 1 | 4 | 1 | 2 | 2 | 3 | 3 | 1 | Stage 1 DERIVED only; no profile; UT-OVUI-047/UT-OVFIX-060 read the URL per keystroke
+SPA-13 | SHARED-ROOT | DEFER | - | 4 | 4 | 4 | 5 | 4 | 4 | 3 | 3 | DERIVED about 14 requests/3 waves per new tab (doc 03 B.0); DEC-C held; owned with NET-22; root R1
+SPA-14 | ACTUAL | FIX | T-A05 | 2 | 2 | 1 | 3 | 4 | 2 | 3 | 1 | DERIVED from planClusterAndEntities: shareholder writes sequential on edit, concurrent on create; N-1 rounds saved; tracking rebuild waits for QA-07 DEV order check
+SPA-15 | UNRESOLVED | FIX-AFTER-PROBE | - | 3 | 2 | 1 | 3 | 2 | 3 | 3 | 1 | DERIVED top 5000 + maxPageSize 500 in fetchPage (possible silent cut at 500); probe P-1 decides; RND-14 jsdom open 326-407 ms at 2,000 options (relative only)
+SPA-16 | UNRESOLVED | MEASURE-FIRST | - | 2 | 4 | 1 | 3 | 2 | 1 | 1 | 1 | MEASURED chunk 427.8 kB gzip (Stage 1); form not blocked; parse time and input delay unmeasured
+SPA-17 | NOT-A-BOTTLENECK | ACCEPT | - | 1 | 2 | 1 | 2 | 2 | 1 | 5 | 1 | DERIVED server plugin time, canvas parity; business relies on recalculation until confirmed otherwise
+SPA-18 | ACTUAL | FIX-AFTER-PROBE | T-A06 | 1 | 5 | 5 | 3 | 4 | 1 | 2 | 1 | DERIVED two sequential reads off the paint path; flag exists; QA-09 DEV check of by-name filter (Prod console gate D164)
+SPA-19 | ACTUAL | DEFER | - | 1 | 4 | 3 | 2 | 4 | 3 | 3 | 1 | DERIVED five project-row loaders, one small read per switch after 30 s; session row lacks netyield and would be staler (PB-10)

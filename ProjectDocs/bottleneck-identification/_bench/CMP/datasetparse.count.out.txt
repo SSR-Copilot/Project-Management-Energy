@@ -1,0 +1,1 @@
+records=102 (100 contracts)  getValue calls=28786  getFormattedValue calls=23845  per contract: 288 + 238

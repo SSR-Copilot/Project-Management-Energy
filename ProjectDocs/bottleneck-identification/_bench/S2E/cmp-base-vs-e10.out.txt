@@ -1,0 +1,24 @@
+startup: out-base: 8 files 1030.1 min / 302.0 gz | out-e10: 8 files 1029.6 min / 301.9 gz | JS files: 155 / 150
+screen                                            [0] n   min    gz     [1] n   min    gz    d.gz(last-first)
+admin/admin-capex-accounts                        30   143.6   52.6     29   143.4   52.5      -0.2
+admin/admin-contract                              28   149.0   49.5     27   148.9   49.3      -0.1
+admin/admin-cost                                  37   188.0   64.5     36   187.7   64.1      -0.4
+admin/admin-default-checklists                    39   210.8   74.7     30   162.4   58.5     -16.2
+admin/admin-gates-approvals                       39   202.3   70.3     32   156.2   55.3     -15.0
+admin/admin-milestones                            23    78.8   31.3     22    78.7   31.2      -0.1
+cost/add-costs-from-table                         40   400.8  130.0     30   354.2  112.3     -17.8
+cost/capex-costs                                  43   441.7  138.5     33   395.2  120.8     -17.7
+cost/contracts                                    38   383.9  119.0     34   382.2  115.7      -3.4
+cost/land-lease                                   46   458.4  141.9     36   411.8  124.2     -17.7
+cost/opex-costs                                   46   459.7  142.6     36   413.1  124.9     -17.7
+pm/checklist                                      28   288.4   88.1     26   247.0   75.3     -12.8
+pm/finance                                        33   362.2  107.6     25   294.5   85.7     -22.0
+pm/general-data                                   50   374.4  118.0     35   238.3   77.2     -40.8
+pm/generators                                     40   356.6  113.2     37   334.3  105.1      -8.1
+pm/grid-operator                                  16   169.1   52.1     13    99.2   32.1     -20.0
+pm/milestones                                     45   414.4  128.1     32   211.4   67.6     -60.4
+pm/planning                                       30   315.3   94.1     27   245.4   74.2     -19.9
+pm/production                                     36   271.6   83.8     32   248.4   75.2      -8.6
+pm/project-main                                   26   159.6   55.6     18   111.6   39.6     -16.0
+pm/revenues                                       44   467.6  140.7     39   336.6  103.6     -37.2
+pm/team                                           22    97.2   37.4     22    97.1   37.3      -0.1

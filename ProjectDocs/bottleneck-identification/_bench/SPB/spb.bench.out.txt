@@ -1,0 +1,29 @@
+SPB BENCH (SYNTHETIC inputs; one Node process; relative only)
+  [SYNTHETIC] 30 turbines, 3 device types, 3 all-WTG land-lease heads: 136 writes, grouped into 136 plan steps
+planStandardContracts (waves on) 30 turbines: 3.183 ms per call (100 reps) -> 136 plan steps
+planStandardContracts (waves off) 30 turbines: 1.136 ms per call (100 reps) -> 136 plan steps
+groupIntoWaves only 30 turbines: 0.426 ms per call (100 reps) -> 136 items
+  [SYNTHETIC] 100 turbines, 4 device types, 3 all-WTG land-lease heads: 351 writes, grouped into 351 plan steps
+planStandardContracts (waves on) 100 turbines: 3.492 ms per call (100 reps) -> 351 plan steps
+planStandardContracts (waves off) 100 turbines: 1.352 ms per call (100 reps) -> 351 plan steps
+groupIntoWaves only 100 turbines: 1.066 ms per call (100 reps) -> 351 items
+  [SYNTHETIC] 800 turbines, 8 device types, 3 all-WTG land-lease heads: 2471 writes, grouped into 2471 plan steps
+planStandardContracts (waves on) 800 turbines: 24.561 ms per call (20 reps) -> 2471 plan steps
+planStandardContracts (waves off) 800 turbines: 7.007 ms per call (20 reps) -> 2471 plan steps
+groupIntoWaves only 800 turbines: 8.120 ms per call (20 reps) -> 2471 items
+validateHedgedVolume 36 years (432 months) x 30 overlapping contracts: 2.042 ms per call (200 reps)
+generateVolumeRows 36 years: 0.025 ms per call (2000 reps) -> 36 items
+applyRevenueEngine with 3,000 assumption rows (SYNTHETIC): 0.854 ms per call (200 reps)
+planSaveContract Edit, 36 stored + 36 new volumes: 0.267 ms per call (500 reps) -> 73 plan steps
+regenerateRepaymentYears 40 years: 0.031 ms per call (5000 reps) -> 41 items
+repaymentDiff 40 rows (individual profile): 0.031 ms per call (5000 reps)
+projectCatalog 2,000 catalogue models (SYNTHETIC): 1.854 ms per call (200 reps) -> 2000 items
+cascadeOptions 2,000 models, supplier + type selected (per type-panel render): 0.465 ms per call (500 reps)
+planTurbineAllocation 20 turbines x 2 all-WTG costs: 0.009 ms per call (500 reps) -> 40 items
+allocationCreates 20 turbines x 2 all-WTG costs: 0.071 ms per call (500 reps) -> 40 items
+planTurbineAllocation 200 turbines x 5 all-WTG costs: 0.132 ms per call (500 reps) -> 1000 items
+allocationCreates 200 turbines x 5 all-WTG costs: 0.703 ms per call (500 reps) -> 1000 items
+buildTurbineNames count 200 over 800 existing: 0.032 ms per call (2000 reps) -> 200 items
+planToggleStatus 200 turbines: 0.071 ms per call (2000 reps) -> 202 plan steps
+planCreateGeneratorType N=200 over 800 existing: 0.244 ms per call (500 reps) -> 201 plan steps
+

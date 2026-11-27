@@ -1,0 +1,7 @@
+raw cached Intl.NumberFormat.format                              0.69 us/call  total 139 ms for 200000
+numberFormat(locale, opts).format  (pool lookup w/ JSON.stringify key) 1.85 us/call  total 370 ms for 200000
+canvasNumberText(value, locale, opts)                            2.69 us/call  total 539 ms for 200000
+raw cached Intl.DateTimeFormat.format                            1.35 us/call  total 271 ms for 200000
+dateFormat(locale, opts).format                                  5.57 us/call  total 1114 ms for 200000
+a.localeCompare(b) (no locale)                                   0.31 us/call  total 62 ms for 200000
+shared Intl.Collator.compare                                     0.22 us/call  total 45 ms for 200000

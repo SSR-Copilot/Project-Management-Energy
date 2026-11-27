@@ -1,0 +1,2 @@
+21600 cost rows (each with a Date): app structuralSharingWithDates 13.1 ms (returns cached array: true) | stock TanStack replaceEqualDeep 14.7 ms
+180000 cost rows (each with a Date): app structuralSharingWithDates 120.0 ms (returns cached array: true) | stock TanStack replaceEqualDeep 147.2 ms
