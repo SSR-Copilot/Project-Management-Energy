@@ -9,7 +9,7 @@ import {
   FREQUENCY_OPTIONS, NO_MILESTONE, SUMMARY_CATEGORY, SUMMARY_TAB_NAME,
   accountsInCategory, allocatedForYear, applyDescriptionChange, averagePayment, byClusterJson,
   canPersistIndividual, canSaveContract, categoryTabs, clusterLinkageChanged,
-  clusterLinkageConfirmation, clusterPayments, clustersHavingCost, contractSubLabel,
+  clusterLinkageConfirmation, clusterPayments, clusterRangeEnd, clustersHavingCost, contractSubLabel,
   describeDescriptionError,
   equalPayments, formatSummaryAmount, frequencyLabel, individualDistribution, initialCostValue,
   clearedMonthKeys, withoutClearedMonths, monthAmountText,
@@ -17,7 +17,7 @@ import {
   needsClusterLinkageConfirmation,
   newCostLine, paidToggleNeedsConfirmation, panelTitle, parseByClusterJson,
   parseStartEndJson, paymentIdsByMonth, planDeleteContract, proposedPayments, reconcilePayments,
-  resolveCategory, resolveEqualMode, resolvePaidTarget, startEndJson,
+  resolveCategory, resolveEqualMode, resolvePaidTarget, resolvedPayments, startEndJson,
   totalCostForPercent, totalCostMax, validateEndMonthYear, validateStartMonthYear,
   validateTotalCost,
   validateMonthAmount, monthAmountErrors, hasMonthRangeError, gridPayer,
@@ -912,6 +912,42 @@ describe("clustersHavingCost / needsClusterLinkageConfirmation", () => {
       .map((c) => c.order)).toEqual([1]);
   });
 
+  it("UT-CAPEXR-210 the handover month belongs to the next cluster only for an Individual Distribution (half-open end)", () => {
+    // `gblClusterDurations`: cluster n ends in the month cluster n+1 starts, so the two windows share that month.
+    const chain = [
+      { order: 4, name: "Cluster 4", startYear: 2032, startMonth: 6, endYear: 2034, endMonth: 1 },
+      { order: 5, name: "Cluster 5", startYear: 2034, startMonth: 1, endYear: 2035, endMonth: 1 },
+    ];
+    const january2034 = [{ year: 2034, month: 1, cost: 110 }];
+    // Individual: `Date(C.Year, m, 1) < e` (`Capex Costs Screen.pa.yaml:839-…`, `:17574`) — Cluster 5 only.
+    expect(clustersHavingCost(chain, january2034, clusterRangeEnd("individual")).map((c) => c.order)).toEqual([5]);
+    // Equal: `Or(y < ey, And(y = ey, m <= em))` (`:788-838`) — both, as the canvas has it.
+    expect(clustersHavingCost(chain, january2034, clusterRangeEnd("equal")).map((c) => c.order)).toEqual([4, 5]);
+    // The default is the inclusive form, so every earlier caller reads as before.
+    expect(clustersHavingCost(chain, january2034).map((c) => c.order)).toEqual([4, 5]);
+    // The month before the handover is Cluster 4 only under both forms.
+    expect(clustersHavingCost(chain, [{ year: 2033, month: 12, cost: 1 }], "exclusive").map((c) => c.order)).toEqual([4]);
+  });
+
+  it("UT-CAPEXR-211 an Individual cost starting in its linked cluster's first month saves without the dialog (QA 25 Nov 2026, 033 / 044)", () => {
+    const chain = [
+      { order: 4, name: "Cluster 4", startYear: 2032, startMonth: 6, endYear: 2034, endMonth: 1 },
+      { order: 5, name: "Cluster 5", startYear: 2034, startMonth: 1, endYear: 2035, endMonth: 1 },
+    ];
+    const base = {
+      clusters: chain,
+      rows: [{ year: 2034, month: 1, cost: 110 }, { year: 2034, month: 2, cost: 111 }, { year: 2034, month: 3, cost: 112 }],
+      selectedClusterOrder: 5, clusterLinkageChanged: true, costPaidByChanged: false, milestoneRelinkResetNeeded: false,
+    };
+    expect(needsClusterLinkageConfirmation({ ...base, rangeEnd: clusterRangeEnd("individual") })).toBe(false);
+    // An Equal Distribution over the same months still asks, as the canvas equal branch does (019).
+    expect(needsClusterLinkageConfirmation({ ...base, rangeEnd: clusterRangeEnd("equal") })).toBe(true);
+    // Money genuinely in Cluster 4 asks under both forms.
+    expect(needsClusterLinkageConfirmation({
+      ...base, rows: [{ year: 2033, month: 6, cost: 1 }], rangeEnd: clusterRangeEnd("individual"),
+    })).toBe(true);
+  });
+
   it("UT-CAPEXR-107 asks only when money sits OUTSIDE the cluster being linked to", () => {
     /*
      * `Or(And(CountRows(Filter(colOtherClusterHavingCost, Order <> Selected.Order)) > 0,
@@ -1261,16 +1297,58 @@ describe("averagePaymentText: what the Average Amount per Payment box shows (D90
 });
 
 describe("contractTotalToStore: the Total Cost a contract keeps (D90, CAPEX-121)", () => {
+  const pct = { distribution: "individual", distributionScheme: "percent" } as const;
+  const abs = { distribution: "individual", distributionScheme: "absolute" } as const;
+  const equal = { distribution: "equal", distributionScheme: "absolute" } as const;
+
   it("UT-CAPEXR-196 a typed total wins; an individual contract without one stores the rounded sum of its months", () => {
     const months = [{ amount: 100 }, { amount: 250 }, { amount: 0 }];
-    expect(contractTotalToStore("individual", "", months)).toBe(350);
-    expect(contractTotalToStore("individual", "500", months)).toBe(500);
-    expect(contractTotalToStore("individual", "", [{ amount: 0.04 }, { amount: 0.04 }])).toBe(0.1);
+    expect(contractTotalToStore(pct, "", months)).toBe(350);
+    expect(contractTotalToStore(pct, "500", months)).toBe(500);
+    expect(contractTotalToStore(abs, "", [{ amount: 0.04 }, { amount: 0.04 }])).toBe(0.1);
   });
 
   it("UT-CAPEXR-197 an equal contract without a total stores nothing", () => {
-    expect(contractTotalToStore("equal", "", [{ amount: 100 }])).toBeUndefined();
-    expect(contractTotalToStore("equal", "1000", [])).toBe(1000);
+    expect(contractTotalToStore(equal, "", [{ amount: 100 }])).toBeUndefined();
+    expect(contractTotalToStore(equal, "1000", [])).toBe(1000);
+  });
+
+  it("UT-CAPEXR-209 Absolute Values always stores the sum of its months, whatever the hidden Total Costs state holds (QA 25 Nov 2026, 042)", () => {
+    // The panel's total state opens with the STORED total (333) although the box is not on screen for Absolute Values;
+    // the canvas recomputes `locAllYearsCost` from the month boxes for exactly this branch (`:17574`).
+    const edited = [{ amount: 123 }, { amount: 222 }, { amount: 321 }];
+    expect(contractTotalToStore(abs, "333", edited)).toBe(666);
+    expect(contractTotalToStore(abs, "", edited)).toBe(666);
+    // % Values keeps the typed-total rule: the box IS on screen there.
+    expect(contractTotalToStore(pct, "333", edited)).toBe(333);
+  });
+});
+
+describe("resolvedPayments: % Values convert against the TYPED total (canvas `locTotalCost`, :17574; QA 25 Nov 2026, 028-030)", () => {
+  /** The contract test 027 leaves behind: total 100000, Dec 25 %, Jan 35 %, Feb 40 %, as `paymentsAsPercent` opens it. */
+  const stored = line({
+    distribution: "individual", distributionScheme: "percent", totalCost: 100000,
+    payments: [pay(2024, 12, 25), pay(2025, 1, 35), pay(2025, 2, 40)],
+  });
+  const money = (l: CostLine, typed: string) =>
+    resolvedPayments(l, typed, proposedPayments(l, typed, [])).map((p) => p.amount);
+
+  it("UT-CAPEXR-206 a total changed on Edit re-prices every month (030: 100000 -> 200000, % unchanged)", () => {
+    expect(money(stored, "200000")).toEqual([50000, 70000, 80000]);
+  });
+
+  it("UT-CAPEXR-207 new percentages and a new total both count (029: 20 / 30 / 50 of 200000)", () => {
+    const edited = { ...stored, payments: [pay(2024, 12, 20), pay(2025, 1, 30), pay(2025, 2, 50)] };
+    expect(money(edited, "200000")).toEqual([40000, 60000, 100000]);
+  });
+
+  it("UT-CAPEXR-208 a blank box falls back to the stored total; Absolute Values passes money through untouched", () => {
+    expect(money(stored, "")).toEqual([25000, 35000, 40000]);
+    const absolute = line({
+      distribution: "individual", distributionScheme: "absolute", totalCost: 333,
+      payments: [pay(2024, 12, 123), pay(2025, 1, 222), pay(2025, 2, 321)],
+    });
+    expect(money(absolute, "333")).toEqual([123, 222, 321]);
   });
 });
 

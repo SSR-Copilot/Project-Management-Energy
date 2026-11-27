@@ -56,7 +56,7 @@ import {
   buildStandardOptions, checkStandardContractClick, isPerWtgUnit, standardAssumptionAmount, standardContractRefusal,
 } from "./standardContracts";
 import {
-  clusterPayments as clusterMoneyPayments, contractTotalToStore, EDITED_FROM_SPREADSHEET_WARNING, individualSaveError, showEditedFromSpreadsheetWarning,
+  clusterPayments as clusterMoneyPayments, clusterRangeEnd, contractTotalToStore, EDITED_FROM_SPREADSHEET_WARNING, individualSaveError, showEditedFromSpreadsheetWarning,
 } from "./rules";
 import type { GridCallback } from "./pcf/ui/GridRenderer";
 import {
@@ -124,7 +124,11 @@ const useStyles = makeStyles({
     rowGap: space.xl,
     // Left as `stretch` on purpose: it is what carries the year column's divider the full
     // height of the panel body, as the reference shows.
-    "@media (max-width: 899px)": { gridTemplateColumns: "minmax(0, 1fr)" },
+    // The one row is the body's remaining height, so each column scrolls inside it (`.capex-canvas-panel
+    // .canvas-panel-body` in canvas.css keeps the body itself from scrolling); stacked on a narrow window, the
+    // body scrolls instead.
+    gridTemplateRows: "minmax(0, 1fr)", flexGrow: 1, minHeight: 0, height: "100%",
+    "@media (max-width: 899px)": { gridTemplateColumns: "minmax(0, 1fr)", gridTemplateRows: "none", overflowY: "auto" },
   },
   /**
    * `con_…_PvModuleType_Fields_3`: `PaddingLeft: =10`; each field sits at `gblAppSizes.Position.X` (20) and is
@@ -135,8 +139,10 @@ const useStyles = makeStyles({
   formColumn: {
     display: "flex", flexDirection: "column", gap: space.l, minWidth: "0",
     paddingLeft: "9px", paddingRight: "37px",
+    // Scrolls on its own only when a short window cannot hold the form; the year gallery never drags it along.
+    minHeight: 0, overflowY: "auto",
     "& .canvas-radio-group legend > span": { color: "#242424" },
-    "@media (max-width: 899px)": { paddingRight: "0" },
+    "@media (max-width: 899px)": { paddingRight: "0", overflowY: "visible" },
   },
   /**
    * `con_Warning_OnEditFromPCF` (`:12426-12500`): `Fill: RGBA(245, 145, 30, 0.5)`, `Height: 80`, 10 px padding, a horizontal
@@ -153,8 +159,12 @@ const useStyles = makeStyles({
     borderLeftColor: tokens.colorNeutralStroke2,
     // `con_…_Fields_4` `PaddingLeft: =10` + `gal_IndividualCost_Items_1` `X: =10` + the year label's `X: =10`.
     paddingLeft: "28px",
+    // `gal_IndividualCost_Items_1` is `Height: =Parent.Height-Self.Y` (`:12538-12540`): the gallery fills the column and
+    // scrolls inside it, its scrollbar at the column's own right edge. A little right padding keeps the month boxes
+    // clear of that bar.
+    minHeight: 0, overflowY: "auto", paddingRight: "4px",
     "@media (max-width: 899px)": {
-      borderLeftStyle: "none", paddingLeft: "0", paddingTop: space.l,
+      borderLeftStyle: "none", paddingLeft: "0", paddingRight: "0", paddingTop: space.l, overflowY: "visible",
     },
   },
 
@@ -846,9 +856,14 @@ export default function CapexCostsScreen() {
     storedName: storedLine?.linkedClusterName,
     payments: storedLine?.payments ?? [],
   });
-  /** `colOtherClusterHavingCost` — against the RAW timeline, as the canvas' `gblClusterDurations`. */
+  /**
+   * `colOtherClusterHavingCost` — against the RAW timeline, as the canvas' `gblClusterDurations`. The handover month
+   * between two clusters counts for the next cluster only on an Individual Distribution and for both on an Equal one
+   * (`clusterRangeEnd`; the canvas differs per branch).
+   */
+  const rangeEnd = clusterRangeEnd(edit?.distribution ?? "equal");
   const clustersWithCost = clustersHavingCost(
-    clusters, proposed.map(p => ({ year: p.year, month: p.month, cost: p.amount })),
+    clusters, proposed.map(p => ({ year: p.year, month: p.month, cost: p.amount })), rangeEnd,
   );
   const needsLinkConfirmation = edit !== null && needsClusterLinkageConfirmation({
     clusters,
@@ -857,6 +872,7 @@ export default function CapexCostsScreen() {
     clusterLinkageChanged: linkageChanged,
     costPaidByChanged,
     milestoneRelinkResetNeeded: relinkResetNeeded,
+    rangeEnd,
   });
   const linkConfirmation = clusterLinkageConfirmation({
     costPaidByChanged,
@@ -949,7 +965,7 @@ export default function CapexCostsScreen() {
     const stored = storedLine?.payments ?? [];
     try {
       await writes.saveLine.mutateAsync({
-        line: { ...edit, totalCost: contractTotalToStore(edit.distribution, costValue, proposed) },
+        line: { ...edit, totalCost: contractTotalToStore(edit, costValue, proposed) },
         accountId: edit.accountId,
         isNew: !isEdit,
         // A cleared (or unreadable) month box is left out, so its stored row is deleted, as the canvas Save does (D117).

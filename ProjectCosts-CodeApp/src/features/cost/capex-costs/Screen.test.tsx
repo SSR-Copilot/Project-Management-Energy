@@ -646,6 +646,46 @@ describe("the Link to Milestone dropdown", () => {
   });
 
   /**
+   * QA 25 Nov 2026, regression pack DEVEX CAPEX 033 / 044: an Individual cost whose first month IS the linked
+   * cluster's first month asked "You have entered costs in Cluster 4, 5 …". `gblClusterDurations` ends each cluster in
+   * the month its successor starts, and the canvas Individual branch reads that end half-open (`:17574`), so the
+   * handover month is the next cluster's alone. On this fixture 3-Application submitted is 1 Jan 2017: January 2017
+   * starts Cluster 3 and closes Cluster 2.
+   */
+  it("UT-CAPEXLINK-001 an Individual cost starting in its linked cluster's first month saves without the dialog", () => {
+    lines = [individualContract({
+      payments: [
+        { year: 2017, month: 1, amount: 110, paid: false },
+        { year: 2017, month: 2, amount: 111, paid: false },
+        { year: 2017, month: 3, amount: 112, paid: false },
+      ],
+    })];
+    mountAndOpenEdit("l1");
+    fireEvent.click(dropdown() as HTMLElement);
+    fireEvent.click(screen.getByRole("option", { name: "Cluster 3" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(screen.queryByText("Change Cluster Link")).not.toBeInTheDocument();
+    expect(saveLine.mutateAsync).toHaveBeenCalledTimes(1);
+    expect(savedLine()).toMatchObject({ linkedClusterName: "Cluster 3", linkedClusterOrder: 3 });
+  });
+
+  it("UT-CAPEXLINK-002 one month before the handover is still the earlier cluster, so the dialog asks", () => {
+    lines = [individualContract({
+      payments: [{ year: 2016, month: 12, amount: 110, paid: false }, { year: 2017, month: 1, amount: 111, paid: false }],
+    })];
+    mountAndOpenEdit("l1");
+    fireEvent.click(dropdown() as HTMLElement);
+    fireEvent.click(screen.getByRole("option", { name: "Cluster 3" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    // Both clusters carry money, so the sentence names both — as the canvas lists `colOtherClusterHavingCost` unfiltered.
+    expect(screen.getByText("Change Cluster Link")).toBeInTheDocument();
+    expect(screen.getByText(/You have entered costs in Cluster 2, 3 and linked them to Cluster 3\./)).toBeInTheDocument();
+    expect(saveLine.mutateAsync).not.toHaveBeenCalled();
+  });
+
+  /**
    * `locCostPaidByChanged` is the SECOND arm of the Save gate's `Or`
    * (`CapexScreenCode.txt:17413`), and it stands alone — no cluster has to hold money and the
    * link need not have moved. `locCostPaidByChanged: locInitialCostPaidBy <> Self.Selected.Value`
@@ -1406,6 +1446,55 @@ describe("confirmation dialog dimensions", () => {
     // The next change clears the strip.
     touchPanel();
     expect(screen.queryByText("Total percentage is over 100%")).not.toBeInTheDocument();
+  });
+
+  /**
+   * QA 25 Nov 2026, regression pack DEVEX CAPEX 028-030: an Individual % Values contract edited from a total of
+   * 100,000 to 200,000 wrote the new total and left every month at the OLD split. The canvas converts each % box
+   * with `locTotalCost: Value(txt_AddContract_RightPanel_TotalCost_1.Value)` (`:17574`), the typed figure.
+   */
+  it("UT-CAPEXPCT-002 a changed Total Costs re-prices the % months on Save (030: 25/35/40 % of 200000)", async () => {
+    lines = [individualContract({
+      distributionScheme: "percent", totalCost: 100000,
+      payments: [
+        { id: "c6", year: 2016, month: 6, amount: 25000, paid: false },
+        { id: "c7", year: 2016, month: 7, amount: 35000, paid: false },
+        { id: "c8", year: 2016, month: 8, amount: 40000, paid: false },
+      ],
+    })];
+    mountAndOpenEdit("l1");
+    fireEvent.change(screen.getByLabelText(/Total Costs/), { target: { value: "200000" } });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Save" })); });
+    expect(saveLine.mutateAsync).toHaveBeenCalledTimes(1);
+    expect(savedLine()?.totalCost).toBe(200000);
+    const written = saveLine.mutateAsync.mock.calls[0]?.[0]?.payments as { month: number; amount: number | null }[];
+    expect(written.map((p) => [p.month, p.amount])).toEqual([[6, 50000], [7, 70000], [8, 80000]]);
+  });
+
+  /**
+   * QA 25 Nov 2026, regression pack DEVEX CAPEX 042: an Absolute Values contract edited from 110/111/112 to
+   * 123/222/321 wrote the months and kept a total of 333. Absolute Values has no Total Costs box; the canvas stores
+   * `locAllYearsCost = Round(Sum(colNewEditPanelCost, TotalSave), 1)` for it (`:17574`).
+   */
+  it("UT-CAPEXMONTH-003 an Absolute Values edit stores the sum of the new months as the total (042: 666, not 333)", async () => {
+    lines = [individualContract({
+      distributionScheme: "absolute", totalCost: 333,
+      payments: [
+        { id: "c6", year: 2016, month: 6, amount: 110, paid: false },
+        { id: "c7", year: 2016, month: 7, amount: 111, paid: false },
+        { id: "c8", year: 2016, month: 8, amount: 112, paid: false },
+      ],
+    })];
+    mountAndOpenEdit("l1");
+    fireEvent.click(screen.getByRole("button", { name: /^2016 Allocated Cost/ }));
+    fireEvent.change(screen.getByLabelText("June 2016"), { target: { value: "123" } });
+    fireEvent.change(screen.getByLabelText("July 2016"), { target: { value: "222" } });
+    fireEvent.change(screen.getByLabelText("August 2016"), { target: { value: "321" } });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Save" })); });
+    expect(saveLine.mutateAsync).toHaveBeenCalledTimes(1);
+    expect(savedLine()?.totalCost).toBe(666);
+    const written = saveLine.mutateAsync.mock.calls[0]?.[0]?.payments as { month: number; amount: number | null }[];
+    expect(written.map((p) => [p.month, p.amount])).toEqual([[6, 123], [7, 222], [8, 321]]);
   });
 
   it("UT-CAPEXSTD-010 a standard contract the live lookup finds already created is refused and leaves the menu (D91, CAPEX-135)", async () => {
