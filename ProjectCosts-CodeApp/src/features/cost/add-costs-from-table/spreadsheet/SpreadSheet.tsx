@@ -27,6 +27,7 @@ import {
   type ColumnWindow, type RowWindow,
 } from "./rowWindow";
 import { columnWidthsFor, sameWidths, type ColumnMetrics } from "./columnWidths";
+import { addRowCostPaidBy } from "../rules";
 
 export interface SheetCell extends CellBase<string> {
   value: string;
@@ -45,6 +46,11 @@ export interface ISpreadSheetProps {
   addRowToken?: number;
   deleteRowToken?: number;
   copyTableToken?: number;
+  /**
+   * Sub-account NUMBER -> "DevCo" | "SPV", from the SPVDevCo mapping (`payerDefaultsByNumber`). Add Row seeds the new
+   * row's Cost Paid By from the sub-account it lands under, as the PCF did (bug 15410). Omitted: the cell stays blank.
+   */
+  payerDefaults?: ReadonlyMap<string, string>;
   /**
    * Which year block the table shows (zero-based), or `null` / omitted for every year. NEW — no canvas
    * equivalent (D73): only the visible columns are rendered, which is what keeps a click or Tab fast; the
@@ -317,6 +323,12 @@ export function gridToJson(grid: SheetGrid, startYear: string): SpreadsheetOutpu
  */
 const RowWindowContext = React.createContext<{
   window: RowWindow; columns: ColumnWindow | null; active: Point | null; columnWidths: number[] | null;
+  /**
+   * The current selection's corners (view coordinates), drawn whatever the window (bug 15411): react-spreadsheet
+   * measures a cell when it mounts, and sizes the selection rectangle from the measured cells at both ends of the
+   * range. `null`: a single cell, or nothing, selected.
+   */
+  selection: { start: Point; end: Point } | null;
 } | null>(null);
 
 /** Everything drawn (`drawAllRows`). */
@@ -388,13 +400,17 @@ function readColumnMetrics(box: HTMLElement): (ColumnMetrics & { rowNumberWidth:
 function WindowedRow({ row, children }: RowProps) {
   const ctx = React.useContext(RowWindowContext);
   if (!ctx) return <tr>{children}</tr>;
-  if (!rowDrawn(ctx.window, row, ctx.active?.row ?? null)) {
+  const sel = ctx.selection;
+  const pinnedRows = sel ? [sel.start.row, sel.end.row] : [];
+  if (!rowDrawn(ctx.window, row, ctx.active?.row ?? null, pinnedRows)) {
     return <tr className="Spreadsheet__row--placeholder" style={{ height: ctx.window.rowHeight }} />;
   }
   if (!ctx.columns) return <tr>{children}</tr>;
   // The row-number cell, then one cell per grid column (react-spreadsheet's order).
   const [rowNumber, ...cells] = React.Children.toArray(children);
-  const runs = columnRuns(cells.length, ctx.columns, ctx.active?.column ?? null);
+  // The selection's end columns are drawn only in its end rows: those are the cells react-spreadsheet measures.
+  const pinnedColumns = sel && (row === sel.start.row || row === sel.end.row) ? [sel.start.column, sel.end.column] : [];
+  const runs = columnRuns(cells.length, ctx.columns, ctx.active?.column ?? null, pinnedColumns);
   return (
     <tr>
       {rowNumber}
@@ -414,7 +430,7 @@ export const SpreadSheetComp = React.memo(function SpreadSheetComp({
   data: initialData,
   onDataChange,
   onAddRow, onDeleteRow, onCopyTable,
-  addRowToken, deleteRowToken, copyTableToken, visibleYearIndex = null, drawAllRows = false,
+  addRowToken, deleteRowToken, copyTableToken, payerDefaults, visibleYearIndex = null, drawAllRows = false,
 }: ISpreadSheetProps) {
   /*
    * `data` is the sheet: what `onDataChange`, Copy Table, Add Row and Delete Row work on. `shown` is
@@ -433,6 +449,8 @@ export const SpreadSheetComp = React.memo(function SpreadSheetComp({
     });
   }, []);
   const selectedRowIndexRef = React.useRef<number | null>(null);
+  /** The current multi-cell selection's corners, for `WindowedRow` (bug 15411); `null` for a single cell or none. */
+  const [selection, setSelection] = React.useState<{ start: Point; end: Point } | null>(null);
   const selectedCtorRef = React.useRef<string>("");
   /** Rows `handleChange`'s cell rules have already run on: running them again changes nothing. */
   const cleanRows = React.useRef(new WeakSet<SheetCell[]>());
@@ -596,6 +614,7 @@ export const SpreadSheetComp = React.memo(function SpreadSheetComp({
 
       if (!range?.start || !range?.end) {
         selectedCtorRef.current = "OtherSelection";
+        setSelection(null);
         return;
       }
 
@@ -603,6 +622,14 @@ export const SpreadSheetComp = React.memo(function SpreadSheetComp({
       const sc = range.start.column;
       const er = range.end.row;
       const ec = range.end.column;
+
+      // Bug 15411: the corners of a multi-cell selection are drawn whatever the window (`WindowedRow`), so
+      // react-spreadsheet can measure them and size its selection rectangle. A single cell needs nothing.
+      setSelection((prev) => {
+        if (sr === er && sc === ec) return prev === null ? prev : null;
+        if (prev && prev.start.row === sr && prev.start.column === sc && prev.end.row === er && prev.end.column === ec) return prev;
+        return { start: { row: sr, column: sc }, end: { row: er, column: ec } };
+      });
 
       // Selection coordinates are the VIEW's: "the whole worksheet" means every visible column.
       const lastRow = viewData.length - 1;
@@ -640,16 +667,18 @@ export const SpreadSheetComp = React.memo(function SpreadSheetComp({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [copyTableToken]);
 
-  // Add Row: insert after the currently-selected row, with Depreciation / Apply VAT "Yes" and Cost Paid By BLANK.
-  // The PCF source looks the nearest account up in the DevCo/SPV mapping; the user's canvas screenshot shows new
-  // rows with Cost Paid By empty, and the user wants it so (18 Nov 2026: "SPV should not be selected by default
-  // when adding a new row"). Save's missing-information check (`validateMissingMetadata`, as the canvas) makes
-  // them pick one.
+  // Add Row: insert after the currently-selected row, with Depreciation / Apply VAT "Yes" and Cost Paid By seeded
+  // from the DevCo/SPV mapping of the sub-account the row lands under — PCF `SpreadSheet.tsx:511-522`
+  // (`findNearestAccountHeaderRow`, then `SubaccountDataIN[number].vsb_devcospv`). Blank when the sub-account has no
+  // mapping, and Save's missing-information check (`validateMissingMetadata`, as the canvas) then makes them pick one.
+  // History: left blank on request (18 Nov 2026, "SPV should not be selected by default when adding a new row");
+  // QA bug 15410 (26 Nov 2026) compared against the canvas, which shows SPV, and asked for canvas parity.
   React.useEffect(() => {
     if (addRowToken === handledTokensRef.current.add) return;
     handledTokensRef.current.add = addRowToken;
 
     const selectedRowIndex = selectedRowIndexRef.current !== null ? selectedRowIndexRef.current : data.length - 1;
+    const costPaidBy = addRowCostPaidBy(data, selectedRowIndex, payerDefaults);
 
     const newRowId = generateRowID(data.length);
     const columnCount = data[0]?.length ?? 0;
@@ -657,6 +686,7 @@ export const SpreadSheetComp = React.memo(function SpreadSheetComp({
       .fill(null)
       .map((_, colIndex) => {
         let v = "";
+        if (colIndex === 3) v = costPaidBy;
         if (colIndex === 4 || colIndex === 5) v = "Yes";
         if (colIndex === 0 || colIndex === 1 || colIndex === 6) v = "";
 
@@ -819,7 +849,8 @@ export const SpreadSheetComp = React.memo(function SpreadSheetComp({
     columns: drawAllRows ? null : cellWindow.columns,
     active,
     columnWidths: drawAllRows ? null : columnWidths,
-  }), [cellWindow, active, columnWidths, drawAllRows]);
+    selection,
+  }), [cellWindow, active, columnWidths, drawAllRows, selection]);
 
   /*
    * The grid element only changes with the grid handed to it: re-rendering react-spreadsheet

@@ -212,7 +212,7 @@ describe("SpreadSheetComp row window (D140)", () => {
 });
 
 describe("SpreadSheetComp Add Row", () => {
-  it("UT-ADDCOST-109 Add Row leaves Cost Paid By blank, Depreciation and Apply VAT 'Yes' (canvas, 18 Nov 2026)", () => {
+  it("UT-ADDCOST-109 Add Row without a mapping leaves Cost Paid By blank, Depreciation and Apply VAT 'Yes'", () => {
     const onDataChange = vi.fn();
     const g = grid("Alpha");
     const { rerender } = render(<SpreadSheetComp data={g} onDataChange={onDataChange} {...props} />);
@@ -220,6 +220,28 @@ describe("SpreadSheetComp Add Row", () => {
     const last = onDataChange.mock.calls.at(-1)?.[0] as SheetGrid;
     expect(last).toHaveLength(4);
     expect(last[3]?.slice(0, 6).map((c) => c.value)).toEqual(["", "", "", "", "Yes", "Yes"]);
+  });
+
+  it("UT-ADDCOST-125 Add Row seeds Cost Paid By from the DevCo/SPV mapping of the sub-account the row lands under (bug 15410)", () => {
+    // Header, account 80000, sub-account 80000_0, one contract row; Add Row with nothing selected goes after the last row.
+    const g: SheetGrid = [
+      ...grid("Alpha").slice(0, 2),
+      [{ value: "80000_0" }, { value: "Turbine" }, { value: "" }, { value: "" }, { value: "" }, { value: "" }, { value: "" }],
+      grid("Alpha")[2]!,
+    ];
+    const onDataChange = vi.fn();
+    const payerDefaults = new Map([["80000_0", "SPV"]]);
+    const { rerender } = render(
+      <SpreadSheetComp data={g} onDataChange={onDataChange} {...props} payerDefaults={payerDefaults} />,
+    );
+    rerender(<SpreadSheetComp data={g} onDataChange={onDataChange} {...props} payerDefaults={payerDefaults} addRowToken={1} />);
+    const last = onDataChange.mock.calls.at(-1)?.[0] as SheetGrid;
+    expect(last).toHaveLength(5);
+    expect(last[4]?.slice(0, 6).map((c) => c.value)).toEqual(["", "", "", "SPV", "Yes", "Yes"]);
+    // A sub-account the mapping does not know keeps the cell blank.
+    const unmapped = new Map([["99999_0", "DevCo"]]);
+    rerender(<SpreadSheetComp data={g} onDataChange={onDataChange} {...props} payerDefaults={unmapped} addRowToken={2} />);
+    expect((onDataChange.mock.calls.at(-1)?.[0] as SheetGrid).at(-1)?.[3]?.value).toBe("");
   });
 });
 

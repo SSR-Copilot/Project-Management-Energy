@@ -9,8 +9,59 @@ import {
   initialContractSource, contractUpserts, costWrites, recomputeContractTotal,
   planContractDeletions, planContractDeletionsCanvasParity, canOpenBulkEdit, canSaveBulkEdit,
   cancelWritesNothing, ADDCOST_SAVE_MSG, saveFailureText,
+  payerDefaultsByNumber, nearestAccountNumber, addRowCostPaidBy,
+  ADDCOST_SPINNER, ADDCOST_CHECKING_MIN_ROWS, showsCheckingPhase,
   type ExistingContract, type ExistingCost, type SheetRow,
 } from "./rules";
+
+describe("the Save spinner's texts (canvas `Add Costs from Table.pa.yaml` :161, :30)", () => {
+  it("UT-ADDCOST-129 the canvas texts, verbatim; the checking one only for a sheet large enough to need it", () => {
+    expect(ADDCOST_SPINNER.checking).toBe("Checking subaccounts validations...");
+    expect(ADDCOST_SPINNER.saving).toBe("Saving costs...");
+    expect(showsCheckingPhase(0)).toBe(false);
+    expect(showsCheckingPhase(ADDCOST_CHECKING_MIN_ROWS - 1)).toBe(false);
+    expect(showsCheckingPhase(ADDCOST_CHECKING_MIN_ROWS)).toBe(true);
+    expect(showsCheckingPhase(15_000)).toBe(true);
+  });
+});
+
+describe("Add Row's Cost Paid By (bug 15410, PCF SpreadSheet.tsx:511-522)", () => {
+  const v = (s: string) => ({ value: s });
+  const sheet = [
+    [v("Account Number"), v("Account Name"), v("Cost Description"), v("Cost Paid By")],
+    [v("80000"), v("Turbine / PV Supply Agreement"), v("*Account*"), v("")],
+    [v("80000_0"), v("Turbine / PV Supply Agreement"), v(""), v("")],
+    [v(""), v(""), v("LOT 5 MODULES"), v("SPV")],
+    [v(""), v(""), v("LOT 6 ONDULEURS"), v("SPV")],
+    [v("80001"), v("Additional WTG / PV Costs"), v("*Account*"), v("")],
+    [v("80001_0"), v("Additional WTG / PV Costs"), v(""), v("")],
+  ];
+
+  it("UT-ADDCOST-126 re-keys the id-keyed mapping by sub-account number, skipping sub-accounts without a mapping", () => {
+    const subs = [{ id: "s1", number: "80000_0" }, { id: "s2", number: "80001_0" }];
+    const byNumber = payerDefaultsByNumber(subs, new Map([["s1", "SPV"], ["other", "DevCo"]]));
+    expect([...byNumber]).toEqual([["80000_0", "SPV"]]);
+  });
+
+  it("UT-ADDCOST-127 the nearest label row at or above the anchor is the sub-account a contract row hangs under", () => {
+    expect(nearestAccountNumber(sheet, 4)).toBe("80000_0"); // after LOT 6
+    expect(nearestAccountNumber(sheet, 3)).toBe("80000_0"); // after LOT 5
+    expect(nearestAccountNumber(sheet, 2)).toBe("80000_0"); // the sub-account row itself
+    expect(nearestAccountNumber(sheet, 1)).toBe("80000"); // the account row itself
+    expect(nearestAccountNumber(sheet, 6)).toBe("80001_0");
+    expect(nearestAccountNumber(sheet, 0)).toBeNull(); // the header is never a label row
+    expect(nearestAccountNumber([sheet[0]!], 5)).toBeNull(); // an anchor past the end is clamped
+  });
+
+  it("UT-ADDCOST-128 a mapped sub-account gives SPV or DevCo, anything else leaves the cell blank", () => {
+    const mapping = new Map([["80000_0", "SPV"], ["80001_0", "DevCo"], ["80000", "Nonsense"]]);
+    expect(addRowCostPaidBy(sheet, 4, mapping)).toBe("SPV");
+    expect(addRowCostPaidBy(sheet, 6, mapping)).toBe("DevCo");
+    expect(addRowCostPaidBy(sheet, 1, mapping)).toBe(""); // the account row: an unusable mapping value
+    expect(addRowCostPaidBy(sheet, 4, new Map())).toBe("");
+    expect(addRowCostPaidBy(sheet, 4, undefined)).toBe("");
+  });
+});
 
 const emptyMonths = (): (number | null)[] => new Array(12).fill(null);
 

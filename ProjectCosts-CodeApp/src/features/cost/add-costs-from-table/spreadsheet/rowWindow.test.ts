@@ -31,6 +31,14 @@ describe("rowWindowFor (D140)", () => {
     expect(rowDrawn(w, 40, null)).toBe(false);
     expect(rowDrawn(w, 40, 40)).toBe(true);
   });
+
+  it("UT-ADDCOST-WIN-005 the selection's end rows are drawn outside the window (bug 15411)", () => {
+    const w = { first: 10, last: 20, rowHeight: 30 };
+    expect(rowDrawn(w, 224, null, [1, 224])).toBe(true); // the whole sheet selected: its last row
+    expect(rowDrawn(w, 1, null, [1, 224])).toBe(true);
+    expect(rowDrawn(w, 100, null, [1, 224])).toBe(false);
+    expect(rowDrawn(w, 100, null, [])).toBe(false);
+  });
 });
 
 describe("columnWindowFor / columnRuns (D140)", () => {
@@ -61,5 +69,16 @@ describe("columnWindowFor / columnRuns (D140)", () => {
       { drawn: true, from: 8, to: 8 },
       { drawn: false, from: 9, to: 9 },
     ]);
+  });
+
+  it("UT-ADDCOST-WIN-013 a row selected by its number: the first and LAST column are drawn beyond the window (bug 15411)", () => {
+    // Window 0..5 of 30 columns, nothing active; the row's selection runs from column 0 to column 29.
+    expect(columnRuns(30, { first: 0, last: 5 }, null, [0, 29])).toEqual([
+      ...Array.from({ length: 6 }, (_, c) => ({ drawn: true, from: c, to: c })),
+      { drawn: false, from: 6, to: 28 },
+      { drawn: true, from: 29, to: 29 },
+    ]);
+    // No selection: unchanged.
+    expect(columnRuns(30, { first: 0, last: 5 }, null, []).at(-1)).toEqual({ drawn: false, from: 6, to: 29 });
   });
 });

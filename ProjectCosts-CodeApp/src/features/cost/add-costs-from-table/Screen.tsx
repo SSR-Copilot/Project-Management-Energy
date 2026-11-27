@@ -33,9 +33,22 @@ import { addCostSaveTimeline } from "@/features/cost/costing/saveTimeline";
 import { rootCauseDetail } from "@/platform/errors";
 import { probeRender } from "@/platform/renderProbe";
 import {
-  ADDCOST_MSG, buildInitialSheet, canOpenBulkEdit, canSaveBulkEdit, saveFailureText,
-  sheetTitle, sheetYearRange, validateSheet, type SheetRow, type ValidationError,
+  ADDCOST_MSG, ADDCOST_SPINNER, buildInitialSheet, canOpenBulkEdit, canSaveBulkEdit, payerDefaultsByNumber,
+  saveFailureText, sheetTitle, sheetYearRange, showsCheckingPhase, validateSheet,
+  type SheetRow, type ValidationError,
 } from "./rules";
+
+/**
+ * Resolves once the browser has had a frame to paint what was just rendered: a `requestAnimationFrame`, then a
+ * task (the frame's paint happens between the two). Without `requestAnimationFrame` (jsdom), one task.
+ */
+function nextPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    const task = () => { setTimeout(resolve, 0); };
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(task);
+    else task();
+  });
+}
 import { outputRowsToSheetRows, prepareSheetSave, sheetRowsToGrid } from "./spreadsheet/adapter";
 import { SpreadSheetComp, gridToJson, type SheetGrid } from "./spreadsheet/SpreadSheet";
 import { saveButtonDisabled, saveRequestRows, sheetLocked } from "./saveRetry";
@@ -99,6 +112,11 @@ export default function AddCostsFromTableScreen() {
   const backgroundRunning = useBackgroundSaveRunning(projectId);
   /** WS-F — this sheet has already handed a Save to the background (a second click is ignored). */
   const handedOff = useRef(false);
+  /**
+   * The Save of a large sheet (`showsCheckingPhase`) shows the canvas' "Checking subaccounts validations..." from
+   * the click until its checks are done and the request has left; `doSave` yields one frame so it paints.
+   */
+  const [checking, setChecking] = useState(false);
 
   const currentYear = new Date().getFullYear();
   const codDate = project?.milestones?.operationsStartCod;
@@ -141,6 +159,12 @@ export default function AddCostsFromTableScreen() {
   const subaccounts = sheetQuery.data?.subaccounts ?? [];
   const existingContracts = sheetQuery.data?.contracts ?? [];
   const existingCosts = sheetQuery.data?.costs ?? [];
+  // Bug 15410: Add Row seeds Cost Paid By from the mapping of the sub-account it lands under; the grid knows rows by
+  // sub-account NUMBER, the loader keys the mapping by id.
+  const payerDefaultsByNumberMap = useMemo(
+    () => payerDefaultsByNumber(sheetQuery.data?.subaccounts ?? [], sheetQuery.data?.payerDefaults ?? new Map()),
+    [sheetQuery.data],
+  );
 
   /*
    * Built once per fresh load — this is what re-hydrates the grid; it must NOT be recreated on
@@ -295,6 +319,19 @@ export default function AddCostsFromTableScreen() {
     // P0.1: the Save's client timeline starts at the click (measurement only, `saveTimeline.ts`).
     addCostSaveTimeline.begin();
     /*
+     * The canvas' first spinner text, for a sheet large enough for its checks to be worth a label
+     * (`ADDCOST_CHECKING_MIN_ROWS`): shown, painted (one frame), then the checks run under it and
+     * "Saving costs..." takes over once the request has left. A smaller sheet skips the frame: its
+     * checks take about a millisecond, and the request leaves in the click's own tick (WS-E).
+     */
+    const checkingShown = showsCheckingPhase(loaded?.loadedRows.length ?? currentRows.length);
+    const endChecking = () => { if (checkingShown) setChecking(false); };
+    if (checkingShown) {
+      setChecking(true);
+      await nextPaint();
+      if (handedOff.current) { endChecking(); return; }
+    }
+    /*
      * WS-E checked: these two stay here. React bails out when they are already null (the usual
      * first Save); only a showing banner (a retry) costs a render before the first request, and
      * clearing it after the send could wipe the banner of a Save refused within the same tick.
@@ -313,6 +350,7 @@ export default function AddCostsFromTableScreen() {
     }
     if (!canSaveBulkEdit(permissions, errorsNow) || !loaded) {
       addCostSaveTimeline.cancel();
+      endChecking();
       return;
     }
 
@@ -351,6 +389,7 @@ export default function AddCostsFromTableScreen() {
       emitSaveLog(prepareLog);
       addCostSaveTimeline.cancel();
       setSaveError(ROUND_TRIP_FAILED(prepared.lost.map((l) => l.description)));
+      endChecking();
       return;
     }
     const { changed, orphanCleanup, deletion } = prepared;
@@ -384,6 +423,8 @@ export default function AddCostsFromTableScreen() {
         // Left out entirely when off, so the call is exactly what it was.
         ...(background ? { background: true } : {}),
       }))();
+      // The request is on its way: "Saving costs..." (the mutation's own `isPending`) takes over.
+      endChecking();
       if (background) {
         handedOff.current = true;
         // The client timeline now ends on the DEVEX/CAPEX paint, before the Save resolves; the bulk
@@ -444,7 +485,7 @@ export default function AddCostsFromTableScreen() {
   // D58: no scrim while saving, so the sheet and its edit/leave controls lock instead.
   // WS-F: also while a background Save of this project runs (this sheet was opened meanwhile; it is
   // re-read when that Save settles). Never true with the flag off.
-  const locked = sheetLocked({ isPending: save.isPending || backgroundRunning });
+  const locked = sheetLocked({ isPending: save.isPending || backgroundRunning || checking });
 
   /*
    * The panel is always mounted so the CAPEX screen behind it never flashes; what it holds depends
@@ -509,6 +550,7 @@ export default function AddCostsFromTableScreen() {
             addRowToken={addRowToken}
             deleteRowToken={deleteRowToken}
             copyTableToken={copyTableToken}
+            payerDefaults={payerDefaultsByNumberMap}
           />
         </div>
       </div>
@@ -527,12 +569,12 @@ export default function AddCostsFromTableScreen() {
    * non-blocking status line in the footer, same verbatim text; while it shows, `busy` keeps the
    * panel from closing and the sheet is `inert`. Save stays guarded by `saveButtonDisabled`.
    *
-   * The text is this screen's own `locSpinnerInformationText: "Saving costs..."` (`Add Costs from
-   * Table.pa.yaml` line 30, the timer's save branch), not the single-cost panel's "Please wait,
-   * saving costs..." (25 Nov 2026). The canvas' first text, "Checking subaccounts validations..."
-   * (the Save button's `OnSelect`), covered its 1 s timer before that branch ran; here the sheet is
-   * validated as it is edited and the Save's own check takes under a millisecond before the first
-   * request leaves (WS-E), so there is no checking phase to label.
+   * The texts are this screen's own (`ADDCOST_SPINNER`), not the single-cost panel's "Please wait, saving
+   * costs..." (25 Nov 2026): the canvas Save button's "Checking subaccounts validations..." (`Add Costs from
+   * Table.pa.yaml` :161) while a LARGE sheet's checks run (`showsCheckingPhase`, see `doSave`), then the
+   * canvas timer's save branch's "Saving costs..." (:30) while the writes run. A smaller sheet shows only the
+   * second: its checks take about a millisecond and the request leaves in the click's own tick (WS-E), so
+   * there is no checking phase to label (27 Nov 2026).
    */
   return (
     <FormPanel centerClose
@@ -543,16 +585,19 @@ export default function AddCostsFromTableScreen() {
       closeTestId="ico_PopUpConfirmation_BodyHeader_2"
       closeLabel="Cancel"
       onDismiss={back}
-      // The canvas pop-up's scrim never closed it: a click beside the sheet must not drop unsaved
-      // edits (the panel is not `dirty`-guarded). Only ✕, Cancel or Escape close it (D78).
+      // The canvas pop-up's scrim never closed it, and it had no keyboard dismissal either: a click beside the sheet
+      // or a stray Escape must not drop unsaved edits (the panel is not `dirty`-guarded). Only ✕ and Cancel close it
+      // (D78; Escape added to the keep-open set for bug 15411's sibling report, 27 Nov 2026). Escape still does its
+      // grid job: react-spreadsheet leaves a cell's edit mode on it.
       keepOpenOnOutsideClick
+      keepOpenOnEscape
       busy={locked}
       footer={!gridShown ? null : (
         <>
           {/* CA-15: a write still running from another screen (or an earlier visit) says so. */}
           <WriteStatus testId="add-costs-write-status" label={costWriteStatusLabel({
-            ownLabel: save.isPending ? "Saving costs..." : null,
-            ownPending: save.isPending, writeInFlight,
+            ownLabel: checking ? ADDCOST_SPINNER.checking : save.isPending ? ADDCOST_SPINNER.saving : null,
+            ownPending: save.isPending || checking, writeInFlight,
           })} />
           <PanelButtons
             saving={locked}

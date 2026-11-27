@@ -43,9 +43,16 @@ export function rowWindowFor(
 export const sameRowWindow = (a: RowWindow, b: RowWindow): boolean =>
   a.first === b.first && a.last === b.last && a.rowHeight === b.rowHeight;
 
-/** Whether grid row `row` is drawn with its cells. The active cell's row always is. */
-export const rowDrawn = (w: RowWindow, row: number, activeRow: number | null): boolean =>
-  row === activeRow || (row >= w.first && row <= w.last);
+/**
+ * Whether grid row `row` is drawn with its cells. The active cell's row always is, and so is every row in `pinned`:
+ * the first and last row of the current selection (bug 15411). react-spreadsheet sizes its selection rectangle from
+ * the measured cells at both ENDS of the range, and a cell is measured only once it is mounted, so a selection whose
+ * end row is outside the window (a column or the whole sheet selected) drew no rectangle at all.
+ */
+export const rowDrawn = (
+  w: RowWindow, row: number, activeRow: number | null, pinned: readonly number[] = [],
+): boolean =>
+  row === activeRow || (row >= w.first && row <= w.last) || pinned.includes(row);
 
 /** Columns drawn beyond the visible ones, on each side. */
 export const OVERSCAN_COLUMNS = 4;
@@ -85,14 +92,17 @@ export const sameColumnWindow = (a: ColumnWindow | null, b: ColumnWindow | null)
 /**
  * A drawn row's columns as runs: drawn columns one by one, and each stretch of columns not drawn
  * as ONE run (one spacer cell spanning them, so the pinned column widths still line up). The
- * active cell's column is always drawn.
+ * active cell's column is always drawn, and so is every column in `pinned`: the first and last
+ * column of the current selection (bug 15411). A row selected by its row number runs to the LAST
+ * month column, far right of the window; with that cell never mounted, react-spreadsheet had no
+ * end point for its selection rectangle and only the active first cell looked selected.
  */
 export function columnRuns(
-  count: number, w: ColumnWindow, activeColumn: number | null,
+  count: number, w: ColumnWindow, activeColumn: number | null, pinned: readonly number[] = [],
 ): { drawn: boolean; from: number; to: number }[] {
   const runs: { drawn: boolean; from: number; to: number }[] = [];
   for (let c = 0; c < count; c++) {
-    const drawn = c === activeColumn || (c >= w.first && c <= w.last);
+    const drawn = c === activeColumn || (c >= w.first && c <= w.last) || pinned.includes(c);
     const last = runs[runs.length - 1];
     if (!drawn && last && !last.drawn) last.to = c;
     else runs.push({ drawn, from: c, to: c });

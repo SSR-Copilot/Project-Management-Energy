@@ -113,6 +113,29 @@ export const ADDCOST_MSG = {
     + "Remove their historical costs first, or confirm the deletion explicitly.",
 } as const;
 
+/**
+ * The Save spinner's texts, verbatim from the canvas. The Save button sets `locSpinnerInformationText:
+ * "Checking subaccounts validations..."` (`Add Costs from Table.pa.yaml` :161) and starts a 1 s timer
+ * (`Duration: =1000`, :20); the timer's save branch replaces it with `"Saving costs..."` (:30) while the writes run.
+ *
+ * Here the checks run synchronously before the first request leaves (WS-E) and take about a millisecond on an
+ * ordinary sheet, so `checking` can only be painted by yielding the browser one frame first, which delays that
+ * request by the frame. The screen does so for sheets of `ADDCOST_CHECKING_MIN_ROWS` rows or more, where the checks
+ * take long enough to be worth a label (the prepare benchmark: tens of ms per step at 15,000 rows); below it the
+ * Save goes straight to `saving`. A fixed second of `checking` was tried and dropped (27 Nov 2026: "adjust it
+ * according to save speed"); the label now lasts one frame plus the real check time.
+ */
+export const ADDCOST_SPINNER = {
+  checking: "Checking subaccounts validations...",
+  saving: "Saving costs...",
+} as const;
+/** Sheets with at least this many rows (one per contract and year) show `ADDCOST_SPINNER.checking` first. */
+export const ADDCOST_CHECKING_MIN_ROWS = 2000;
+/** Whether a Save of a sheet of `rowCount` rows shows the checking text (and yields a frame) before its checks. */
+export function showsCheckingPhase(rowCount: number): boolean {
+  return rowCount >= ADDCOST_CHECKING_MIN_ROWS;
+}
+
 /* ═════════════════════════════════════════════════════ failed-save messages ══ */
 
 /** Why a Save failed, as the screen needs to word it. Built by the data layer, worded here. */
@@ -284,6 +307,59 @@ export const uniqueId = (row: Pick<SheetRow, "accountNumber" | "accountName">): 
 
 export const costUniqueId = (row: SheetRow): string =>
   `${row.accountName}-${row.accountNumber}${row.description}${row.year}${row.rowId}`;
+
+/**
+ * The SPVDevCo mapping re-keyed by sub-account NUMBER ("80000_0"), which is what a grid row carries; the loader keys
+ * it by sub-account id. A sub-account without a mapping row has no entry.
+ */
+export function payerDefaultsByNumber(
+  subaccounts: readonly { id: string; number: string }[],
+  payerDefaultsById: ReadonlyMap<string, string>,
+): ReadonlyMap<string, string> {
+  const byNumber = new Map<string, string>();
+  for (const sub of subaccounts) {
+    const payer = payerDefaultsById.get(sub.id);
+    if (payer !== undefined) byNumber.set(sub.number, payer);
+  }
+  return byNumber;
+}
+
+/**
+ * The account number of the nearest label row at or above `startIndex` — PCF `findNearestAccountHeaderRow`
+ * (`util_datset.ts:158`): the first row, scanning upwards, whose Account Number AND Account Name are both filled.
+ * Contract rows leave both blank, so this is the sub-account row ("80000_0") a contract row hangs under, or the
+ * account row ("80000") itself when that is what is selected. `null` when there is none (the header row has text in
+ * both, so only an empty grid gets here).
+ */
+export function nearestAccountNumber(
+  grid: readonly (readonly { value: string }[])[],
+  startIndex: number,
+): string | null {
+  for (let i = Math.min(startIndex, grid.length - 1); i >= 1; i--) {
+    const row = grid[i];
+    const number = (row?.[0]?.value ?? "").trim();
+    const name = (row?.[1]?.value ?? "").trim();
+    if (number !== "" && name !== "") return number;
+  }
+  return null;
+}
+
+/**
+ * Bug 15410 (26 Nov 2026): the Cost Paid By a row Add Row inserts. PCF `SpreadSheet.tsx:511-522`: the nearest label
+ * row's account number is looked up in the DevCo/SPV mapping; a hit gives "SPV" or "DevCo", anything else leaves the
+ * cell blank for the user to pick (Save's missing-information check insists on it).
+ */
+export function addRowCostPaidBy(
+  grid: readonly (readonly { value: string }[])[],
+  anchorIndex: number,
+  payerDefaults: ReadonlyMap<string, string> | undefined,
+): string {
+  if (!payerDefaults) return "";
+  const number = nearestAccountNumber(grid, anchorIndex);
+  if (number === null) return "";
+  const payer = payerDefaults.get(number);
+  return payer === "SPV" || payer === "DevCo" ? payer : "";
+}
 
 /** The DevCo/SPV default per sub-account number, from the SPVDevCo mapping. */
 export function devCoSpvDefault(

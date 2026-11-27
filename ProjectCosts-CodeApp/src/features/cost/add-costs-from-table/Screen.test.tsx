@@ -17,7 +17,9 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useEffect } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { AddCostSheetData } from "@/data/addCostSheet";
-import { CHOICE, rowIdentity, type ExistingContract, type SheetRow } from "./rules";
+import {
+  ADDCOST_CHECKING_MIN_ROWS, ADDCOST_SPINNER, CHOICE, rowIdentity, type ExistingContract, type SheetRow,
+} from "./rules";
 import { saveButtonDisabled, saveRequestRows, sheetLocked } from "./saveRetry";
 import type { SheetGrid } from "./spreadsheet/SpreadSheet";
 import { countRenders } from "@/test/renderCounts";
@@ -319,7 +321,10 @@ describe("Add Cost from Table without spinners (D58)", () => {
   const expectBlocking = () => {
     const status = screen.getByTestId("add-costs-write-status");
     expect(status.getAttribute("role")).toBe("dialog");
-    expect(status).toHaveTextContent("Saving costs...");
+    // "Saving costs..." from the click on: the canvas' "Checking subaccounts validations..." second is not replayed
+    // (27 Nov 2026), the checks here are instant and the writes start at once.
+    expect(status).toHaveTextContent(ADDCOST_SPINNER.saving);
+    expect(status).not.toHaveTextContent(ADDCOST_SPINNER.checking);
     expect(status.querySelector(".fui-Spinner")).not.toBeNull();
   };
 
@@ -335,6 +340,39 @@ describe("Add Cost from Table without spinners (D58)", () => {
     expect(status.getAttribute("role")).toBe("status");
     expect(status.textContent).toBe("");
     expect(document.querySelector(".fui-Spinner")).toBeNull();
+  });
+
+  it("UT-ADDCOST-BUSY-003 a LARGE sheet shows the canvas' checking text, painted, before the request leaves; then 'Saving costs...'", async () => {
+    // `ADDCOST_CHECKING_MIN_ROWS` contracts under the one sub-account, each with a January cost: one sheet row each.
+    const data = freshData();
+    for (let i = 0; i < ADDCOST_CHECKING_MIN_ROWS; i += 1) {
+      data.contracts.push({ ...contract, id: `c-big-${i}`, name: `Cost ${i}` });
+      data.costs.push({ id: `k-big-${i}`, contractId: `c-big-${i}`, year: 2026, month: 1, cost: 1 });
+    }
+    sheet = { data, isFetching: false };
+    const view = renderScreen();
+    editJanuary("200");
+    let resolve!: () => void;
+    mutateAsync.mockImplementationOnce(() => {
+      savePending = true;
+      return new Promise<undefined>((res) => { resolve = () => { savePending = false; res(undefined); }; });
+    });
+    await act(async () => { fireEvent.click(saveButton()); });
+    // Before the frame: the checking text is on screen, the sheet is locked, and nothing has been sent.
+    const status = screen.getByTestId("add-costs-write-status");
+    expect(status).toHaveTextContent(ADDCOST_SPINNER.checking);
+    expect(status.getAttribute("role")).toBe("dialog");
+    expect(saveButton()).toHaveProperty("disabled", true);
+    expect(mutateAsync).not.toHaveBeenCalled();
+    // After the frame: the checks ran, the request left, and "Saving costs..." has taken over.
+    await act(async () => { await new Promise((r) => setTimeout(r, 80)); });
+    expect(mutateAsync).toHaveBeenCalledTimes(1);
+    view.rerender(
+      <MemoryRouter initialEntries={["/costs/add-from-table?category=1"]}><AddCostsFromTableScreen /></MemoryRouter>,
+    );
+    expect(screen.getByTestId("add-costs-write-status")).toHaveTextContent(ADDCOST_SPINNER.saving);
+    expect(screen.getByTestId("add-costs-write-status")).not.toHaveTextContent(ADDCOST_SPINNER.checking);
+    await act(async () => { resolve(); });
   });
 
   it("UT-ADDCOST-BUSY-002 the blocking spinner also goes when the save REJECTS, and the error banner shows", async () => {
@@ -500,6 +538,17 @@ describe("Add Cost from Table — the right panel keeps unsaved edits (D62, D78)
   it("UT-ADDCOST-PANEL-002 the ✕ still goes back to DEVEX/CAPEX", () => {
     renderWithCapex();
     fireEvent.click(screen.getByTestId("ico_PopUpConfirmation_BodyHeader_2"));
+    expect(screen.getByTestId("capex-screen-stub")).toBeTruthy();
+  });
+
+  it("UT-ADDCOST-PANEL-003 Escape does not close the sheet either: the canvas pop-up had no keyboard dismissal (27 Nov 2026)", () => {
+    renderWithCapex();
+    fireEvent.keyDown(screen.getByTestId("add-costs-grid"), { key: "Escape" });
+    fireEvent.keyDown(screen.getByTestId("btn_AddRow_SpreadSheet_Costs_ProjectCosts_TableCommandBar_AddDataTable"), { key: "Escape" });
+    expect(screen.queryByTestId("capex-screen-stub")).toBeNull();
+    expect(screen.getByTestId("add-costs-grid")).toBeTruthy();
+    // Cancel is still the way out.
+    fireEvent.click(screen.getByTestId("pcf_Spreadsheet_Costs_ProjectCosts_BodyButtons_Cancel"));
     expect(screen.getByTestId("capex-screen-stub")).toBeTruthy();
   });
 });
