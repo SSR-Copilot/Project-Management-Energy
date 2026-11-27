@@ -9,7 +9,7 @@ import { Vsb_capexcommentsesService } from "@/generated/services/Vsb_capexcommen
 import { unwrap } from "@/platform/errors";
 import { deleteRecord, fetchAll } from "./client";
 import { ACTIVE, and, bind, lookupIn, numberOf } from "./odata";
-import { chunk } from "./odata";
+import { readChunked } from "./readChunks";
 import { COMMENT_TYPE, commentName, type CapexComment } from "@/features/cost/capex-costs/comments";
 
 /**
@@ -63,8 +63,9 @@ function authorName(source: object): string | null {
  */
 export async function loadComments(contractIds: readonly string[]): Promise<CapexComment[]> {
   if (contractIds.length === 0) return [];
-  const batches = await Promise.all(
-    chunk(contractIds).map((ids) =>
+  const batches = await readChunked(
+    contractIds,
+    (ids) =>
       fetchAll(
         "list CAPEX comments",
         (o) => Vsb_capexcommentsesService.getAll(o),
@@ -78,7 +79,6 @@ export async function loadComments(contractIds: readonly string[]): Promise<Cape
           filter: and(lookupIn("vsb_capexcontract", ids), ACTIVE),
         },
       ),
-    ),
   );
   return batches.flat().map((r) => ({
     id: r.vsb_capexcommentsid,

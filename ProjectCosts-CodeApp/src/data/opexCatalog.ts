@@ -31,7 +31,8 @@ import type {
   DeviceTypeInProject, OpexAccount, OpexSubaccount,
 } from "@/features/cost/periods/opexRules";
 import { fetchAll } from "./client";
-import { ACTIVE, and, chunk, eq, idIn, lookupEq, lookupIn } from "./odata";
+import { ACTIVE, and, eq, idIn, lookupEq, lookupIn } from "./odata";
+import { readChunked } from "./readChunks";
 
 /**
  * `colOpexAccounts = Sort('Opex Accounts', Order, Ascending)` (`OnStart.txt:622-629`).
@@ -149,23 +150,24 @@ export async function loadOpexDeviceTypes(
   )];
 
   const [deviceBatches, turbineTypeBatches] = await Promise.all([
-    Promise.all(chunk(typeIds).map((ids) => fetchAll(
+    readChunked(typeIds, (ids) => fetchAll(
       "list device types in project",
       (o) => Vsb_devicetypesinprojectsService.getAll(o),
       {
         select: ["vsb_devicetypesinprojectid", "vsb_name", "_vsb_typeinprojectid_value"],
         filter: lookupIn("vsb_typeinprojectid", ids),
       },
-    ))),
-    generatorIds.length === 0 ? Promise.resolve([]) : Promise.all(
-      chunk(generatorIds).map((ids) => fetchAll(
+    )),
+    generatorIds.length === 0 ? Promise.resolve([]) : readChunked(
+      generatorIds,
+      (ids) => fetchAll(
         "list generators for the O&M card headers",
         (o) => Vsb_generatorsService.getAll(o),
         {
           select: ["vsb_generatorid", "vsb_turbinetype", "vsb_name"],
           filter: idIn("vsb_generatorid", ids),
         },
-      )),
+      ),
     ),
   ]);
 

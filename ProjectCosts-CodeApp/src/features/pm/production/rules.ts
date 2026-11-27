@@ -67,7 +67,7 @@ import { CHOICE_PRODUCTION, ES, ES_FINANCE, ES_PLANT, ES_PRODUCTION } from "@/da
 import { bind, dateOnly, owningBusinessUnitBind as ownerBind } from "@/data/odata";
 import { WIDE_GROUP_CONCURRENCY } from "@/data/concurrency";
 import { createdRowRef, together, type PlannedWrite, type WritePlan } from "@/data/writePlan";
-import { textFormat } from "@/features/pm/generators/rules";
+import { textFormat } from "@/domain/powerFxNumeric";
 
 /* ═══════════════════════════════════════════════════════════════════ columns ════ */
 

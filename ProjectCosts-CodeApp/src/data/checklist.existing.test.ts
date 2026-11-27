@@ -24,7 +24,7 @@ vi.mock("@/generated/services/Vsb_projectchecklisttrackingnotesService", () => (
 vi.mock("./adminGatesApprovals", () => ({
   findScopeCountryTechId: async () => null, getEntraPeople: async () => new Map(), listChecklistApprovals: async () => [], listGateApprovals: async () => [],
 }));
-vi.mock("./generalData", () => ({ listProjectStates: async () => [] }));
+vi.mock("./projectStatesRead", () => ({ listProjectStates: async () => [] }));
 
 import { existingTrackingIds } from "./checklist";
 

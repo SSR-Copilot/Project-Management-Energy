@@ -21,6 +21,7 @@ import { AppRoutes } from "@/app/routes";
 import { adminEntriesVisible } from "@/app/adminAccess";
 import { adminPageTitle } from "@/app/adminTitles";
 import { useHasTracedError } from "@/app/useHasTracedError";
+import { useRailIntentPrefetch } from "@/app/useRailIntent";
 import { ReportProblemPanel } from "@/features/shared/report-problem/ReportProblemPanel";
 
 /*
@@ -43,6 +44,8 @@ export default function App() {
   const currentUser = useCurrentUser();
   /* D162 (FE-SH-08): subscribed, so the header's warning icon appears when the error is traced, not at the next unrelated render. */
   const tracedError = useHasTracedError();
+  /* T-C03: hovering or focusing a rail entry starts that screen's chunk (and, behind its own switch, its first reads). */
+  useRailIntentPrefetch(projectId, pathname);
 
   const onCostScreen = pathname.startsWith("/costs/");
   /*

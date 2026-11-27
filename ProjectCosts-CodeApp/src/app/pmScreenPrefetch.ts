@@ -15,11 +15,11 @@
  * The screen's modules are loaded on demand (dynamic imports), so the entry bundle does not carry them.
  */
 import { queryOptions, type QueryClient } from "@tanstack/react-query";
+import { entryPrefetch } from "@/data/entryPrefetchFlags";
 import type { PmBootSlug } from "./bootPlan";
+import { REFERENCE } from "@/data/queryPolicy";
 
-type Prefetcher = (qc: QueryClient, projectId: string) => Promise<unknown>;
-
-const REFERENCE_STALE = 30 * 60 * 1000;
+export type Prefetcher = (qc: QueryClient, projectId: string) => Promise<unknown>;
 
 async function prefetchChecklist(qc: QueryClient, projectId: string): Promise<void> {
   const [{ qk }, { checklistPerf }, data] = await Promise.all([
@@ -33,7 +33,7 @@ async function prefetchChecklist(qc: QueryClient, projectId: string): Promise<vo
     qc.prefetchQuery(queryOptions({
       queryKey: perf.sharedStates ? qk.generalDataProjectStates : qk.checklist(projectId, "states"),
       queryFn: data.listChecklistProjectStates,
-      ...(perf.sharedStates ? { staleTime: REFERENCE_STALE } : {}),
+      ...(perf.sharedStates ? { ...REFERENCE } : {}),
     })),
     qc.prefetchQuery(queryOptions({ queryKey: qk.checklist(projectId, "trackings"), queryFn: () => data.listChecklistTrackings(projectId) })),
     project.then(() => {
@@ -112,13 +112,39 @@ async function prefetchGridOperator(qc: QueryClient, projectId: string): Promise
   await Promise.all([qc.prefetchQuery(q.gridOperatorProjectQuery(projectId)), qc.prefetchQuery(q.gridOperatorRowQuery(projectId))]);
 }
 
-/** The screens this module starts reads for, by route slug. Others (Production, Revenues, Finance) are another owner's. */
+/*
+ * T-C02 (SPB-02, `BOOT_PREFETCH_PM_EXTRA_SCREENS`): Production, Revenues and Finance's REFERENCE reads. Their options come from
+ * `features/pm/<screen>/queries.ts`, which their hooks use too (rule E1), so the key and the function cannot drift. Finance's project, inputs,
+ * repayments and step-up reads are `refetchOnMount: "always"` and are deliberately not prefetched (see `finance/queries.ts`).
+ */
+async function prefetchProductionScreen(qc: QueryClient, projectId: string): Promise<void> {
+  if (!entryPrefetch().pmExtraScreens) return;
+  const q = await import("@/features/pm/production/queries");
+  await q.prefetchProduction(qc, projectId);
+}
+
+async function prefetchRevenuesScreen(qc: QueryClient, projectId: string): Promise<void> {
+  if (!entryPrefetch().pmExtraScreens) return;
+  const q = await import("@/features/pm/revenues/queries");
+  await q.prefetchRevenues(qc, projectId);
+}
+
+async function prefetchFinanceScreen(qc: QueryClient): Promise<void> {
+  if (!entryPrefetch().pmExtraScreens) return;
+  const q = await import("@/features/pm/finance/queries");
+  await q.prefetchFinanceReference(qc);
+}
+
+/** The screens this module starts reads for, by route slug. */
 export const PM_SCREEN_PREFETCHERS: Partial<Record<PmBootSlug, Prefetcher>> = {
   checklist: prefetchChecklist,
   team: prefetchTeam,
   milestones: prefetchMilestones,
   planning: prefetchPlanningScreen,
   "grid-operator": prefetchGridOperator,
+  production: prefetchProductionScreen,
+  revenues: prefetchRevenuesScreen,
+  finance: prefetchFinanceScreen,
 };
 
 /** Starts the reads of the screen `slug` opens; resolves when they have settled (a failed one is the screen's to retry, never thrown). */

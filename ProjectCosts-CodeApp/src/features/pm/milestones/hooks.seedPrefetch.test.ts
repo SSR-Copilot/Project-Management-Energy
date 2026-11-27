@@ -21,7 +21,8 @@ const m = vi.hoisted(() => ({
 vi.mock("@/data/milestones", () => ({
   countProjectRevenues: m.countProjectRevenues, listRevenueAssumptions: m.listRevenueAssumptions,
 }));
-vi.mock("@/data/revenues", () => ({
+// BND-04 (T-E02): the two small reads the Milestones hooks use live in `data/revenueLookups` (no longer behind `data/revenues`).
+vi.mock("@/data/revenueLookups", () => ({
   findCurrency: m.findCurrency, loadFirstRevenueSubaccount: m.loadFirstRevenueSubaccount,
 }));
 

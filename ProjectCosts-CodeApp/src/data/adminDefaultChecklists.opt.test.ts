@@ -15,7 +15,7 @@ vi.mock("./client", async (importOriginal) => ({
   fetchAll: async () => h.rows,
 }));
 
-const { listProjectStates } = await import("./generalData");
+const { listProjectStates } = await import("./projectStatesRead");
 const { checklistClusterView } = await import("./adminDefaultChecklists");
 
 type Raw = { vsb_projectstateid: string; vsb_name: string | null; vsb_order: number | null; vsb_isvisibleonchecklist: boolean | null; statecode: number };

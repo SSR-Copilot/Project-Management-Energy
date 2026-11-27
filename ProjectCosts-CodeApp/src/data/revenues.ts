@@ -17,9 +17,7 @@ import { Vsb_projectsService } from "@/generated/services/Vsb_projectsService";
 import { Vsb_projectrevenuesService } from "@/generated/services/Vsb_projectrevenuesService";
 import { Vsb_balancingpricesService } from "@/generated/services/Vsb_balancingpricesService";
 import { Vsb_revenueindividualhedgevolumesService } from "@/generated/services/Vsb_revenueindividualhedgevolumesService";
-import { Vsb_revenuesubaccountsService } from "@/generated/services/Vsb_revenuesubaccountsService";
 import { Vsb_energyyieldsService } from "@/generated/services/Vsb_energyyieldsService";
-import { TransactioncurrenciesService } from "@/generated/services/TransactioncurrenciesService";
 import {
   BALANCING_COL, FLAG_COL, HEDGE_VOLUME_COL, PROJECT_COL, REVENUE_COL, ALL_STANDARD_FLAG_KEYS,
   type AssumptionRow, type BalancingPeriod, type CountryInflationProfileRow, type IndividualVolumeRow,
@@ -30,8 +28,8 @@ import { localDayOf } from "@/domain/dates";
 import { fetchAll, fetchPage } from "./client";
 import { ACTIVE, and, dateOnly, eq, geDate, guid, leDate, lookupEq } from "./odata";
 import { rowStr as str, rowNum as num } from "./rowValues";
-import { listProjectStates } from "./generalData";
-import { loadCountryInflation, loadCurrencies } from "./landLease";
+import { listProjectStates } from "./projectStatesRead";
+import { loadCountryInflation } from "./countryInflation";
 import { listRevenueAssumptions } from "./milestones";
 // The project-row mapper the PM screens share: moved to `./pmProjectRow` (FE-P2-05, D162) so Finance reads it without this
 // module; re-exported, so every importer of these names from here is unchanged.
@@ -209,17 +207,6 @@ export async function hasNegativePriceProduction(projectId: string): Promise<boo
   return rows.length > 0;
 }
 
-/** `locSelectedRevenueSubaccount: First(colRevenueSubaccounts)` — `Sort('Revenue Subaccounts', Order)` (App.pa.yaml:604-609). */
-export async function loadFirstRevenueSubaccount(): Promise<{ id: string; name: string } | null> {
-  const rows = await fetchPage(
-    "load the revenue subaccount",
-    (o) => Vsb_revenuesubaccountsService.getAll(o),
-    { select: ["vsb_revenuesubaccountid", "vsb_name"], orderBy: ["vsb_order asc"], top: 1 },
-  );
-  const r = rows[0];
-  return r ? { id: r.vsb_revenuesubaccountid, name: r.vsb_name ?? "" } : null;
-}
-
 /**
  * `locCountryRelatedAssumptions` (Add L729-742, Edit L978-991) — the project country's slice of
  * `Assumptions Revenues SQL` (an Italian project reads every `Italy*` row, 1.21.753), through the
@@ -229,28 +216,6 @@ export async function listRevenueAssumptionRows(countryName: string): Promise<As
   return (await listRevenueAssumptions(countryName)).map((r) => ({
     country: r.country, valuetype: r.valuetype, category: r.category ?? "", wind: r.wind, pv: r.pv,
   }));
-}
-
-/**
- * `LookUp(Currencies, 'Currency Code' = <code>)` — through the shared `loadCurrencies` (Land Lease).
- *
- * `onlyThisCode` (D136, the Revenue screen passes it): the server filters on the ISO code, so one small read
- * replaces the whole `transactioncurrencies` table. The same `x.code === code` test then picks the row, so the row
- * found is the one the unfiltered read finds (the filtered rows keep the table's own order). The Milestones screen
- * calls this without the option and is unchanged.
- */
-export async function findCurrency(
-  code: string, opts: { onlyThisCode?: boolean } = {},
-): Promise<{ id: string; name: string } | null> {
-  const rows = opts.onlyThisCode
-    ? (await fetchAll(
-      "find the revenue currency",
-      (o) => TransactioncurrenciesService.getAll(o),
-      { select: ["transactioncurrencyid", "currencyname", "isocurrencycode"], filter: eq("isocurrencycode", code) },
-    )).map((r) => ({ id: r.transactioncurrencyid, name: r.currencyname ?? "", code: r.isocurrencycode ?? "" }))
-    : await loadCurrencies();
-  const c = rows.find((x) => x.code === code);
-  return c ? { id: c.id, name: c.name } : null;
 }
 
 /**

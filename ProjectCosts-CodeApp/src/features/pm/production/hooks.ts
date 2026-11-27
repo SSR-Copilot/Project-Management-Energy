@@ -34,9 +34,10 @@ import type { ScreenData } from "@/data/notConnected";
 import { generatorsPerf } from "@/data/generatorsPerfFlags";
 import { usePlanWrite, type PlanJob } from "@/data/usePlanWrite";
 import {
-  listEnergyYields, listProjectRevenues, listStandardRevenueAssumptions, listStoredNegativePrices,
+  listEnergyYields, listProjectRevenues, listStoredNegativePrices,
   loadGenerationInputs, loadProductionProject, loadStoredSeasonality,
 } from "@/data/production";
+import { energyYieldsQueryOptions, productionAssumptionsQueryOptions, productionProjectQueryOptions } from "./queries";
 import {
   PRODUCTION_SCREEN_TEXT, UI, planDeleteYield, planRollUp, planSaveYield, planStandardContracts, planStatusChange,
   projectYieldTotals, shouldGenerate,
@@ -71,21 +72,13 @@ const NONE: never[] = [];
 
 /** `gblRecordSelectedProject` — re-read on every visit, as `OnVisible` does. */
 export function useProductionProject(projectId: string | undefined): ScreenData<ProductionProject | null> {
-  const q = useQuery({
-    queryKey: qk.production(projectId ?? "", "project"),
-    queryFn: () => loadProductionProject(projectId!),
-    enabled: Boolean(projectId),
-  });
+  const q = useQuery({ ...productionProjectQueryOptions(projectId), enabled: Boolean(projectId) });
   return out(q, null);
 }
 
 /** `colEnergyYieldsInProject`. */
 export function useEnergyYields(projectId: string | undefined): ScreenData<EnergyYieldRow[]> {
-  const q = useQuery({
-    queryKey: qk.production(projectId ?? "", "yields"),
-    queryFn: () => listEnergyYields(projectId!),
-    enabled: Boolean(projectId),
-  });
+  const q = useQuery({ ...energyYieldsQueryOptions(projectId), enabled: Boolean(projectId) });
   return out(q, NONE as EnergyYieldRow[]);
 }
 
@@ -98,12 +91,7 @@ const NO_STANDARDS: StandardAssumptions = { seasonality: [], negativePrices: [] 
 
 /** `colStandardSeasonalityYeild` / `colStandardNegativePricePV` — the project country's Fabric SQL rows. */
 export function useRevenueAssumptions(countryName: string | null | undefined): ScreenData<StandardAssumptions> {
-  const q = useQuery({
-    queryKey: qk.production("", "standardAssumptions", countryName ?? ""),
-    queryFn: () => listStandardRevenueAssumptions(countryName!),
-    enabled: Boolean(countryName),
-    staleTime: 30 * 60 * 1000,
-  });
+  const q = useQuery({ ...productionAssumptionsQueryOptions(countryName), enabled: Boolean(countryName) });
   return out(q, NO_STANDARDS);
 }
 

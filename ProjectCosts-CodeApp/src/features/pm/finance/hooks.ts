@@ -54,8 +54,8 @@ import type { ScreenData } from "@/data/notConnected";
 import { usePlanWrite } from "@/data/usePlanWrite";
 import { projectStatesQueryOptions } from "@/data/projectStates";
 import {
-  countActiveTurbines, findFinancingInputsByKey, listBanks, listDebtAssumptions,
-  listFinancingCategories, listFinancingInputsRaw, listKfwTranches, listRepaymentAmounts,
+  countActiveTurbines, findFinancingInputsByKey, listDebtAssumptions,
+  listFinancingInputsRaw, listRepaymentAmounts,
   listStepUpMargins, loadFinanceProject, loadTotalDevexCapex, withCategoryOrder,
 } from "@/data/finance";
 import {
@@ -64,6 +64,8 @@ import {
   type FinancingInputRow, type StoredRepaymentRow, type StoredStepUpMarginRow,
 } from "./rules";
 import { FINANCE_WRITE_ACTION } from "./perf";
+import { REFERENCE } from "@/data/queryPolicy";
+import { banksQueryOptions, financingCategoriesQueryOptions, kfwTranchesQueryOptions } from "./queries";
 
 /** The Dataverse entity sets the screen reads and writes. */
 /**
@@ -88,7 +90,6 @@ export const TABLES: readonly string[] = [
 const out = <T,>(q: { data?: T; isLoading: boolean; error: unknown }, empty: T): ScreenData<T> =>
   ({ data: q.data ?? empty, isLoading: q.isLoading, error: q.error ?? undefined, connected: true });
 
-const REFERENCE_STALE = 30 * 60 * 1000;
 
 /** `gblRecordSelectedProject` (+ `'Financing Options'`). */
 export function useFinanceProject(projectId: string | undefined): ScreenData<FinanceProject | null> {
@@ -111,11 +112,7 @@ export function useFinanceProject(projectId: string | undefined): ScreenData<Fin
 
 /** `colFinancingCategories`. */
 export function useFinancingCategories(): ScreenData<FinancingCategory[]> {
-  const q = useQuery({
-    queryKey: qk.financeReference("categories"),
-    queryFn: listFinancingCategories,
-    staleTime: REFERENCE_STALE,
-  });
+  const q = useQuery(financingCategoriesQueryOptions());
   return out<FinancingCategory[]>(q, []);
 }
 
@@ -127,7 +124,7 @@ export function useDebtAssumptions(countryName: string | null): ScreenData<DebtA
     queryKey: qk.financeReference("debtAssumptions", countryName ?? "-"),
     queryFn: async () => sliceDebtAssumptions(await listDebtAssumptions(countryName!)),
     enabled: Boolean(countryName),
-    staleTime: REFERENCE_STALE,
+    ...REFERENCE,
   });
   // Once enabled, `isLoading` is true from the first render until the rows are in (the visit seeds
   // wait for it, see the Screen); with no country the read never runs and there is no standard.
@@ -142,21 +139,13 @@ const NO_BANKS: BankRow[] = [];
 
 /** `Assumptions Banks SQL` (Fabric SQL, read only) — the bank picker. */
 export function useBanks(): ScreenData<BankRow[]> {
-  const q = useQuery({
-    queryKey: qk.financeReference("banks"),
-    queryFn: listBanks,
-    staleTime: REFERENCE_STALE,
-  });
+  const q = useQuery(banksQueryOptions());
   return out<BankRow[]>(q, NO_BANKS);
 }
 
 /** `AssumptionsKfWTrancheSQL` (Fabric SQL, read only) — the KfW-Tranche picker. */
 export function useKfwTranches(): ScreenData<string[]> {
-  const q = useQuery({
-    queryKey: qk.financeReference("kfwTranches"),
-    queryFn: listKfwTranches,
-    staleTime: REFERENCE_STALE,
-  });
+  const q = useQuery(kfwTranchesQueryOptions());
   return out<string[]>(q, []);
 }
 

@@ -22,9 +22,10 @@ import {
   listSubstructureTypes, loadGeneratorsProject, loadProjectPlanning,
 } from "@/data/generators";
 import { logAction } from "@/platform/requestLog";
+import { REFERENCE } from "@/data/queryPolicy";
 
 /** How long a reference list counts as fresh. */
-export const REFERENCE_STALE = 30 * 60 * 1000;
+export const REFERENCE_STALE = REFERENCE.staleTime;
 
 export type SimpleFamilyKey = "storage" | "hydrogen" | "substation";
 

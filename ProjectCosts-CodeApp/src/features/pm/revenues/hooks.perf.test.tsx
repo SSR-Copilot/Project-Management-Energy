@@ -16,12 +16,14 @@ const m = vi.hoisted(() => ({
 }));
 
 vi.mock("@/data/revenues", () => ({
-  loadRevenueProject: m.loadRevenueProject, findCurrency: m.findCurrency,
+  loadRevenueProject: m.loadRevenueProject,
   hasNegativePriceProduction: vi.fn(), listBalancingPrices: vi.fn(), listIndividualVolumeIds: vi.fn(),
   listIndividualVolumes: vi.fn(), listOverlappingContracts: vi.fn(), listRevenueAssumptionRows: vi.fn(),
-  listRevenueContracts: vi.fn(), listRevenueCountryInflation: vi.fn(), loadFirstRevenueSubaccount: vi.fn(),
+  listRevenueContracts: vi.fn(), listRevenueCountryInflation: vi.fn(),
 }));
-vi.mock("@/data/generalData", () => ({ listProjectStates: m.listProjectStates }));
+// BND-03/04/06 (T-E01/T-E02): the currency lookup, the first revenue sub-account and the shared project states each moved to their own module.
+vi.mock("@/data/revenueLookups", () => ({ findCurrency: m.findCurrency, loadFirstRevenueSubaccount: vi.fn() }));
+vi.mock("@/data/projectStatesRead", () => ({ listProjectStates: m.listProjectStates }));
 
 import { useRevenueCurrency, useRevenueProject } from "./hooks";
 

@@ -45,62 +45,8 @@ import { TECHNOLOGY_LABEL, technologyValue } from "@/domain/technology";
  * (its solution label is still "1-Feasibility studies Standard Assumption ?";
  * `References/DataSources.json` carries the renamed display name).
  */
-export const PROJECT_COL = {
-  id: "vsb_projectid",
-  name: "vsb_projectname",
-  originalProjectName: "vsb_originalprojectname",
-  shortName: "vsb_shortname",
-  /** 'Project ID' — the human-readable identifier Dataverse assigns on create. */
-  projectNumber: "vsb_name",
-  internalProjectId: "vsb_internalprojectid",
-  projectType: "vsb_projecttype",
-  district: "vsb_district",
-  municipality: "vsb_municipality",
-  terrainSize: "vsb_terrainsize",
-  latitude: "vsb_latitude",
-  longitude: "vsb_longitude",
-  technology: "vsb_technology",
-  approvalState: "vsb_approvalstates",
-  spvName: "vsb_spvname",
-  spvCompanyCode: "vsb_spvcompanycode",
-  spvLegalStructure: "vsb_spvlegalstructure",
-  taxFactor: "vsb_taxfactor",
-  shareOfFarmdown: "vsb_shareoffarmdown",
-  isStandardShareOfFarmdown: "vsb_isstandardshareoffarmdown",
-  standardCostCreated: "vsb_standardcostcreated",
-  developmentType: "vsb_developmenttype",
-  startCluster: "vsb_startcluster",
-  acquisitionDate: "vsb_acquisitiondate",
-  acquisitionPrice: "vsb_acquisitionprice",
-  plantWtgCost: "vsb_plantwtgcost",
-  totalCapacity: "vsb_totalcapacity",
-  netYieldP50: "vsb_netyieldp50",
-
-  /* the milestone date chain — shared with features/pm/milestones */
-  projectStartDate: "vsb_projectstartdate",
-  feasibilityStudies: "vsb_feasibilitystudies",
-  projectDevelopmentStarted: "vsb_projectdevelopmentstarted",
-  applicationSubmitted: "vsb_applicationsubmitted",
-  legallyBindingPermits: "vsb_legallybindingpermits",
-  fid: "vsb_finalinvestmentdecision",
-  construction: "vsb_construction",
-  cod: "vsb_operationsstartdatecod",
-  endDate: "vsb_enddate",
-  salesStartDate: "vsb_salesstartdate",
-  salesCompleted: "vsb_salescompleted",
-  operationalLifetime: "vsb_operationallifetime",
-
-  /* the "Is ... Standard Assumption?" flags */
-  isProjectDevelopmentStd: "vsb_feasibilitystudiesstandardassumption",
-  isApplicationSubmittedStd: "vsb_is3applicationsubmittedstandardassumption",
-  isLegallyBindingPermitsStd: "vsb_is4legallybindingpermitsstandardassumption",
-  isFidStd: "vsb_isfinalinvestmentdecisionstandardassumption",
-  isConstructionStd: "vsb_is5constructionstandardassumption",
-  isCodStd: "vsb_isoperationsstartdatecodstandardassumption",
-  isEndDateStd: "vsb_isenddatestandardassumption",
-  isSalesStartStd: "vsb_issalesstartdatestandardassumption",
-  isSalesCompletedStd: "vsb_issalescompletiondatestandardassumption",
-} as const;
+export { PROJECT_COL } from "./projectColumns";
+import { PROJECT_COL } from "./projectColumns";
 
 /**
  * Lookup navigation properties, written as `<Nav>@odata.bind`. Spelled exactly as the

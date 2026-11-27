@@ -15,6 +15,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactElement, ReactNode } from "react";
 import { FIXTURE_ROWS, IDS } from "./fixtures";
 import { ADMIN_OPT } from "@/data/adminFlags";
+import { SMALL_FIXES } from "@/data/smallFixesFlags";
 
 const ADMIN_OPT_DEFAULTS = { ...ADMIN_OPT };
 
@@ -517,6 +518,66 @@ describe("CAPEXAccountsSettingsScreen", () => {
     expect(failure).toHaveTextContent("Failed step: Later-year costs deleted (1 row).");
     expect(failure).toHaveTextContent("Already completed: Future-month costs set to 0 (1 row).");
     expect(screen.queryByTestId("capex-forecast-cleanup")).not.toBeInTheDocument();
+  });
+
+  /**
+   * SAD-05 / T-B07: the forecast clean-up holds the browser's "leave this page?" prompt while it runs. The cost read of the
+   * clean-up is held open by the test so the hold can be observed; `beforeunload` is cancelled by the shared reference-counted
+   * handler (`components/beforeUnload.ts`) exactly while a holder is active.
+   */
+  const unloadPrompted = () => {
+    const e = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(e);
+    return e.defaultPrevented;
+  };
+  async function deactivateLandWithCleanupHeldOpen(outcome: "ok" | "fail") {
+    client.contracts = [{ vsb_capexprojectcontractid: "00000000-0000-0000-0000-000000005000" }];
+    const gate = deferred<void>();
+    const base = client.retrieveMultipleRecordsAsync.getMockImplementation()!;
+    client.retrieveMultipleRecordsAsync.mockImplementation(async (table: string, options: { filter?: string }) => {
+      if (table !== "vsb_capexcosts") return base(table, options);
+      await gate.promise;
+      if (outcome === "fail") return { success: false, error: { message: "denied", status: 500 } };
+      return { success: true, data: [] };
+    });
+    const user = await openDevelopmentTab();
+    await user.click(screen.getByRole("button", { name: "Select account 80000 - Land" }));
+    await user.click(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-deactivateAccount"));
+    await user.click(dialogButton("Deactivate"));
+    expect(await screen.findByText("Account and its subaccounts deactivated.")).toBeInTheDocument();
+    return gate;
+  }
+
+  it("UT-ADCAPEX-960 the browser's leave-page prompt is held while the forecast clean-up runs and released when it succeeds (SAD-05)", async () => {
+    expect(unloadPrompted()).toBe(false);
+    const gate = await deactivateLandWithCleanupHeldOpen("ok");
+    await screen.findByTestId("capex-forecast-cleanup");
+    expect(unloadPrompted()).toBe(true);
+    await act(async () => { gate.resolve(); });
+    await screen.findByText(/Forecast costs cleaned up|No forecast costs to clean up/);
+    await waitFor(() => expect(unloadPrompted()).toBe(false));
+  });
+
+  it("UT-ADCAPEX-961 the prompt is released when the clean-up fails too", async () => {
+    const gate = await deactivateLandWithCleanupHeldOpen("fail");
+    await screen.findByTestId("capex-forecast-cleanup");
+    expect(unloadPrompted()).toBe(true);
+    await act(async () => { gate.resolve(); });
+    await screen.findByText(/Could not clean up the forecast costs/);
+    await waitFor(() => expect(unloadPrompted()).toBe(false));
+  });
+
+  it("UT-ADCAPEX-962 with CLEANUP_UNLOAD_GUARD off there is no prompt while the clean-up runs, as before", async () => {
+    SMALL_FIXES.CLEANUP_UNLOAD_GUARD = false;
+    try {
+      const gate = await deactivateLandWithCleanupHeldOpen("ok");
+      await screen.findByTestId("capex-forecast-cleanup");
+      expect(unloadPrompted()).toBe(false);
+      await act(async () => { gate.resolve(); });
+      await screen.findByText(/Forecast costs cleaned up|No forecast costs to clean up/);
+    } finally {
+      SMALL_FIXES.CLEANUP_UNLOAD_GUARD = true;
+    }
   });
 
   it("UT-ADCAPEX-921 a partial cascade failure is reported with what landed, and the dialog stays open with an alert", async () => {

@@ -44,6 +44,7 @@ import { Vsb_capexcostsService } from "@/generated/services/Vsb_capexcostsServic
 import { DataError, isRecordGone, unwrap } from "@/platform/errors";
 import { deleteRecord, fetchAll } from "./client";
 import { and, bind, chunk, idIn, lookupEq, lookupIn, numberOf } from "./odata";
+import { readChunked, readLaned } from "./readChunks";
 import { forEachLimit, mapLimit } from "./concurrency";
 import { loadCostAccounts, loadPayerDefaults } from "./costBook";
 import {
@@ -161,8 +162,8 @@ export async function loadAddCostSheetData(
 async function loadContracts(
   label: string, filters: readonly (string | undefined)[],
 ): Promise<ExistingContract[]> {
-  const batches = await Promise.all(filters.map((filter) =>
-    fetchAll(label, (o) => Vsb_capexprojectcontractsService.getAll(o), { select: CONTRACT_SELECT, filter })));
+  const batches = await readLaned(filters, (filter) =>
+    fetchAll(label, (o) => Vsb_capexprojectcontractsService.getAll(o), { select: CONTRACT_SELECT, filter }));
   return batches.flat().map((c) => ({
     id: c.vsb_capexprojectcontractid,
     name: c.vsb_name ?? "",
@@ -211,8 +212,9 @@ async function refreshSnapshot(contractIds: readonly string[]): Promise<{
  */
 async function loadCostsForContracts(contractIds: readonly string[]): Promise<ExistingCost[]> {
   if (contractIds.length === 0) return [];
-  const costBatches = await Promise.all(
-    chunk([...contractIds]).map((ids) =>
+  const costBatches = await readChunked(
+    [...contractIds],
+    (ids) =>
       fetchAll(
         "list Add Cost from Table costs",
         (o) => Vsb_capexcostsService.getAll(o),
@@ -224,7 +226,6 @@ async function loadCostsForContracts(contractIds: readonly string[]): Promise<Ex
           maxPageSize: 5000,
         },
       ),
-    ),
   );
   return costBatches.flat().map((r) => ({
     id: r.vsb_capexcostid,

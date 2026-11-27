@@ -12,7 +12,7 @@ vi.mock("@microsoft/power-apps/data", async () => (await import("@/test/guardedS
 const svc = vi.hoisted(() => ({ getAll: vi.fn() }));
 vi.mock("@/generated/services/Vsb_projectstatesService", () => ({ Vsb_projectstatesService: svc }));
 
-import { listProjectStates } from "@/data/generalData";
+import { listProjectStates } from "@/data/projectStatesRead";
 import { qk } from "@/data/keys";
 import { adminStates, costStates, overviewStates, projectStatesQueryOptions } from "@/data/projectStates";
 import { useProjectStates as useAdminStates } from "@/features/admin/admin-gates-approvals/hooks";

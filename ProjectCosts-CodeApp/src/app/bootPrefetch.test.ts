@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient } from "@tanstack/react-query";
 import { startupFlags } from "./startupFlags";
 import { resetBootDvopt, setBootDvoptForTests } from "@/data/bootDvoptFlags";
+import { resetEntryPrefetch, setEntryPrefetchForTests } from "@/data/entryPrefetchFlags";
 
 const calls = vi.hoisted(() => ({
   list: [] as string[], launchParams: {} as Record<string, string>, rejectProjects: false,
@@ -34,11 +35,14 @@ vi.mock("@/data/project", () => ({
 vi.mock("@/data/generalData", () => ({
   loadGeneralDataProject: vi.fn(async (id: string) => { note(`gdProject:${id}`); return { id, countryId: "country-1" }; }),
   listGeneralDataCountries: vi.fn(async () => { note("gdCountries"); return []; }),
-  listProjectStates: vi.fn(async () => { note("gdStates"); return []; }),
   listShareholders: vi.fn(async (id: string) => { note(`shareholders:${id}`); return []; }),
   listStateTrackings: vi.fn(async (id: string) => { note(`trackings:${id}`); return []; }),
   listCountryAreas: vi.fn(async (c: string) => { note(`areas:${c}`); return []; }),
   listTerrainUtilizations: vi.fn(async (c: string | null) => { note(`utilizations:${c}`); return []; }),
+}));
+// BND-06 (T-E01): the shared project-states read is its own module now (same note, same call).
+vi.mock("@/data/projectStatesRead", () => ({
+  listProjectStates: vi.fn(async () => { note("gdStates"); return []; }),
 }));
 vi.mock("@/platform/powerClient", async (original) => ({
   ...(await original<typeof import("@/platform/powerClient")>()),
@@ -82,6 +86,10 @@ beforeEach(() => {
   calls.scopes.length = 0;
   startupFlags.bootPrefetch = true;
   resetBootDvopt();
+  // T-C01 / T-C03: this file pins the chunk-and-session-project boot of a Cost deep link and the admin routes' old "starts nothing".
+  // The Cost screen's own reads and the admin chunk are `costScreenPrefetch.boot.test.ts`'s (UT-BOOT-COST-*), with the switches ON.
+  resetEntryPrefetch();
+  setEntryPrefetchForTests({ costReads: false, adminChunk: false });
 });
 
 describe("boot prefetch", () => {

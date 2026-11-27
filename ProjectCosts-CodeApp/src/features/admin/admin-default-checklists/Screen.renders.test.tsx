@@ -36,10 +36,7 @@ vi.mock("@/data/adminDefaultChecklists", async (importOriginal) => ({
 }));
 
 const states = vi.hoisted(() => ({ list: vi.fn() }));
-vi.mock("@/data/generalData", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/data/generalData")>()),
-  listProjectStates: states.list,
-}));
+vi.mock("@/data/projectStatesRead", () => ({ listProjectStates: states.list }));
 
 const exec = vi.hoisted(() => vi.fn());
 vi.mock("@/data/executePlan", async (importOriginal) => ({

@@ -7,7 +7,15 @@
     <title>Project Costs</title>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- BND-09 static splash, styled in src/styles/global.css; React replaces every child of #root on its first commit. -->
+      <div class="vsb-splash" role="status" aria-live="polite" aria-busy="true" data-testid="app-splash">
+        <div class="vsb-splash-card">
+          <span class="vsb-splash-spinner" aria-hidden="true"></span>
+          <span class="vsb-splash-label">Please wait...</span>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

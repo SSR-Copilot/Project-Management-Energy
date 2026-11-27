@@ -35,7 +35,8 @@ import { createWithStableId } from "./stableCreateId";
 import { deleteIfExists, fetchAll, isAlreadyGone, updateRecordIfExists } from "./client";
 import { listActiveCapexAccounts, toAccountRow } from "./capexAccounts";
 import { DELETE_CONCURRENCY, WRITE_CONCURRENCY, mapLimit } from "./concurrency";
-import { ACTIVE, and, chunk, dateOnly, eq, idIn, lookupEq, lookupIn, numberOf, or } from "./odata";
+import { ACTIVE, and, dateOnly, eq, idIn, lookupEq, lookupIn, numberOf, or } from "./odata";
+import { readChunked } from "./readChunks";
 import { costWrite } from "./costWritePolicy";
 import {
   COST_TYPE, CLOSING_DATE_TYPE, CONTRACT_TYPE, TOTAL_COSTS_TYPE, MARGIN_TYPE,
@@ -174,8 +175,9 @@ export async function listPaymentTargets(
 ): Promise<PaymentTarget[]> {
   if (contractIds.length === 0) return [];
   void projectId; // kept for the cache key's sake; the filter is by contract
-  const batches = await Promise.all(
-    chunk(contractIds).map((ids) =>
+  const batches = await readChunked(
+    contractIds,
+    (ids) =>
       fetchAll(
         "list payment targets",
         (o) => Vsb_bopcontractspaymenttargetsesService.getAll(o),
@@ -187,7 +189,6 @@ export async function listPaymentTargets(
           filter: and(lookupIn("vsb_bopprojectcontract", ids), ACTIVE),
         },
       ),
-    ),
   );
   return batches.flat().map(toPaymentTarget);
 }
@@ -202,8 +203,9 @@ export async function listDevCoLinks(
   contractIds: readonly string[],
 ): Promise<DevCoLinkRow[]> {
   if (contractIds.length === 0) return [];
-  const batches = await Promise.all(
-    chunk(contractIds).map((ids) =>
+  const batches = await readChunked(
+    contractIds,
+    (ids) =>
       fetchAll(
         "list DevCo cost links",
         (o) => Vsb_bopcontractsdevcocostsesService.getAll(o),
@@ -214,7 +216,6 @@ export async function listDevCoLinks(
           filter: and(lookupIn("vsb_bopcontract", ids), ACTIVE),
         },
       ),
-    ),
   );
   return batches
     .flat()
@@ -253,8 +254,9 @@ export async function listCapexCostRows(
   const contractIds = contracts.map((c) => c.id);
   if (contractIds.length === 0) return [];
 
-  const batches = await Promise.all(
-    chunk(contractIds).map((ids) =>
+  const batches = await readChunked(
+    contractIds,
+    (ids) =>
       fetchAll(
         "list DevCo CAPEX costs",
         (o) => Vsb_capexcostsService.getAll(o),
@@ -266,7 +268,6 @@ export async function listCapexCostRows(
           maxPageSize: 5000,
         },
       ),
-    ),
   );
 
   return batches.flat().map((r) => ({

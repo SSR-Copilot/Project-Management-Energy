@@ -66,7 +66,7 @@ import {
 import { addDays, addMonths, addYears } from "@/domain/dates";
 import { startsWithStandard } from "@/domain/costStandards";
 import { numberFormat } from "@/domain/locale";
-import { forLanguage } from "@/features/pm/generators/rules";
+import { forLanguage } from "@/domain/powerFxNumeric";
 import { CHOICE_FINANCE, ES, ES_FINANCE } from "@/data/dataverseNames";
 import { bind, dateOnly, owningBusinessUnitBind as ownerBind } from "@/data/odata";
 import { createdRowRef, refusePlan, together, type PlannedWrite, type WritePlan } from "@/data/writePlan";

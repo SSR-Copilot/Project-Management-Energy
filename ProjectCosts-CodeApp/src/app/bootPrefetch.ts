@@ -19,8 +19,9 @@ import { trace } from "@/platform/telemetry";
 import { bootTarget, needsLaunchParams, type BootTarget } from "./bootPlan";
 import { bootDvopt } from "@/data/bootDvoptFlags";
 import { generatorsPerf } from "@/data/generatorsPerfFlags";
+import { entryPrefetch } from "@/data/entryPrefetchFlags";
 import {
-  COST_SCREEN_LOADERS, PM_SCREEN_LOADERS, loadGeneralDataScreen, loadGeneratorsScreen, loadProjectOverviewScreen,
+  ADMIN_SCREEN_LOADERS, COST_SCREEN_LOADERS, PM_SCREEN_LOADERS, loadGeneralDataScreen, loadGeneratorsScreen, loadProjectOverviewScreen,
 } from "./screenLoaders";
 import { sessionProjectQueryOptions, sessionQueryOptions } from "./SessionContext";
 import { startupFlags } from "./startupFlags";
@@ -50,6 +51,15 @@ export async function prefetchTarget(qc: QueryClient, target: BootTarget): Promi
       await Promise.all([session, quietly(`${slug} screen reads`, async () => {
         const { prefetchPmScreenReads } = await import("./pmScreenPrefetch");
         await prefetchPmScreenReads(qc, slug, projectId);
+      })]);
+      return;
+    }
+    // T-C01 (`BOOT_PREFETCH_COST_READS`): the Cost screen's own first reads start beside the session project, not after the route gate.
+    if (target.kind === "cost" && entryPrefetch().costReads) {
+      const { path, projectId, category } = target;
+      await Promise.all([session, quietly(`${path} screen reads`, async () => {
+        const { prefetchCostScreenReads } = await import("./costScreenPrefetch");
+        await prefetchCostScreenReads(qc, path, projectId, { mode: "boot", ...(category === undefined ? {} : { category }) });
       })]);
       return;
     }
@@ -119,7 +129,9 @@ function preloadChunk(target: BootTarget): void {
       : target.kind === "generators" ? (generatorsPerf().prefetch ? [loadGeneratorsScreen] : [])
         // OPT-03: the Cost screen or the other Project Management screen the link opens.
         : target.kind === "cost" ? COST_SCREEN_LOADERS[target.path] ?? []
-          : target.kind === "pm-screen" ? PM_SCREEN_LOADERS[target.slug] ? [PM_SCREEN_LOADERS[target.slug]!] : [] : [];
+          : target.kind === "pm-screen" ? PM_SCREEN_LOADERS[target.slug] ? [PM_SCREEN_LOADERS[target.slug]!] : []
+            // T-C03 (BND-17, `BOOT_PREFETCH_ADMIN_CHUNK`): an admin deep link starts the screen's chunk beside the session (no read).
+            : target.kind === "admin" ? (entryPrefetch().adminChunk && ADMIN_SCREEN_LOADERS[target.path] ? [ADMIN_SCREEN_LOADERS[target.path]!] : []) : [];
   // A chunk that cannot be fetched is the router's problem when it needs it (it shows its error then).
   for (const load of loads) load().catch(() => undefined);
 }

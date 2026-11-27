@@ -37,6 +37,7 @@ import { usePlanWrite } from "@/data/usePlanWrite";
 import { useSession } from "@/app/SessionContext";
 import { loadPriceInflation } from "@/data/milestones";
 import { cancelModulePermission, requestModulePermission, type FlowApprovalResult } from "@/data/flows";
+import { REFERENCE } from "@/data/queryPolicy";
 import {
   listAllWtgLandLeaseCosts, listGeneratorsByIds, listOrderableGenerators,
   listProjectTurbines, loadDeviceCosts,
@@ -184,7 +185,7 @@ export function useInflationIndex(fid: string | null | undefined, enabled = true
     queryKey: qk.priceInflation(Number.isFinite(year) ? year : 0),
     queryFn: () => loadPriceInflation(year),
     enabled: Number.isFinite(year) && enabled,
-    staleTime: REFERENCE_STALE,
+    ...REFERENCE,
   });
   const index = q.data
     ? accumulatedIndex(q.data.current?.accumulatedIndex, q.data.previous?.accumulatedIndex, Number.isFinite(month) ? month : 0)
@@ -197,7 +198,7 @@ export function useDeviceCosts(countryId: string | null | undefined, enabled = t
   const q = useQuery({
     queryKey: qk.deviceCosts(countryId ?? ""),
     queryFn: () => loadDeviceCosts(countryId ?? null),
-    staleTime: REFERENCE_STALE,
+    ...REFERENCE,
     enabled,
   });
   return out(q, { modules: null, inverter: null, mountingFix: null, mountingTracker: null });

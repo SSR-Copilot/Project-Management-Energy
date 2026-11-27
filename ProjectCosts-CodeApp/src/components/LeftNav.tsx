@@ -395,6 +395,8 @@ function NavItemLink({
       to={to}
       // The canvas `ItemKey` (configuration, stable across captions).
       data-testid={`rail-${item.key}`}
+      // T-C03: the route this entry opens, for the in-app intent prefetch (`app/intentPrefetch.ts`); an attribute only, no behaviour.
+      data-nav-path={item.path}
       aria-current={activeNavKey(pathname, items) === item.key ? "page" : undefined}
       className={() =>
         mergeClasses(

@@ -179,10 +179,13 @@ vi.mock("@/generated/services/TransactioncurrenciesService", () => ({
 const {
   contractLabel, loadCapexTotals, loadCapexCategories, loadCostAccounts, loadCostBook, standardContractExists,
   loadCostLines,
-  loadMilestoneDurations, loadProjectStates, resolvePayer,
+  loadProjectStates, resolvePayer,
   linkOpexChains, mapOpexRow, mapLandLeasePeriodRow, groupAllocations,
   AGGREGATION_VALUE, readAggregation, writeAggregation,
 } = await import("./costBook");
+// BND-04 (T-E02): the milestone-duration read moved to its own module; the cases below stay here (ids UT-BOOK-050..053) because they share this
+// file's `fetchAll` fixture by label.
+const { loadMilestoneDurations } = await import("./milestoneDurations");
 const { deleteCostLine, saveCostLine } = await import("./capexWrites");
 // B2 (OPT-07b/c): the chart of accounts and the currencies are read through short-lived SHARED reads. Every case below sets its own
 // fixture, so each starts with those memos empty.

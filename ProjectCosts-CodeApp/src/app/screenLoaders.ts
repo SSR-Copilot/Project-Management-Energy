@@ -29,6 +29,27 @@ export const loadGridOperatorScreen = () => import("@/features/pm/grid-operator/
 export const loadRevenuesScreen = () => import("@/features/pm/revenues/Screen");
 export const loadFinanceScreen = () => import("@/features/pm/finance/Screen");
 
+/*
+ * T-C03 (BND-17): the Administration screens' loaders, named like the others. `routes.tsx` wraps them in `lazy()` and `bootPrefetch.ts` (an
+ * admin deep link) and `intentPrefetch.ts` (a rail hover) start the same function early; the module system returns one promise to all of them.
+ */
+export const loadAdminChecklistsScreen = () => import("@/features/admin/admin-default-checklists/Screen");
+export const loadAdminGatesScreen = () => import("@/features/admin/admin-gates-approvals/Screen");
+export const loadAdminCapexAccountsScreen = () => import("@/features/admin/admin-capex-accounts/Screen");
+export const loadAdminMilestonesScreen = () => import("@/features/admin/admin-milestones/Screen");
+export const loadAdminCostScreen = () => import("@/features/admin/admin-cost/Screen");
+export const loadAdminContractScreen = () => import("@/features/admin/admin-contract/Screen");
+
+/** The chunk of an Administration screen, by its route path (`/admin/<screen>`). */
+export const ADMIN_SCREEN_LOADERS: Record<string, () => Promise<unknown>> = {
+  "/admin/default-checklists": loadAdminChecklistsScreen,
+  "/admin/gates-approvals": loadAdminGatesScreen,
+  "/admin/capex-accounts": loadAdminCapexAccountsScreen,
+  "/admin/milestones": loadAdminMilestonesScreen,
+  "/admin/cost": loadAdminCostScreen,
+  "/admin/contract": loadAdminContractScreen,
+};
+
 /** The chunks a Cost route renders (`add-from-table` is a panel over the CAPEX screen, so both). */
 export const COST_SCREEN_LOADERS: Record<string, readonly (() => Promise<unknown>)[]> = {
   "/costs/capex": [loadCapexCostsScreen],

@@ -105,6 +105,8 @@ let bookLoading = false;
 let bookError: Error | null = null;
 /** The Summary tab's totals query. */
 let totalsLoading = false;
+/** SCC-16 / T-E06: the arguments the screen passed to `useCapexComments`. */
+const capexCommentsCalls: unknown[][] = [];
 
 vi.mock("@/features/cost/costing/useCostBook", () => ({
   useCostBook: () => ({
@@ -129,7 +131,7 @@ vi.mock("@/features/cost/costing/useCostBook", () => ({
     activeWtgCountReady: wtgReady, ensureActiveWtgCount,
     countryId: stdAssumptions.length ? "country-1" : undefined, technology: stdAssumptions.length ? 952850000 : undefined, isLoading: false,
   }),
-  useCapexComments: () => ({ data: [] }),
+  useCapexComments: (...args: unknown[]) => { capexCommentsCalls.push(args); return { data: [] }; },
   /** `Project States` — 1..6 are the clusters; Draft/Abandoned/On-hold are not. */
   useProjectStates: () => ({ data: projectStates }),
   /** No `Milestones Standard Assumptions` row for this fixture's country/technology. */
@@ -185,6 +187,7 @@ vi.mock("./CommentsPanel", () => ({
 }));
 
 import CapexCostsScreen from "./Screen";
+import { SMALL_FIXES } from "@/data/smallFixesFlags";
 
 function mount(entry = "/costs/capex?category=0") {
   return render(
@@ -265,6 +268,7 @@ beforeEach(() => {
   writeInFlight = false;
   gridWriteActionsDisabled = undefined;
   gridAccountsSeen.length = 0;
+  capexCommentsCalls.length = 0;
   capexWriteOptions = undefined;
   vi.clearAllMocks();
   document.querySelectorAll('[data-testid="open-add"]').forEach((n) => n.remove());
@@ -1566,5 +1570,24 @@ describe("grid inputs stay put while the panel is typed in (OPT-25)", () => {
     // Old: a fresh `accountsInCategory(...)` array on every one of these renders (so the grid's `gridRows` memo was dead).
     expect(gridAccountsSeen.length).toBeGreaterThan(before);
     expect(new Set(gridAccountsSeen).size).toBe(1);
+  });
+});
+
+describe("the grid's comment dots keep their threads while the next set loads (SCC-16, T-E06)", () => {
+  it("UT-CAPEXCOM-022 the screen opts in to keepPrevious for its own comments query", () => {
+    mount();
+    expect(capexCommentsCalls.length).toBeGreaterThan(0);
+    for (const [, options] of capexCommentsCalls) expect(options).toEqual({ keepPrevious: true });
+  });
+
+  it("UT-CAPEXCOM-023 with CAPEX_KEEP_COMMENT_DOTS off the screen opts out again (today's behaviour)", () => {
+    SMALL_FIXES.CAPEX_KEEP_COMMENT_DOTS = false;
+    try {
+      mount();
+      expect(capexCommentsCalls.length).toBeGreaterThan(0);
+      for (const [, options] of capexCommentsCalls) expect(options).toEqual({ keepPrevious: false });
+    } finally {
+      SMALL_FIXES.CAPEX_KEEP_COMMENT_DOTS = true;
+    }
   });
 });

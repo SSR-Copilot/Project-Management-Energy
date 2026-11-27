@@ -65,7 +65,8 @@ import { sharedRead } from "./sharedRead";
 import { createWithStableId } from "./stableCreateId";
 import { CASCADE_DELETE_CONCURRENCY, LEAF_DELETE_CONCURRENCY, mapLimitFirstFailure, WRITE_CONCURRENCY } from "./concurrency";
 import { loadAllCurrencies, loadCurrencyNameMap, type CurrencyRow } from "./currencies";
-import { ACTIVE, and, chunk, eq, lookupEq, lookupIn } from "./odata";
+import { ACTIVE, and, eq, lookupEq, lookupIn } from "./odata";
+import { readChunked } from "./readChunks";
 
 /** Option sets arrive as a number or as its string form depending on the column. */
 function numberOf(value: unknown): number | null {
@@ -169,12 +170,12 @@ export async function loadLeaseBook(projectId: string): Promise<LeaseBook> {
   )];
 
   const [periodBatches, allocationBatches, currencyName] = await Promise.all([
-    Promise.all(chunk(headerIds).map((ids) => fetchAll(
+    readChunked(headerIds, (ids) => fetchAll(
       "list Land Lease periods",
       (o) => Vsb_landleaseperiodsService.getAll(o),
       { select: LEASE_PERIOD_SELECT, filter: lookupIn("vsb_projectcost", ids) },
-    ))),
-    Promise.all(chunk(headerIds).map((ids) => fetchAll(
+    )),
+    readChunked(headerIds, (ids) => fetchAll(
       "list Land Lease WTG allocations",
       (o) => Vsb_landleaseallocationwtgsService.getAll(o),
       {
@@ -184,7 +185,7 @@ export async function loadLeaseBook(projectId: string): Promise<LeaseBook> {
         ],
         filter: lookupIn("vsb_projectcost", ids),
       },
-    ))),
+    )),
     loadCurrencyNameMap(currencyIds),
   ]);
 
@@ -300,8 +301,9 @@ export async function loadLeaseGenerators(projectId: string): Promise<GeneratorO
   const typeIds = [...wtgTypeIds, ...pvLabel.keys()];
   if (typeIds.length === 0) return [];
 
-  const batches = await Promise.all(
-    chunk(typeIds).map((ids) => fetchAll(
+  const batches = await readChunked(
+    typeIds,
+    (ids) => fetchAll(
       "list generators in project for Land Lease",
       (o) => Vsb_generatorinprojectsService.getAll(o),
       {
@@ -311,7 +313,7 @@ export async function loadLeaseGenerators(projectId: string): Promise<GeneratorO
         ],
         filter: lookupIn("vsb_moduletypeinprojectid", ids),
       },
-    )),
+    ),
   );
 
   const wtg: { id: string; name: string; status: string | null }[] = [];

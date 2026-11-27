@@ -25,6 +25,7 @@ import { trace } from "@/platform/telemetry";
 import { fetchAll, fetchPage } from "./client";
 import { mapLimit } from "./concurrency";
 import { and, chunk, contains, eq, guid, idIn, lookupEq, or } from "./odata";
+import { readChunked } from "./readChunks";
 import { checklistTables, type ChecklistApproval as GateTaskApproval } from "./adminChecklistTables";
 import { CHECKLIST_ENTITY_SETS } from "@/data/dataverseNames";
 
@@ -283,7 +284,7 @@ export async function listScopeChecklistItems(countryTechId: string): Promise<Ch
 export async function listChecklistApprovals(itemIds: readonly string[]): Promise<ChecklistApproval[]> {
   if (itemIds.length === 0) return [];
   const C = CHECKLIST_APPROVAL_COL;
-  const batches = await Promise.all(chunk(itemIds).map((ids) =>
+  const batches = await readChunked(itemIds, (ids) =>
     fetchAll(
       "list check-list default approvals",
       (o) => Vsb_checklistdefaultapprovalsesService.getAll(o),
@@ -294,7 +295,7 @@ export async function listChecklistApprovals(itemIds: readonly string[]): Promis
         ],
         filter: idIn(C.projectDefaultChecklist, ids),
       },
-    )));
+    ));
   return batches.flat().map((r) => ({
     id: r.vsb_checklistdefaultapprovalsid,
     name: r.vsb_name ?? null,
@@ -489,7 +490,7 @@ const PEOPLE_CHUNK_FAN_OUT = 4;
  */
 export const GATES_REUSE_PEOPLE = true;
 
-/* The screen's project states are the one shared `Project States` read (`listProjectStates`, `data/generalData.ts`),
+/* The screen's project states are the one shared `Project States` read (`listProjectStates`, `data/projectStatesRead.ts`),
  * viewed by `adminStates` (`data/projectStates.ts`, D159). */
 
 /** Gate templates for (country, technology), matched by choice CODE. */

@@ -14,7 +14,7 @@ vi.mock("./adminGatesApprovals", () => ({
   findScopeCountryTechId: vi.fn(), getEntraPeople: (ids: readonly string[]) => svc.entra(ids),
   listChecklistApprovals: (ids: readonly string[]) => svc.approvals(ids), listGateApprovals: (c: string, t: number) => svc.gates(c, t),
 }));
-vi.mock("./generalData", () => ({ listProjectStates: vi.fn() }));
+vi.mock("./projectStatesRead", () => ({ listProjectStates: vi.fn() }));
 
 import { listChecklistApprovalSettings, listChecklistGates } from "./checklist";
 import { resetChecklistPeopleCache } from "./checklistPeople";

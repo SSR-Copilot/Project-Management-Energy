@@ -17,6 +17,7 @@ import type { CountryRow } from "@/domain/countryPicker";
 import { bootDvopt } from "./bootDvoptFlags";
 import { fetchAll } from "./client";
 import { qk } from "./keys";
+import { REFERENCE } from "./queryPolicy";
 
 /** The union of the columns the four screens selected, plus `statecode`. */
 export const COUNTRY_SELECT_SETTINGS = ["vsb_countryid", "vsb_name", "vsb_isocurrencycode", "vsb_title", "statecode"];
@@ -29,7 +30,7 @@ export const COUNTRY_SELECT_SETTINGS = ["vsb_countryid", "vsb_name", "vsb_isocur
 export const COUNTRY_SELECT = [...COUNTRY_SELECT_SETTINGS, "_vsb_businessunit_value", "_owningbusinessunit_value"];
 
 /** Country reference data changes rarely; matches the longest of the four old stale times. */
-export const COUNTRIES_STALE_MS = 30 * 60 * 1000;
+export const COUNTRIES_STALE_MS = REFERENCE.staleTime;
 
 export interface CountryRecord extends CountryRow {
   isoCurrencyCode: string | undefined;
@@ -82,7 +83,7 @@ export const activeOnly = (rows: readonly CountryRecord[]): CountryRecord[] => r
 export const countriesQueryOptions = {
   queryKey: qk.adminCountries,
   queryFn: listCountries,
-  staleTime: COUNTRIES_STALE_MS,
+  ...REFERENCE,
 } as const;
 
 /**

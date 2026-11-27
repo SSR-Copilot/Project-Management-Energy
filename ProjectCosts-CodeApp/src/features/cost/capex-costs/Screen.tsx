@@ -91,6 +91,7 @@ import {
   savingCostLabel,
 } from "./panelRules";
 import { costWriteStatusLabel, writeCommandsDisabled } from "@/domain/writeGuard";
+import { SMALL_FIXES } from "@/data/smallFixesFlags";
 import { useCostWriteInFlight, useWriteFailureReport } from "../costing/useCostWriteFlight";
 import { useSavePaintMark } from "../costing/useSavePaintMark";
 
@@ -420,7 +421,9 @@ export default function CapexCostsScreen() {
    * one year's March and not another's.
    */
   const contractIds = useMemo(() => (book?.lines ?? []).map(l => l.id), [book]);
-  const comments = useCapexComments(contractIds);
+  // SCC-16 / T-E06: the dots stay while the next id list (a contract added or deleted, another category) loads. Opt-in: only this
+  // caller; the comments panel (one contract) keeps today's no-placeholder behaviour. Rollback: `CAPEX_KEEP_COMMENT_DOTS`.
+  const comments = useCapexComments(contractIds, { keepPrevious: SMALL_FIXES.CAPEX_KEEP_COMMENT_DOTS });
   const bookLines = book?.lines;
   const commentFlags = useMemo(() => {
     const threads = commentThreads(comments.data ?? []);

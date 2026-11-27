@@ -16,12 +16,17 @@ vi.mock("./client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./client")>()),
   fetchAll: m.fetchAll, fetchPage: m.fetchPage,
 }));
-vi.mock("./landLease", () => ({ loadCurrencies: m.loadCurrencies, loadCountryInflation: vi.fn() }));
-vi.mock("./generalData", () => ({ listProjectStates: m.listProjectStates }));
+// BND-03/04/06 (T-E01/T-E02): `findCurrency` now lives in `./revenueLookups` and reads the whole table through `./currencies` (the same read
+// `landLease.loadCurrencies` wraps); the project states come from `./projectStatesRead`.
+vi.mock("./currencies", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./currencies")>()), loadAllCurrencies: m.loadCurrencies,
+}));
+vi.mock("./projectStatesRead", () => ({ listProjectStates: m.listProjectStates }));
 vi.mock("./milestones", () => ({ listRevenueAssumptions: vi.fn() }));
 
 import { PROJECT_COL } from "@/features/pm/revenues/rules";
-import { findCurrency, loadRevenueProject } from "./revenues";
+import { loadRevenueProject } from "./revenues";
+import { findCurrency } from "./revenueLookups";
 
 const TABLE = [
   { id: "cur-1", name: "Euro", code: "EUR" },

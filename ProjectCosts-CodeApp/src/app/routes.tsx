@@ -17,7 +17,8 @@ import { EmptyState, LoadingOverlay } from "@/components";
 import { useSession } from "./SessionContext";
 import { costLocation, launchCostPath, launchPmPath } from "./deepLinks";
 import {
-  loadAddCostsFromTableScreen, loadCapexCostsScreen, loadCheckListScreen, loadContractsScreen, loadFinanceScreen,
+  loadAdminCapexAccountsScreen, loadAdminChecklistsScreen, loadAdminContractScreen, loadAdminCostScreen, loadAdminGatesScreen,
+  loadAdminMilestonesScreen, loadAddCostsFromTableScreen, loadCapexCostsScreen, loadCheckListScreen, loadContractsScreen, loadFinanceScreen,
   loadGeneralDataScreen, loadGeneratorsScreen, loadGridOperatorScreen, loadLandLeaseScreen, loadMilestonesScreen,
   loadOpexCostsScreen, loadPlanningScreen, loadProductionScreen, loadProjectOverviewScreen, loadRevenuesScreen, loadTeamScreen,
 } from "./screenLoaders";
@@ -48,12 +49,13 @@ const RevenuesScreen = lazy(loadRevenuesScreen);
 const FinanceScreen = lazy(loadFinanceScreen);
 
 /* Administration — UI built, not connected to Dataverse yet. */
-const AdminChecklistsScreen = lazy(() => import("@/features/admin/admin-default-checklists/Screen"));
-const AdminGatesScreen = lazy(() => import("@/features/admin/admin-gates-approvals/Screen"));
-const AdminCapexAccountsScreen = lazy(() => import("@/features/admin/admin-capex-accounts/Screen"));
-const AdminMilestonesScreen = lazy(() => import("@/features/admin/admin-milestones/Screen"));
-const AdminCostScreen = lazy(() => import("@/features/admin/admin-cost/Screen"));
-const AdminContractScreen = lazy(() => import("@/features/admin/admin-contract/Screen"));
+// T-C03 (BND-17): through `screenLoaders.ts` too, so a deep link or a rail hover starts the chunk early.
+const AdminChecklistsScreen = lazy(loadAdminChecklistsScreen);
+const AdminGatesScreen = lazy(loadAdminGatesScreen);
+const AdminCapexAccountsScreen = lazy(loadAdminCapexAccountsScreen);
+const AdminMilestonesScreen = lazy(loadAdminMilestonesScreen);
+const AdminCostScreen = lazy(loadAdminCostScreen);
+const AdminContractScreen = lazy(loadAdminContractScreen);
 
 /**
  * The landing route.

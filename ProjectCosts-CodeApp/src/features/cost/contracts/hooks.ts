@@ -18,6 +18,7 @@ import { ContractLinksError, findBopStandardAssumptions, type ContractWrite, typ
 import { BOP_ASSUMPTIONS_ONE_READ, CONTRACT_KEYS_ONCE, CONTRACT_LINKS_WITH_PATCH } from "@/data/leaseOpexFlags";
 import { loadProjectExtras, type ProjectExtras } from "@/data/project";
 import { useSession } from "@/app/SessionContext";
+import { capexAccountsAllQueryOptions, devCoCapexCostsQueryOptions, devCoContractsOptions } from "../costing/costQueries";
 import { costWriteKey } from "@/domain/writeGuard";
 import {
   CONTRACT_TYPE, applySelection, applyUsage, buildAccountTree, sortContracts, sortPaymentTargets,
@@ -80,21 +81,8 @@ export function usePaymentTargets(projectId: string | undefined, contracts: BopC
  * CONTR-057 lifted for this picker). Its own key: the active-only list stays cached for the Contracts settings screen.
  */
 export function useCapexAccounts() {
-  return useQuery({
-    queryKey: qk.capexAccountsAll,
-    queryFn: () => costRepository().listCapexAccounts({ includeInactive: true }),
-    // The chart of accounts is master data maintained on the Admin screens; it does not
-    // change during a costing session.
-    staleTime: 30 * 60 * 1000,
-  });
-}
-
-/** The one definition of the DevCo CAPEX contracts read, shared by `useDevCoCapexContracts` and `useCapexCostRows` (S1-07). */
-function devCoContractsOptions(projectId: string | undefined) {
-  return {
-    queryKey: qk.devCoCapexContracts(projectId ?? "none"),
-    queryFn: () => costRepository().listDevCoCapexContracts(projectId as string),
-  };
+  // T-C01: the key, the function and the freshness (master data maintained on the Admin screens, 30 minutes) are `costQueries.ts`'.
+  return useQuery(capexAccountsAllQueryOptions());
 }
 
 export function useDevCoCapexContracts(projectId: string | undefined) {
@@ -130,18 +118,8 @@ export function useDevCoLinks(projectId: string | undefined, contracts: BopContr
  */
 export function useCapexCostRows(projectId: string | undefined) {
   const queryClient = useQueryClient();
-  return useQuery({
-    queryKey: qk.devCoCapexCosts(projectId ?? "none"),
-    // S1-07: the first hop of this read is the DevCo contracts, which `useDevCoCapexContracts` reads under its own key at the
-    // same moment. `fetchQuery` with an EXPLICIT `staleTime: 0` (the client default is 30 s, which would serve a cached list)
-    // joins that read when it is in flight and otherwise reads fresh, exactly as the read inside `listCapexCostRows` did, and
-    // the answer lands in that key's cache too. One request, not two.
-    queryFn: () => costRepository().listCapexCostRows(
-      projectId as string,
-      queryClient.fetchQuery({ ...devCoContractsOptions(projectId), staleTime: 0 }),
-    ),
-    enabled: Boolean(projectId),
-  });
+  // T-C01 / S1-07: the key and the function (the DevCo contracts' first hop, joined with `staleTime: 0`) are `costQueries.ts`'.
+  return useQuery({ ...devCoCapexCostsQueryOptions(queryClient, projectId), enabled: Boolean(projectId) });
 }
 
 /** What the callers read of the extras: `data`, `isLoading` and `error` (every caller uses only these). */

@@ -58,6 +58,7 @@ import {
   RenumberAfterDeleteError, TaskCreatedIdUnknownError, TaskStatusNotSetError,
   type ChecklistTask, type TaskForm,
 } from "@/data/adminDefaultChecklists";
+import { SMALL_FIXES } from "@/data/smallFixesFlags";
 import { palette } from "@/theme/tokens";
 import {
   useChecklistClusters, useChecklistLocks, useChecklistPrivileges, useChecklistTabs,
@@ -151,9 +152,12 @@ export default function CheckListSettingsScreen() {
   const tabId = resolveTabId(sortedTabs, params.get("tab"));
   const hasTabs = sortedTabs.length > 0;
 
-  const clustersQuery = useChecklistClusters(hasTabs);
+  // SAD-02 / T-E05: neither read depends on a tab id, so both start in the same wave as the tab list (`DEFAULT_CHECKLISTS_REFS_PARALLEL`;
+  // OFF: they wait for the tab list, as before). The tasks stay gated on the tab id. A failed or empty tab list still shows its own state.
+  const refsEarly = SMALL_FIXES.DEFAULT_CHECKLISTS_REFS_PARALLEL;
+  const clustersQuery = useChecklistClusters(refsEarly || hasTabs);
   const tasksQuery = useChecklistTasks(hasTabs ? tabId : null);
-  const locksQuery = useChecklistLocks(hasTabs);
+  const locksQuery = useChecklistLocks(refsEarly || hasTabs);
   useChecklistPrivileges(); // server-enforced: Dataverse still decides, a 403 is reported.
   /** The admin rule (with the local-run bypass): a non-admin gets a read-only screen. */
   const canEdit = useAdminAccess();

@@ -20,7 +20,9 @@ export type BootTarget =
   /** OPT-03: `/project/<slug>?projectId=…` for a Project Management screen the targets above do not name (its slug is the route's). */
   | { kind: "pm-screen"; projectId: string; slug: PmBootSlug }
   /** OPT-03: a Cost screen of an existing project, from `/costs/…?projectId=…` or the bare root with a project id. */
-  | { kind: "cost"; projectId: string; path: CostPath }
+  | { kind: "cost"; projectId: string; path: CostPath; category?: number }
+  /** T-C03 (BND-17): an Administration screen, `/admin/<screen>`: only its chunk is started (its reads depend on the user's roles). */
+  | { kind: "admin"; path: AdminBootPath }
   | { kind: "none" };
 
 /** The PM routes (`routes.tsx`) other than General Data and Generators, which have targets of their own. */
@@ -28,6 +30,24 @@ export const PM_BOOT_SLUGS = [
   "milestones", "production", "checklist", "team", "planning", "grid-operator", "revenues", "finance",
 ] as const;
 export type PmBootSlug = (typeof PM_BOOT_SLUGS)[number];
+
+/** The Administration routes (`routes.tsx`), by their path. */
+export const ADMIN_BOOT_PATHS = [
+  "/admin/default-checklists", "/admin/gates-approvals", "/admin/capex-accounts", "/admin/milestones", "/admin/cost", "/admin/contract",
+] as const;
+export type AdminBootPath = (typeof ADMIN_BOOT_PATHS)[number];
+
+/**
+ * T-C01: the DEVEX/CAPEX tab a `?category=N` asks for, as the screen reads it (`resolveCategory`: an integer from 0), or `undefined` when the
+ * link names none (the Summary tab). Not checked against the number of tabs, which only the categories read knows: an out-of-range N costs one
+ * speculative read and the screen shows the Summary tab, as before.
+ */
+export function categoryFromSearch(search: string): number | undefined {
+  const raw = new URLSearchParams(search).get("category");
+  if (raw === null || raw.trim() === "") return undefined;
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 0 && n <= 99 ? n : undefined;
+}
 
 export interface BootInput {
   /** `window.location.hash`, e.g. `#/projects?p=2`, or "". */
@@ -93,8 +113,12 @@ export function bootTarget(input: BootInput): BootTarget {
   if ((COST_PATHS as readonly string[]).includes(path)) {
     // The cost routes read the project from the route, then the launch parameters, then the player URL (`SessionContext`).
     const link = readProjectLink(input.launchParams, input.windowSearch, search);
-    return link.status === "valid" ? { kind: "cost", projectId: link.projectId, path: path as CostPath } : { kind: "none" };
+    if (link.status !== "valid") return { kind: "none" };
+    const category = path === "/costs/capex" || path === "/costs/add-from-table" ? categoryFromSearch(search) : undefined;
+    return { kind: "cost", projectId: link.projectId, path: path as CostPath, ...(category === undefined ? {} : { category }) };
   }
+
+  if ((ADMIN_BOOT_PATHS as readonly string[]).includes(path)) return { kind: "admin", path: path as AdminBootPath };
 
   return { kind: "none" };
 }

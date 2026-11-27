@@ -52,10 +52,7 @@ vi.mock("@/data/adminDefaultChecklists", async (importOriginal) => ({
 
 /** OPT-07d: the clusters are a view of the ONE shared `Project States` read (D159), so that read is the mock boundary now (was `loadClusters`). */
 const states = vi.hoisted(() => ({ list: vi.fn() }));
-vi.mock("@/data/generalData", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/data/generalData")>()),
-  listProjectStates: states.list,
-}));
+vi.mock("@/data/projectStatesRead", () => ({ listProjectStates: states.list }));
 
 /** Edit / toggle / status are WritePlans run by `executePlan` (through `runPlan`); `PlanError` and the rest stay real. */
 const exec = vi.hoisted(() => vi.fn());
@@ -75,6 +72,7 @@ import { vsbTheme } from "@/theme/fluent";
 import { palette } from "@/theme/tokens";
 import { FIXTURE_CLUSTERS, FIXTURE_LOCKED, FIXTURE_TABS, FIXTURE_TASKS } from "./fixtures";
 import { qk } from "@/data/keys";
+import { SMALL_FIXES } from "@/data/smallFixesFlags";
 import { LOCK_LOADING_TOOLTIP, LOCK_TOOLTIP, LOCK_UNKNOWN_TOOLTIP, REORDER_STALE_MESSAGE } from "./rules";
 import CheckListSettingsScreen from "./Screen";
 
@@ -165,12 +163,53 @@ describe("CheckListSettingsScreen", () => {
     await waitFor(() => expect(api.loadTasks).toHaveBeenCalledWith(DE_WIND));
   });
 
-  it("UT-ADCHK-902 no tabs → empty state and no task or lock query", async () => {
+  it("UT-ADCHK-902 no tabs → empty state and no task query (T-E05: the lock read is no longer held back by the tab list, see UT-ADCHK-960/961)", async () => {
     api.loadTabs.mockResolvedValue([]);
     renderScreen();
     expect(await screen.findByText("No checklist country/technology combinations are configured")).toBeInTheDocument();
     expect(api.loadTasks).not.toHaveBeenCalled();
-    expect(api.loadLockedTaskIds).not.toHaveBeenCalled();
+  });
+
+  it("UT-ADCHK-960 the locks and the clusters reads start in the first wave, before the tab list has answered (SAD-02); the tasks wait for a tab", async () => {
+    const tabs = deferred<typeof FIXTURE_TABS>();
+    api.loadTabs.mockReturnValue(tabs.promise);
+    renderScreen();
+    await waitFor(() => expect(api.loadLockedTaskIds).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(states.list).toHaveBeenCalledTimes(1));
+    expect(api.loadTabs).toHaveBeenCalledTimes(1);
+    expect(api.loadTasks).not.toHaveBeenCalled();
+    tabs.resolve(FIXTURE_TABS);
+    await waitFor(() => expect(api.loadTasks).toHaveBeenCalledWith(DE_WIND));
+    // Each read ran once: starting early did not add a second request.
+    expect(api.loadLockedTaskIds).toHaveBeenCalledTimes(1);
+    expect(states.list).toHaveBeenCalledTimes(1);
+    expect(await screen.findAllByRole("tab")).toHaveLength(3);
+  });
+
+  it("UT-ADCHK-961 with DEFAULT_CHECKLISTS_REFS_PARALLEL off the locks and the clusters wait for the tab list, as before", async () => {
+    SMALL_FIXES.DEFAULT_CHECKLISTS_REFS_PARALLEL = false;
+    try {
+      const tabs = deferred<typeof FIXTURE_TABS>();
+      api.loadTabs.mockReturnValue(tabs.promise);
+      renderScreen();
+      await waitFor(() => expect(api.loadTabs).toHaveBeenCalledTimes(1));
+      await new Promise((r) => { setTimeout(r, 50); });
+      expect(api.loadLockedTaskIds).not.toHaveBeenCalled();
+      expect(states.list).not.toHaveBeenCalled();
+      tabs.resolve(FIXTURE_TABS);
+      await waitFor(() => expect(api.loadLockedTaskIds).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(states.list).toHaveBeenCalledTimes(1));
+    } finally {
+      SMALL_FIXES.DEFAULT_CHECKLISTS_REFS_PARALLEL = true;
+    }
+  });
+
+  it("UT-ADCHK-962 a failed tab list still shows its own error state while the early reads run (SAD-02: the failure screen is unchanged)", async () => {
+    api.loadTabs.mockRejectedValue(new DataError("Load checklist country/technology tabs", "Data source not registered"));
+    renderScreen();
+    expect(await screen.findByText(/The checklist country\/technology combinations/)).toBeInTheDocument();
+    expect(screen.queryAllByRole("tab")).toHaveLength(0);
+    expect(api.loadTasks).not.toHaveBeenCalled();
   });
 
   it("UT-ADCHK-903 shows a clear error (not a crash) when a table is unavailable", async () => {

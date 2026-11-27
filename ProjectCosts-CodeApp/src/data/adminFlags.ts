@@ -25,6 +25,10 @@
  *    inactive OPEX rows; the CAPEX account hierarchy from the shared chart read). OFF: the separate reads.
  *  - `ADMIN_CASCADE_INVALIDATE` (AD-11): deleting a standard DEVEX cost or a standard BoP contract also marks the project caches
  *    its server plug-in changes as stale. OFF: only the standard-assumption keys, as before.
+ *  - `ADMIN_HAS_CONTRACTS_NO_FOCUS` (SAD-06, bottleneck programme T-C04): the advisory per-subaccount "has contracts" checks of the
+ *    CAPEX tree do not re-run when the browser tab becomes visible again (one request per visible sub-account, up to the pool width at
+ *    a time, on every return). The check is advisory: Delete re-checks on the server (`adminCapexAccounts.ts`), and the checks still
+ *    run on mount when older than 30 s (no account write refreshes them, `capexAccountsWriteKeys`). OFF: the global focus refetch, as before.
  */
 export interface AdminOptFlags {
   CLEANUP_RESILIENT: boolean;
@@ -34,6 +38,7 @@ export interface AdminOptFlags {
   ADMIN_NO_REDUNDANT_EXISTS: boolean;
   ADMIN_SCOPE_READS_ONCE: boolean;
   ADMIN_CASCADE_INVALIDATE: boolean;
+  ADMIN_HAS_CONTRACTS_NO_FOCUS: boolean;
 }
 
 export const ADMIN_OPT: AdminOptFlags = {
@@ -44,6 +49,7 @@ export const ADMIN_OPT: AdminOptFlags = {
   ADMIN_NO_REDUNDANT_EXISTS: true,
   ADMIN_SCOPE_READS_ONCE: false, // integration: off, D160 section 10 skipped this merge on purpose (the active and hidden OPEX reads would fail together) (AD-09)
   ADMIN_CASCADE_INVALIDATE: true,
+  ADMIN_HAS_CONTRACTS_NO_FOCUS: true,
 };
 
 /** Width of the `hasContracts` pool (AD-03). */

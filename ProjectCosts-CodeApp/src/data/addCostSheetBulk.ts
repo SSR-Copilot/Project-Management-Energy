@@ -89,7 +89,7 @@
  * SDK. Nothing is swallowed — every write failure ends in a `SavePlanError` (or a `RowsGoneError`
  * that carries the outcome of the deletes) with its cause (CONVENTIONS rules 3 and 14).
  */
-import { ES, ES_ADMIN } from "./dataverseNames";
+import { CAPEX_CONTRACTS, CAPEX_COSTS } from "./bulkTables";
 import type {
   BulkTableInfo, DeepInsertGroup, ExistingIdsReader, SaveBuildPlan, UpsertTarget,
 } from "./bulkTypes";
@@ -101,17 +101,8 @@ import {
 
 /* ═════════════════════════════════════════════════════════════════════ tables ══ */
 
-export const CAPEX_CONTRACTS: BulkTableInfo = {
-  entitySetName: ES.capexProjectContracts,
-  logicalName: "vsb_capexprojectcontract",
-  primaryKey: "vsb_capexprojectcontractid",
-};
-
-export const CAPEX_COSTS: BulkTableInfo = {
-  entitySetName: ES_ADMIN.capexCosts,
-  logicalName: "vsb_capexcost",
-  primaryKey: "vsb_capexcostid",
-};
+/** The two descriptors moved to `./bulkTables` (BND-07, so the bulk transport does not load this module); re-exported for the save and its tests. */
+export { CAPEX_CONTRACTS, CAPEX_COSTS };
 
 /** The cost row's contract bind, as the planner writes it on a new cost row. */
 const CONTRACT_BIND = "vsb_Contract@odata.bind";

@@ -32,10 +32,7 @@ vi.mock("@/data/adminGatesApprovals", () => ({ projectGatesRepository: repo }));
 
 /** D159: the states are the one shared `Project States` read, which the hook views through `adminStates`. */
 const states = vi.hoisted(() => ({ list: vi.fn() }));
-vi.mock("@/data/generalData", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/data/generalData")>()),
-  listProjectStates: states.list,
-}));
+vi.mock("@/data/projectStatesRead", () => ({ listProjectStates: states.list }));
 
 /** The writes are WritePlans run by `executePlan` (through `runPlan`); `PlanError` and the rest stay real. */
 const exec = vi.hoisted(() => vi.fn());
@@ -59,6 +56,8 @@ import { CheckmarkRegular, EditRegular } from "@fluentui/react-icons";
 import { PlanError } from "@/data/executePlan";
 import type { WritePlan } from "@/data/writePlan";
 import { DataError } from "@/platform/errors";
+import { SMALL_FIXES } from "@/data/smallFixesFlags";
+import { clearTraces, traces } from "@/platform/telemetry";
 import { ERROR_HINT } from "@/platform/userMessage";
 import {
   asSharedStates, FIXTURE_APPROVALS, FIXTURE_CHECKLISTS, FIXTURE_COUNTRIES, FIXTURE_COUNTRY_ROWS, FIXTURE_STATES, FIXTURE_TEMPLATES, fixtureDataset,
@@ -640,6 +639,61 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
     renderScreen();
     expect(await screen.findByText("Gate approvals could not be loaded")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+  });
+
+  /** RND-09 / T-D04: a stable QueryClient, so `rerender` re-renders the failed screen against the same cache. */
+  const renderStable = () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } });
+    const tree = () => (
+      <FluentProvider theme={vsbTheme}>
+        <QueryClientProvider client={client}><ProjectGatesSettingsScreen /></QueryClientProvider>
+      </FluentProvider>
+    );
+    const view = render(tree());
+    return { rerenderAll: () => view.rerender(tree()) };
+  };
+  const loadTraces = () => traces().filter((e) => e.message === "Could not load the gate approvals");
+  const failedText = `Could not load the gate approvals. ${ERROR_HINT.server}`;
+
+  it("UT-ADGATE-950 a failed load is traced ONCE however often the failed state re-renders (RND-09), with the same line and cause", async () => {
+    const failure = new DataError("list gate approval templates", "offline", 503);
+    repo.loadDataset.mockRejectedValue(failure);
+    clearTraces();
+    const { rerenderAll } = renderStable();
+    const text = (await screen.findByText(/Could not load the gate approvals\./)).textContent;
+    for (let i = 0; i < 10; i += 1) rerenderAll();
+    const mine = loadTraces();
+    expect(mine).toHaveLength(1);
+    expect(mine[0]!.severity).toBe("error");
+    expect(mine[0]!.detail).toBe(failure);
+    // The visible text is the one `userErrorText` always produced.
+    expect(text).toBe(failedText);
+  });
+
+  it("UT-ADGATE-951 with GATES_TRACE_ONCE off the trace is written in render again (every re-render adds one), the text unchanged", async () => {
+    repo.loadDataset.mockRejectedValue(new DataError("list gate approval templates", "offline", 503));
+    SMALL_FIXES.GATES_TRACE_ONCE = false;
+    try {
+      clearTraces();
+      const { rerenderAll } = renderStable();
+      const text = (await screen.findByText(/Could not load the gate approvals\./)).textContent;
+      for (let i = 0; i < 5; i += 1) rerenderAll();
+      expect(loadTraces().length).toBeGreaterThan(5);
+      expect(text).toBe(failedText);
+    } finally {
+      SMALL_FIXES.GATES_TRACE_ONCE = true;
+    }
+  });
+
+  it("UT-ADGATE-952 Try again on a load that fails again is a new failure and is traced once more", async () => {
+    // A fresh error object per attempt, as every real failure is (the trace is keyed on the error's identity).
+    repo.loadDataset.mockImplementation(() => Promise.reject(new DataError("list gate approval templates", "offline", 503)));
+    clearTraces();
+    renderStable();
+    await screen.findByText("Gate approvals could not be loaded");
+    await waitFor(() => expect(loadTraces()).toHaveLength(1));
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(loadTraces()).toHaveLength(2));
   });
 
   it("UT-ADGATE-926 a failed REFETCH over cached data still shows the error state", async () => {

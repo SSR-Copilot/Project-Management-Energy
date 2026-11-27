@@ -9,6 +9,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { resetEntryPrefetch, setEntryPrefetchForTests } from "@/data/entryPrefetchFlags";
 import type { ReactNode } from "react";
 
 const s = vi.hoisted(() => ({
@@ -63,7 +64,7 @@ beforeEach(() => {
   resetSeedOnce();
   resetBootDvopt();
 });
-afterEach(() => cleanup());
+afterEach(() => { cleanup(); resetEntryPrefetch(); });
 
 const planningScreen = (qc: QueryClient) => renderHook(() => {
   const project = usePlanningProject(PID);
@@ -142,7 +143,8 @@ describe("Grid Operator boot prefetch", () => {
 });
 
 describe("no slug, no reads", () => {
-  it("UT-BOOT-SCREENS-020 a slug this module does not prefetch (Production, Revenues, Finance) starts nothing", async () => {
+  it("UT-BOOT-SCREENS-020 with BOOT_PREFETCH_PM_EXTRA_SCREENS OFF (T-C02) Production, Revenues and Finance start nothing, as before (they are prefetched with it ON: UT-BOOT-SCREENS-200..206)", async () => {
+    setEntryPrefetchForTests({ pmExtraScreens: false });
     const qc = client();
     for (const slug of ["production", "revenues", "finance"] as const) await prefetchPmScreenReads(qc, slug, PID);
     expect(s.calls).toEqual([]);

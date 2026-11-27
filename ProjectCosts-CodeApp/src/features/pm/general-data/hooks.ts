@@ -37,10 +37,9 @@ import type { ScreenData } from "@/data/notConnected";
 import { usePlanWrite } from "@/data/usePlanWrite";
 import { useDebouncedValue } from "@/features/shared/useDebouncedValue";
 import { searchEntraPeople, getEntraPeople } from "@/data/adminGatesApprovals";
-import { listChecklistGates } from "@/data/checklist";
 import { checklistPerf } from "@/data/checklistPerfFlags";
 import { lookupPeopleAll, onePersonCache } from "@/data/personCache";
-import { loadMilestoneDurations } from "@/data/costBook";
+import { loadMilestoneDurations } from "@/data/milestoneDurations";
 import { cancelGateApproval } from "@/data/flows";
 import { trace } from "@/platform/telemetry";
 import {
@@ -62,6 +61,7 @@ import {
 } from "./queries";
 import { generalDataReloadKeys } from "./reload";
 import { gdCancelReusesCache } from "./gdPerfFlags";
+import { REFERENCE } from "@/data/queryPolicy";
 
 export type { AreaOption, MunicipalityRow, UtilizationOption } from "@/data/generalData";
 
@@ -210,7 +210,7 @@ export function useMilestoneDurations(countryId: string | null | undefined, tech
     queryKey: qk.milestoneDurations(countryId ?? "", technology ?? -1),
     queryFn: () => loadMilestoneDurations(countryId ?? undefined, technology ?? undefined),
     enabled: enabled && Boolean(countryId) && technology !== null && technology !== undefined,
-    staleTime: REFERENCE_STALE,
+    ...REFERENCE,
   });
   return q.data;
 }
@@ -259,6 +259,9 @@ export async function cancelDraftGateApprovalIfRunning(args: {
     const scope = { countryId: args.project.countryId, technology: args.project.technology ?? null };
     // PB-15 (`GD_CANCEL_REUSES_CACHE`): the Check List's own gate query (same key and function, so its staleTime applies and a fresh
     // entry is returned without a request); the step reads only when none is fresh. The key is the Check List's only with `scopedGates`.
+    // BND-04 (T-E02): loaded here, on the cancel path only, not with the screen: `data/checklist` is about 13 KiB gzip that every General Data
+    // visit used to download for this one step. A chunk that fails to load lands in the `catch` below like any failed read.
+    const { listChecklistGates } = await import("@/data/checklist");
     const gates = args.queryClient && gdCancelReusesCache() && checklistPerf().scopedGates
       ? await args.queryClient.fetchQuery({
         queryKey: qk.checklistGates(scope.countryId ?? "", scope.technology ?? ""),

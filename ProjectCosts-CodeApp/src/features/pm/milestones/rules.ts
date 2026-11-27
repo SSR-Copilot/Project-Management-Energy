@@ -47,7 +47,7 @@ import { ES, CHOICE, CHOICE_FINANCE } from "@/data/dataverseNames";
 import { dateOnly } from "@/data/odata";
 import { together, type PlannedWrite, type WritePlan } from "@/data/writePlan";
 import { milestonesRepriceTogether } from "./milestonesPerfFlags";
-import type { MilestoneAssumptionValues } from "@/data/costBook";
+import type { MilestoneAssumptionValues } from "@/data/milestoneDurations";
 import {
   PROJECT_COL, bind, clearSkippedMilestones, startClusterNo, formatAuditStamp,
 } from "@/features/pm/general-data/rules";

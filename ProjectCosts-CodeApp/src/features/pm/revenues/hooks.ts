@@ -37,18 +37,18 @@
  */
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ES, ES_FINANCE, ES_PRODUCTION } from "@/data/dataverseNames";
-import { listProjectStates } from "@/data/generalData";
 import { qk } from "@/data/keys";
 import type { ScreenData } from "@/data/notConnected";
 import { usePlanWrite } from "@/data/usePlanWrite";
 import {
-  findCurrency, hasNegativePriceProduction, listBalancingPrices, listIndividualVolumeIds,
-  listIndividualVolumes, listOverlappingContracts, listRevenueAssumptionRows, listRevenueContracts,
-  listRevenueCountryInflation,
-  loadFirstRevenueSubaccount, loadRevenueProject, type StoredVolume,
+  listIndividualVolumeIds, listIndividualVolumes, listOverlappingContracts, type StoredVolume,
 } from "@/data/revenues";
 import {
-  provinceToPriceRegion, revenueCurrencyCode,
+  balancingPricesQueryOptions, negativePriceProductionQueryOptions, revenueAssumptionsQueryOptions, revenueContractsQueryOptions,
+  revenueCurrencyQueryOptions, revenueInflationQueryOptions, revenueProjectQueryOptions, revenueSubaccountQueryOptions,
+} from "./queries";
+import {
+  provinceToPriceRegion,
   type AssumptionRow, type BalancingPeriod, type CountryInflationProfileRow, type RevenueProject,
   type StoredRevenueContract,
 } from "./rules";
@@ -69,8 +69,6 @@ export const TABLES: readonly string[] = [
 const out = <T,>(q: { data?: T; isLoading: boolean; error: unknown }, empty: T): ScreenData<T> =>
   ({ data: q.data ?? empty, isLoading: q.isLoading, error: q.error ?? undefined, connected: true });
 
-const REFERENCE_STALE = 30 * 60 * 1000;
-
 /**
  * `Set(gblRecordSelectedProject, LookUp(Projects, …))` (`OnVisible`).
  *
@@ -81,13 +79,7 @@ const REFERENCE_STALE = 30 * 60 * 1000;
  */
 export function useRevenueProject(projectId: string | undefined): ScreenData<RevenueProject | null> {
   const qc = useQueryClient();
-  const q = useQuery({
-    queryKey: qk.revenues(projectId ?? "", "project"),
-    queryFn: () => loadRevenueProject(projectId!, () => qc.fetchQuery({
-      queryKey: qk.generalDataProjectStates, queryFn: listProjectStates, staleTime: REFERENCE_STALE,
-    })),
-    enabled: Boolean(projectId),
-  });
+  const q = useQuery({ ...revenueProjectQueryOptions(qc, projectId), enabled: Boolean(projectId) });
   return out<RevenueProject | null>(q, null);
 }
 
@@ -97,32 +89,19 @@ export const useItalyRegion = (project: RevenueProject | null): string | null =>
 
 /** Rule 3 — `Assumptions Revenues SQL` (Fabric SQL, read only) for the project's country. */
 export function useRevenueAssumptions(countryName: string | null): ScreenData<AssumptionRow[]> {
-  const q = useQuery({
-    queryKey: qk.revenuesReference("assumptions", countryName ?? "-"),
-    queryFn: () => listRevenueAssumptionRows(countryName!),
-    enabled: Boolean(countryName),
-    staleTime: REFERENCE_STALE,
-  });
+  const q = useQuery({ ...revenueAssumptionsQueryOptions(countryName), enabled: Boolean(countryName) });
   return out<AssumptionRow[]>(q, []);
 }
 
 /** `colProjectRevenueContracts`. */
 export function useRevenueContracts(projectId: string | undefined): ScreenData<StoredRevenueContract[]> {
-  const q = useQuery({
-    queryKey: qk.revenues(projectId ?? "", "contracts"),
-    queryFn: () => listRevenueContracts(projectId!),
-    enabled: Boolean(projectId),
-  });
+  const q = useQuery({ ...revenueContractsQueryOptions(projectId), enabled: Boolean(projectId) });
   return out<StoredRevenueContract[]>(q, []);
 }
 
 /** `colProjectBalancingPriceContracts`. */
 export function useBalancingPrices(projectId: string | undefined): ScreenData<BalancingPeriod[]> {
-  const q = useQuery({
-    queryKey: qk.revenues(projectId ?? "", "balancing"),
-    queryFn: () => listBalancingPrices(projectId!),
-    enabled: Boolean(projectId),
-  });
+  const q = useQuery({ ...balancingPricesQueryOptions(projectId), enabled: Boolean(projectId) });
   return out<BalancingPeriod[]>(q, []);
 }
 
@@ -140,32 +119,19 @@ export function useIndividualVolumes(
 
 /** Rule 18 — `_ProductionExist`. */
 export function useNegativePriceProduction(projectId: string | undefined): ScreenData<boolean> {
-  const q = useQuery({
-    queryKey: qk.revenues(projectId ?? "", "negativePriceProduction"),
-    queryFn: () => hasNegativePriceProduction(projectId!),
-    enabled: Boolean(projectId),
-  });
+  const q = useQuery({ ...negativePriceProductionQueryOptions(projectId), enabled: Boolean(projectId) });
   return out(q, false);
 }
 
 /** Rule 17 — `Country Inflation Profiles` for the project's country. */
 export function useCountryInflationProfiles(countryId: string | null): ScreenData<CountryInflationProfileRow[]> {
-  const q = useQuery({
-    queryKey: qk.revenuesReference("inflation", countryId ?? "-"),
-    queryFn: () => listRevenueCountryInflation(countryId!),
-    enabled: Boolean(countryId),
-    staleTime: REFERENCE_STALE,
-  });
+  const q = useQuery({ ...revenueInflationQueryOptions(countryId), enabled: Boolean(countryId) });
   return out<CountryInflationProfileRow[]>(q, []);
 }
 
 /** `First(colRevenueSubaccounts)` — the subaccount of every contract. */
 export function useRevenueSubaccount(): ScreenData<{ id: string; name: string } | null> {
-  const q = useQuery({
-    queryKey: qk.revenuesReference("subaccount"),
-    queryFn: loadFirstRevenueSubaccount,
-    staleTime: REFERENCE_STALE,
-  });
+  const q = useQuery(revenueSubaccountQueryOptions());
   return out<{ id: string; name: string } | null>(q, null);
 }
 
@@ -179,13 +145,7 @@ export function useRevenueSubaccount(): ScreenData<{ id: string; name: string } 
 export function useRevenueCurrency(
   countryName: string | null, enabled = true,
 ): ScreenData<{ id: string; name: string } | null> {
-  const code = revenueCurrencyCode(countryName);
-  const q = useQuery({
-    queryKey: qk.revenuesReference("currency", code),
-    queryFn: () => findCurrency(code, { onlyThisCode: true }),
-    enabled,
-    staleTime: REFERENCE_STALE,
-  });
+  const q = useQuery({ ...revenueCurrencyQueryOptions(countryName), enabled });
   return out<{ id: string; name: string } | null>(q, null);
 }
 

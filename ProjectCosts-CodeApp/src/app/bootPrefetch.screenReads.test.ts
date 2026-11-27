@@ -35,6 +35,7 @@ import { startBootPrefetch } from "./bootPrefetch";
 import { sessionProjectQueryOptions } from "./SessionContext";
 import { resetBootDvopt, setBootDvoptForTests } from "@/data/bootDvoptFlags";
 import { startupFlags } from "./startupFlags";
+import { resetEntryPrefetch, setEntryPrefetchForTests } from "@/data/entryPrefetchFlags";
 
 const ID = "9f5aade5-2b7c-ef11-ac20-000d3a466ab7";
 const client = () => new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 60_000 } } });
@@ -46,6 +47,9 @@ beforeEach(() => {
   s.holdSession = undefined;
   startupFlags.bootPrefetch = true;
   resetBootDvopt();
+  // T-C01: the Cost screen's own reads are `costScreenPrefetch.boot.test.ts`'s; this file pins the PM screens' start only.
+  resetEntryPrefetch();
+  setEntryPrefetchForTests({ costReads: false });
 });
 
 describe("PB-03 boot prefetch of a PM screen's own reads", () => {

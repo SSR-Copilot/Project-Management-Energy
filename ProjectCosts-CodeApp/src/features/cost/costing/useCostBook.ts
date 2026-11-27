@@ -1,15 +1,15 @@
 import { useMemo } from "react";
-import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useSession } from "@/app/SessionContext";
 import { qk } from "@/data/keys";
 import { costRepository } from "@/data/costRepository";
-import { COST_READS_RETRY, COST_REFRESH_ON_FAILURE, LEASE_LEAN_RELOAD, OPEX_BOOK_REUSES_CATALOGUE } from "@/data/leaseOpexFlags";
-import { NO_FOCUS_REFETCH } from "@/data/adminQueryPresets";
+import { COST_REFRESH_ON_FAILURE, LEASE_LEAN_RELOAD } from "@/data/leaseOpexFlags";
 import { loadActiveWtgCount, loadStandardAssumptions } from "@/data/standardContracts";
 import { CAPEX_OPT } from "@/data/capexOptFlags";
 import { isPerWtgUnit } from "@/features/cost/capex-costs/standardContracts";
 import { deleteComment, loadComments, saveComment } from "@/data/comments";
-import { loadCapexCategories, loadMilestoneDurations, standardContractExists } from "@/data/costBook";
+import { standardContractExists } from "@/data/costBook";
+import { loadMilestoneDurations } from "@/data/milestoneDurations";
 import { costStates, projectStatesQueryOptions } from "@/data/projectStates";
 import type { CostBookScope } from "@/data/costBook";
 import type { PeriodWriteContext, StandardContractArgs } from "@/data/periodWrites";
@@ -22,7 +22,7 @@ import {
 } from "@/data/addCostSheet";
 import { emitSaveLog } from "@/data/saveLog";
 import type { BackgroundOutcome } from "@/data/addCostSheetBulk";
-import { excludePendingFromBook, excludePendingFromSheet, isPendingContract, pendingDeletes } from "@/data/pendingDeletes";
+import { pendingDeletes } from "@/data/pendingDeletes";
 import type { CostBook, CostLine, CostPeriod, Payment } from "./model";
 import { panelBusyLogLine, type PanelSaveWritten } from "@/data/capexWrites";
 import { logAction } from "@/platform/requestLog";
@@ -31,6 +31,11 @@ import { patchBookDeleted, patchBookPaid, patchBookSaved } from "./capexBookPatc
 import { addCostSaveTimeline } from "./saveTimeline";
 import { beginBackgroundSave, type BackgroundSaveHandle } from "./backgroundSave";
 import { costWriteKey } from "@/domain/writeGuard";
+import {
+  addCostSheetQueryOptions, capexCategoriesQueryOptions, capexCommentsKey, capexTotalsQueryOptions, costBookQueryOptions,
+  countryInflationQueryOptions, currenciesQueryOptions, leaseAssumptionsQueryOptions, leaseBookKey, leaseBookQueryOptions,
+  leaseGeneratorsQueryOptions, opexAccountsOptions, opexSubaccountsOptions,
+} from "./costQueries";
 import { COMMENTS_KEY, capexWriteInvalidations, savedMonthsDeleteRows, type CapexWriteJob } from "./capexInvalidation";
 
 /**
@@ -71,16 +76,6 @@ function periodsEqual(a: CostPeriod, b: CostPeriod): boolean {
 }
 
 /**
- * dvopt T-14 (CA-11, `COST_READS_RETRY`): the four main Cost reads (book, Land Lease book, CAPEX totals, Add Cost sheet) used
- * `retry: false` with no recorded reason (a search of the decision log, the bug register and the git history found none), so one
- * transient 5xx / 429 showed "Cost data is unavailable". They now inherit the app default (`Providers.tsx`: `attempt < 2 &&
- * isRetryable`, a jittered wait): a transient failure is retried twice, a 403 or any other 4xx shows at once. The Add Cost sheet's
- * "no refetch while editing" protection (`NO_FOCUS_REFETCH`, `refetchOnReconnect`) is separate and unchanged, and a retry only
- * ever follows a failed fetch, so it never re-hydrates a grid that holds edits. `false`: `retry: false`, as before.
- */
-const readRetry = (): { retry?: false } => (COST_READS_RETRY ? {} : { retry: false });
-
-/**
  * @param category DEVEX/CAPEX tab index. Omit it on screens that do not show cost lines —
  *   the Dataverse path then fetches none, instead of the project's whole cost set.
  * @param options.everyVisit re-read the book every time the screen opens, whatever its age (OPEX, D123:
@@ -94,38 +89,10 @@ const readRetry = (): { retry?: false } => (COST_READS_RETRY ? {} : { retry: fal
 export function useCostBook(category?: number, options?: { everyVisit?: boolean; scope?: CostBookScope }) {
   const { projectId, project } = useSession();
   const queryClient = useQueryClient();
-  const scope = options?.scope;
-  const queryKey = ["cost-book", projectId, category ?? "none", ...(category === undefined && scope === "opex" ? ["opex"] : [])];
-  const query = useQuery({
-    queryKey, enabled: Boolean(projectId), ...readRetry(),
-    ...(options?.everyVisit ? { refetchOnMount: "always" as const } : {}),
-    // Rows a previous Add Cost from Table Save is still deleting in the background stay hidden
-    // (D51 §11.19). The snapshot is taken when the read starts: every registry change is followed
-    // by an invalidation, which cancels and restarts a read in flight.
-    queryFn: async () => {
-      const pending = pendingDeletes.snapshot();
-      return excludePendingFromBook(await costRepository().getCostBook(projectId as string, category, {
-        ...(scope ? { scope } : {}),
-        // dvopt CB-08 (`OPEX_BOOK_REUSES_CATALOGUE`): the OPEX book's sub-account names come from the catalogue the screen already holds
-        // (`["opex-subaccounts"]`, 30 min: the same ACTIVE rows), so a visit, a focus refetch and a post-write reload do not read
-        // `vsb_opexsubaccounts` again. `ensureQueryData` returns a cached answer, joins one in flight, or reads it once.
-        ...(scope === "opex" && category === undefined && OPEX_BOOK_REUSES_CATALOGUE
-          ? {
-            opexSubaccountNames: async () =>
-              (await queryClient.ensureQueryData(opexSubaccountsOptions(queryClient))).map((s) => ({ id: s.id, name: s.name })),
-          }
-          : {}),
-        // CA-09 (`COMMENTS_WITH_PAYMENTS`): the red comment dots no longer wait for the payments. Once the contract list is in, the
-        // threads of those contracts start under the key the screen reads, in the same wave as the payments. A CAPEX tab only.
-        ...(CAPEX_OPT.COMMENTS_WITH_PAYMENTS && category !== undefined && category >= 0
-          ? { onContracts: (ids: string[]) => prefetchCapexComments(queryClient, ids.filter((id) => !isPendingContract(pending, id))) }
-          : {}),
-        // B2 (OPT-07d): the `Project States` a linked contract needs come from the shared D159 cache entry (the same active
-        // rows in `Order`) instead of a read of their own; a warm cache costs no request.
-        loadStates: async () => costStates(await queryClient.ensureQueryData(projectStatesQueryOptions())),
-      }), pending);
-    },
-  });
+  // T-C01: the key, the function and the freshness are `costQueries.ts`' (one definition with the boot prefetch).
+  const costBookOptions = costBookQueryOptions(queryClient, projectId, category, options);
+  const queryKey = costBookOptions.queryKey;
+  const query = useQuery({ ...costBookOptions, enabled: Boolean(projectId) });
   /**
    * The O&M / Land Lease / Other OPEX period screens' save.
    *
@@ -289,16 +256,10 @@ export function useAddStandardContract() {
  * data boundary". The queries moved to `data/landLease.ts` and the hooks moved here, so the Land
  * Lease screen now reaches its data exactly as every other Cost screen does.
  */
-export const leaseBookKey = (projectId: string | undefined) =>
-  ["land-lease-book", projectId ?? "none"] as const;
+export { leaseBookKey };
 
 export function useLeaseBook(projectId: string | undefined) {
-  return useQuery({
-    queryKey: leaseBookKey(projectId),
-    enabled: Boolean(projectId),
-    ...readRetry(),
-    queryFn: () => costRepository().getLeaseBook(projectId as string),
-  });
+  return useQuery({ ...leaseBookQueryOptions(projectId), enabled: Boolean(projectId) });
 }
 
 /**
@@ -315,20 +276,11 @@ async function refreshLeaseBooks(client: QueryClient, projectId: string | undefi
 }
 
 export function useLeaseGenerators(projectId: string | undefined) {
-  return useQuery({
-    queryKey: ["land-lease-generators", projectId ?? "none"] as const,
-    enabled: Boolean(projectId),
-    staleTime: 5 * 60 * 1000,
-    queryFn: () => costRepository().getLeaseGenerators(projectId as string),
-  });
+  return useQuery({ ...leaseGeneratorsQueryOptions(projectId), enabled: Boolean(projectId) });
 }
 
 export function useCurrencies() {
-  return useQuery({
-    queryKey: ["transaction-currencies"] as const,
-    staleTime: 30 * 60 * 1000,
-    queryFn: () => costRepository().listCurrencies(),
-  });
+  return useQuery(currenciesQueryOptions());
 }
 
 /**
@@ -339,12 +291,7 @@ export function useCurrencies() {
  * data, so it is keyed on the country alone and cached for half an hour.
  */
 export function useCountryInflation(countryId: string | undefined) {
-  return useQuery({
-    queryKey: ["country-inflation", countryId ?? "none"] as const,
-    enabled: Boolean(countryId),
-    staleTime: 30 * 60 * 1000,
-    queryFn: () => costRepository().getCountryInflation(countryId as string),
-  });
+  return useQuery({ ...countryInflationQueryOptions(countryId), enabled: Boolean(countryId) });
 }
 
 export function useLeaseAssumptions(
@@ -352,10 +299,8 @@ export function useLeaseAssumptions(
   technology: number | null | undefined,
 ) {
   return useQuery({
-    queryKey: ["land-lease-assumptions", countryId ?? "none", technology ?? "none"] as const,
+    ...leaseAssumptionsQueryOptions(countryId, technology),
     enabled: Boolean(countryId) && technology !== null && technology !== undefined,
-    staleTime: 15 * 60 * 1000,
-    queryFn: () => costRepository().getLeaseAssumptions(countryId, technology),
   });
 }
 
@@ -392,30 +337,6 @@ export function useLeaseWrites(projectId: string | undefined) {
 }
 
 /* ══════════════════════════════════════════════════ OPEX reference data ══ */
-
-/**
- * `colOpexAccounts` and `colOpexSubaccounts` (`OnStart.txt:622-640`).
- *
- * Global master data — two rows and nine rows on the org — so one query pair is cached for the
- * session rather than fetched per screen. `OpexScreen.tsx` carried both as transcribed constants
- * because no loader existed; `selectedAccount` / `defaultSubaccount` / `subaccountsForMode` take
- * exactly these shapes, so the constants were deletable the moment this landed.
- */
-const opexAccountsOptions = {
-  queryKey: ["opex-accounts"] as const,
-  staleTime: 30 * 60 * 1000,
-  queryFn: () => costRepository().listOpexAccounts(),
-};
-
-/** The OPEX sub-account catalogue's query, shared by `useOpexCatalog` and (CB-08) the OPEX book, so the one cached read serves both. */
-const opexSubaccountsOptions = (queryClient: QueryClient) => ({
-  queryKey: ["opex-subaccounts"] as const,
-  staleTime: 30 * 60 * 1000,
-  // B2 (OPT-06): the sub-accounts need the account NAMES, and the accounts query reads them. Pass its PROMISE (the
-  // sub-account read starts at once, beside it), not nothing: with no argument `loadOpexSubaccounts` read the accounts a
-  // second time. `ensureQueryData` joins the accounts read already in flight, so the table is read once.
-  queryFn: () => costRepository().listOpexSubaccounts(queryClient.ensureQueryData(opexAccountsOptions)),
-});
 
 export function useOpexCatalog() {
   const queryClient = useQueryClient();
@@ -472,13 +393,7 @@ export function useOpexAssumptionScopes(
  */
 export function useCapexTotals(enabled = true) {
   const { projectId } = useSession();
-  return useQuery({
-    queryKey: ["capex-totals", projectId],
-    enabled: enabled && Boolean(projectId),
-    ...readRetry(),
-    // See `useCostBook`: pending background deletes are left out of the sums (D51 §11.19).
-    queryFn: () => costRepository().getCapexTotals(projectId as string, pendingDeletes.snapshot()),
-  });
+  return useQuery({ ...capexTotalsQueryOptions(projectId), enabled: enabled && Boolean(projectId) });
 }
 
 /** CA-05: what each panel save wrote, handed from `mutationFn` to `onSuccess` by the mutation's variables object. */
@@ -659,22 +574,7 @@ export function useCapexWrites(
  */
 export function useAddCostSheet(category: number) {
   const { projectId } = useSession();
-  return useQuery({
-    queryKey: ["add-cost-sheet", projectId, category],
-    enabled: Boolean(projectId),
-    ...readRetry(),
-    // The sheet is an editor: a refetch re-hydrates the grid (dropping unsaved edits) and clears the
-    // Screen's retry-id cache, so after a failed save a focus or reconnect refetch would turn a safe
-    // "Save again" into a silent partial save. It still loads fresh on entry and after a save.
-    ...NO_FOCUS_REFETCH,
-    refetchOnReconnect: false,
-    // A sheet loaded while an earlier Save's deletes still run must not show (and so re-plan)
-    // the rows being deleted (D51 §11.19; the `blockedByPastCosts` branch reloads in place).
-    queryFn: async () => {
-      const pending = pendingDeletes.snapshot();
-      return excludePendingFromSheet(await costRepository().loadAddCostSheet(projectId as string, category), pending);
-    },
-  });
+  return useQuery({ ...addCostSheetQueryOptions(projectId, category), enabled: Boolean(projectId) });
 }
 
 /**
@@ -924,11 +824,7 @@ export function useProjectStates() {
  * `useProjectStates` above.
  */
 export function useCapexCategories() {
-  return useQuery({
-    queryKey: ["capex-categories"],
-    staleTime: 30 * 60 * 1000,
-    queryFn: () => loadCapexCategories(),
-  });
+  return useQuery(capexCategoriesQueryOptions());
 }
 
 /**
@@ -950,25 +846,7 @@ export function useMilestoneDurations(
   });
 }
 
-/** The second element of the `["capex-comments", key]` query key: the contract ids, sorted and joined (one definition, CA-09). */
-export function capexCommentsKey(contractIds: readonly string[]): string {
-  return [...contractIds].sort().join(",");
-}
-
-/**
- * CA-09: starts the comment threads of `contractIds` under the key `useCapexComments` reads, unless that key already holds data.
- * `staleTime: Infinity` makes this a "fetch only when missing": a book reload never re-reads threads the cache already has (their
- * own freshness stays with `useCapexComments`: 30 s and the focus refetch). Fire-and-forget; `prefetchQuery` never rejects, so a
- * failed warm-up leaves the screen's own query to read on mount.
- */
-function prefetchCapexComments(client: QueryClient, contractIds: readonly string[]): void {
-  if (contractIds.length === 0) return;
-  void client.prefetchQuery({
-    queryKey: ["capex-comments", capexCommentsKey(contractIds)],
-    queryFn: () => loadComments(contractIds),
-    staleTime: Infinity,
-  });
-}
+export { capexCommentsKey };
 
 /**
  * The comment threads for a set of contracts.
@@ -985,7 +863,7 @@ function prefetchCapexComments(client: QueryClient, contractIds: readonly string
  * They share the \`["capex-comments", …]\` key PREFIX, which is what lets one panel save refresh
  * both: react-query matches invalidations by prefix.
  */
-export function useCapexComments(contractIds: readonly string[]) {
+export function useCapexComments(contractIds: readonly string[], options: { keepPrevious?: boolean } = {}) {
   // B2 (OPT-25): the key (a sorted, joined id list; about 20 KB at 500+ contracts) is rebuilt when the id list changes, not on
   // every render. The CAPEX screen memoises its list on the book, so that is once per book; the panel passes one id.
   const key = useMemo(() => capexCommentsKey(contractIds), [contractIds]);
@@ -993,6 +871,11 @@ export function useCapexComments(contractIds: readonly string[]) {
     queryKey: ["capex-comments", key],
     enabled: contractIds.length > 0,
     queryFn: () => loadComments(contractIds),
+    // SCC-16 / T-E06, OPT-IN (the grid's dots only): a new id list (a contract added or deleted, another category) is a new key with no
+    // data, so the dots went away until its read landed. The previous key's threads stay until then: the dots are filtered through the
+    // book's own payments (`commentCosts`), so a thread of another contract matches no payment. The panel (one contract) does NOT opt
+    // in: contract B must never show contract A's thread while loading.
+    ...(options.keepPrevious === true ? { placeholderData: keepPreviousData } : {}),
   });
 }
 

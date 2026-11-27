@@ -45,3 +45,61 @@ body {
 * {
   box-sizing: border-box;
 }
+
+/*
+ * BND-09 (T-C08): the static splash inside `#root` in index.html, shown from the first paint until React's first commit replaces
+ * the children of `#root`. It mirrors `components/LoadingOverlay` (mode "blocking"): a 10 % scrim, a white 500 x 240 card with
+ * 5 px corners, a spinner box 90 px high with the label 10 px under it, 14.7 px semibold black text (the canvas
+ * `cmp_PopUp_Loading` measurements transcribed there). Plain CSS: it must paint before any JavaScript has run. The spinner is a
+ * 28 px ring in `palette.themePrimary` (#006eb9, `theme/tokens.ts`), the size of Fluent's medium Spinner.
+ */
+.vsb-splash {
+  position: fixed;
+  top: 0; right: 0; bottom: 0; left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.10);
+  z-index: 1000;
+}
+
+.vsb-splash-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 500px;
+  max-width: 90vw;
+  height: 240px;
+  background-color: #ffffff;
+  border-radius: 5px;
+}
+
+.vsb-splash-spinner {
+  box-sizing: border-box;
+  width: 28px;
+  height: 28px;
+  /* the overlay's 90 px spinner box starts 50 px down, so the 28 px ring sits at 81 px; the label then starts at 150 px (50 + 90 + 10) */
+  margin-top: 81px;
+  margin-bottom: 41px;
+  border: 3px solid rgba(0, 110, 185, 0.2);
+  border-top-color: #006eb9;
+  border-radius: 50%;
+  animation: vsb-splash-spin 0.9s linear infinite;
+}
+
+.vsb-splash-label {
+  padding: 0 20px;
+  text-align: center;
+  color: #000000;
+  font-size: 14.7px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+@keyframes vsb-splash-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vsb-splash-spinner { animation: none; }
+}

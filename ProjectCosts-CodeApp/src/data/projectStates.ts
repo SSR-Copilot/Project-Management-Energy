@@ -3,7 +3,7 @@
  *
  * Seven screens need these ten rows. They used to read the table through four different functions under four different cache
  * keys, so opening Project Overview and then General Data read it twice, and each key went stale on its own clock. Now there is
- * one read (`listProjectStates`, `data/generalData.ts`), one key (`qk.generalDataProjectStates`) and one freshness, and each
+ * one read (`listProjectStates`, `data/projectStatesRead.ts`), one key (`qk.generalDataProjectStates`) and one freshness, and each
  * screen takes its own view of the list through the pure functions below, so what a screen shows is exactly what it showed
  * before: Project Overview and the Cost screens list the ACTIVE states only, the Admin gate screen lists every state with
  * its raw `Order`, General Data, the Check List, Revenues and Milestones list every state.
@@ -11,7 +11,7 @@
  * No React in this file: `app/bootPrefetch.ts` imports it.
  */
 import { queryOptions } from "@tanstack/react-query";
-import { listProjectStates, type SharedProjectState } from "./generalData";
+import { listProjectStates, type SharedProjectState } from "./projectStatesRead";
 import { qk } from "./keys";
 import type { ProjectState as AdminProjectState } from "./adminGatesApprovals";
 import type { ProjectState as CostProjectState } from "./costBook";

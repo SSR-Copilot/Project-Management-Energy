@@ -31,7 +31,7 @@ vi.mock("./adminGatesApprovals", () => ({
   listChecklistApprovals: (ids: readonly string[]) => svc.approvals(ids),
   listGateApprovals: (c: string, t: number) => svc.gates(c, t),
 }));
-vi.mock("./generalData", () => ({ listProjectStates: () => svc.states() }));
+vi.mock("./projectStatesRead", () => ({ listProjectStates: () => svc.states() }));
 
 import { CHOICE_PROCESS, ES } from "@/data/dataverseNames";
 import {

@@ -20,10 +20,7 @@ const repo = vi.hoisted(() => ({ loadDataset: vi.fn(), searchPeople: vi.fn(), re
 vi.mock("@/data/adminGatesApprovals", () => ({ projectGatesRepository: repo }));
 
 const states = vi.hoisted(() => ({ list: vi.fn() }));
-vi.mock("@/data/generalData", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/data/generalData")>()),
-  listProjectStates: states.list,
-}));
+vi.mock("@/data/projectStatesRead", () => ({ listProjectStates: states.list }));
 
 const exec = vi.hoisted(() => vi.fn());
 vi.mock("@/data/executePlan", async (importOriginal) => ({

@@ -49,6 +49,9 @@ import { useBusyRunner } from "@/features/shared/useBusyRunner";
 import { useConfirmDialog, type ConfirmState } from "@/features/shared/useConfirmDialog";
 import { usePanelState } from "@/features/shared/usePanelState";
 import { useToggleSet } from "@/features/shared/useToggleSet";
+import { holdBeforeUnload } from "@/components/beforeUnload";
+import { SMALL_FIXES } from "@/data/smallFixesFlags";
+import { actionLog } from "@/platform/requestLog";
 import { userReason } from "@/platform/userMessage";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -215,12 +218,17 @@ export default function CAPEXAccountsSettingsScreen() {
    */
   function cleanUpInBackground(accountIds: readonly string[], year: number, month: number) {
     const done = notify.progress(CLEANUP.running, { testId: CLEANUP.testId });
-    void cleanUpForecastCosts(accountIds, year, month)
+    // SAD-05 / T-B07: a tab close or reload mid-run stops the loop half-way and no Resume exists, so the browser asks first while it
+    // runs (the shared reference-counted hold, released on success and on failure). Rollback: `CLEANUP_UNLOAD_GUARD`.
+    const release = SMALL_FIXES.CLEANUP_UNLOAD_GUARD ? holdBeforeUnload() : () => undefined;
+    // Rule 23: one `[VSB] ACTION` line for the whole clean-up (it is not a query or a mutation of its own).
+    void actionLog("clean up forecast costs", () => cleanUpForecastCosts(accountIds, year, month))
       .then(
         (result) => notify.success(cleanupDoneText(result)),
         (error: unknown) => notify.error(describeWriteError(error, CLEANUP.action)),
       )
       .finally(() => {
+        release();
         done();
         void invalidateAfterCapexAccountsWrite(queryClient);
       });

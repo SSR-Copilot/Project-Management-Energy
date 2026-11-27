@@ -66,6 +66,7 @@ import {
   type TrackingRow, type WritePlan,
 } from "./rules";
 import { checklistReloadKeys } from "./reload";
+import { REFERENCE } from "@/data/queryPolicy";
 
 /** NEW (6 Nov 2026): how long, and how often, the screen waits for the gate flow to move a cluster on. */
 const TRANSITION_WAIT_MS = 30_000;
@@ -137,7 +138,6 @@ export const checklistWriteKeys = (projectId: string) => [
 const NONE: never[] = [];
 
 /** D156 (`sharedStates`): how long the shared project-states list is kept, as on Revenues, Milestones and Project Overview. */
-const REFERENCE_STALE = 30 * 60 * 1000;
 
 /**
  * D156 (`sharedStates`): the shared list is filled by whichever screen opened first, and General Data's rows may leave
@@ -177,7 +177,7 @@ export function useClusterSequence(
     queryKey: perf.sharedStates ? qk.generalDataProjectStates : qk.checklist(id, "states"),
     queryFn: listChecklistProjectStates,
     enabled: Boolean(projectId),
-    ...(perf.sharedStates ? { staleTime: REFERENCE_STALE, select: normaliseStates } : {}),
+    ...(perf.sharedStates ? { ...REFERENCE, select: normaliseStates } : {}),
     ...quiet,
   });
   const trackings = useQuery({

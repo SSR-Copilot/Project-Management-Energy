@@ -39,7 +39,7 @@ import { CHOICE_PROCESS, ES, TEXT_MAX_LENGTH } from "@/data/dataverseNames";
 import { bind } from "@/data/odata";
 import { refusePlan, type WritePlan } from "@/data/writePlan";
 import type { PlanJob } from "@/data/usePlanWrite";
-import { textFormat } from "@/features/pm/generators/rules";
+import { textFormat } from "@/domain/powerFxNumeric";
 
 /* ═══════════════════════════════════════════════════════════════════ columns ════ */
 

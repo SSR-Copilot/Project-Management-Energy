@@ -5,7 +5,7 @@
 import type {
   DefaultChecklist, GateTaskApproval, GateTemplate, GatesDataset, PersonRef, ProjectState,
 } from "@/data/adminGatesApprovals";
-import type { SharedProjectState } from "@/data/generalData";
+import type { SharedProjectState } from "@/data/projectStatesRead";
 import type { CountryRow } from "@/domain/countryPicker";
 import { MODE } from "./rules";
 

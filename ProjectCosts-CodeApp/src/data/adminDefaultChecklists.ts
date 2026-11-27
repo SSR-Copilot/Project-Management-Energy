@@ -14,7 +14,7 @@
  * `SynchroniseProjectTaskList-Add_Update` reads the committed row, so the UI must reflect only
  * what Dataverse accepted.
  */
-import type { SharedProjectState } from "./generalData";
+import type { SharedProjectState } from "./projectStatesRead";
 import { RowWriteError } from "./adminRowWrites";
 import { ADMIN_OPT } from "./adminFlags";
 import { forEachLimit } from "./concurrency";

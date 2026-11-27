@@ -39,7 +39,7 @@ import { fetchAll, fetchPage } from "./client";
 import { ACTIVE, and, chunk, eq, guid, lookupEq, lookupIn } from "./odata";
 import { rowStr as str, rowNum as num } from "./rowValues";
 import { PROJECT_SELECT, toRevenueProject } from "./pmProjectRow";
-import { listProjectStates } from "./generalData";
+import { listProjectStates } from "./projectStatesRead";
 
 /** Cost-chunk reads in flight at once (`parallelReads`): a read shares the 52-request ceiling with the screen's other reads. */
 const READ_CONCURRENCY = 8;

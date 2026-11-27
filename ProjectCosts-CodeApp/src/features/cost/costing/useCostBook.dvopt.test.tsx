@@ -160,3 +160,43 @@ describe("CA-16 the active-WTG count is read only when it can be used", () => {
     await waitFor(() => expect(loadActiveWtgCount).toHaveBeenCalledTimes(1));
   });
 });
+
+describe("SCC-16 / T-E06: the comment dots keep the previous threads while the next id list loads (opt-in)", () => {
+  /** The first id list answers at once; the second is held open so the in-between render can be read. */
+  function twoLists() {
+    const thread = (id: string) => ({ id, contractId: id, costId: `cost-${id}`, comment: "x" });
+    let release: () => void = () => undefined;
+    loadComments.mockImplementation(async (ids: readonly string[]) => {
+      if (ids.includes("c-b")) await new Promise<void>((r) => { release = r; });
+      return [thread(ids[0]!)] as never[];
+    });
+    return { release: () => release() };
+  }
+  const keys = (ids: readonly string[]) => capexCommentsKey(ids);
+
+  it("UT-CAPEXCOM-020 with keepPrevious the first render of the new key still holds the previous key's threads (placeholder)", async () => {
+    const gate = twoLists();
+    const { client, wrapper } = setup();
+    const hook = renderHook(({ ids }: { ids: string[] }) => useCapexComments(ids, { keepPrevious: true }), { wrapper, initialProps: { ids: ["c-a"] } });
+    await waitFor(() => expect(hook.result.current.data).toHaveLength(1));
+    hook.rerender({ ids: ["c-a", "c-b"] });
+    // The new key has no data yet, and the old data is shown meanwhile.
+    expect(client.getQueryData(["capex-comments", keys(["c-a", "c-b"])])).toBeUndefined();
+    expect(hook.result.current.data).toHaveLength(1);
+    expect(hook.result.current.isPlaceholderData).toBe(true);
+    gate.release();
+    await waitFor(() => expect(hook.result.current.isPlaceholderData).toBe(false));
+  });
+
+  it("UT-CAPEXCOM-021 WITHOUT the option (the comments panel's call) another contract's threads are never shown while loading", async () => {
+    const gate = twoLists();
+    const { wrapper } = setup();
+    const hook = renderHook(({ ids }: { ids: string[] }) => useCapexComments(ids), { wrapper, initialProps: { ids: ["c-a"] } });
+    await waitFor(() => expect(hook.result.current.data).toHaveLength(1));
+    hook.rerender({ ids: ["c-b"] });
+    expect(hook.result.current.data).toBeUndefined();
+    expect(hook.result.current.isPlaceholderData).toBe(false);
+    gate.release();
+    await waitFor(() => expect(hook.result.current.data).toHaveLength(1));
+  });
+});

@@ -7,7 +7,8 @@
 import { Vsb_devexcapexstandardassumptionsesService } from "@/generated/services/Vsb_devexcapexstandardassumptionsesService";
 import { Vsb_generatortypeinprojectsService } from "@/generated/services/Vsb_generatortypeinprojectsService";
 import { fetchAll } from "./client";
-import { ACTIVE, and, chunk, lookupEq, lookupIn, numberOf } from "./odata";
+import { ACTIVE, and, lookupEq, lookupIn, numberOf } from "./odata";
+import { readChunked } from "./readChunks";
 import type { DevexCapexAssumption } from "@/features/cost/capex-costs/standardContracts";
 import { CAPEX_OPT } from "./capexOptFlags";
 
@@ -28,7 +29,7 @@ export async function loadStandardAssumptions(
   // one sub-account, so the chunks do not overlap. The JS narrowing below stays (a belt for any row the filter let through),
   // so the rows returned are exactly the ones the whole-table read kept; for one chunk (a category holds well under 40
   // sub-accounts) their order is the server's order as before.
-  const batches = await Promise.all(chunk([...wanted]).map((ids) => fetchAll(
+  const batches = await readChunked([...wanted], (ids) => fetchAll(
     "list CAPEX standard assumptions",
     (o) => Vsb_devexcapexstandardassumptionsesService.getAll(o),
     {
@@ -40,7 +41,7 @@ export async function loadStandardAssumptions(
       ],
       filter: and(lookupIn("vsb_subaccount", ids), ACTIVE),
     },
-  )));
+  ));
   const rows = batches.flat();
   return rows
     .filter((r) => r._vsb_subaccount_value && wanted.has(r._vsb_subaccount_value))

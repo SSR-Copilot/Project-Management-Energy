@@ -8,13 +8,15 @@
  */
 import { queryOptions } from "@tanstack/react-query";
 import { qk } from "@/data/keys";
+import { REFERENCE } from "@/data/queryPolicy";
 import {
-  listCountryAreas, listGeneralDataCountries, listProjectStates, listShareholders,
+  listCountryAreas, listGeneralDataCountries, listShareholders,
   listStateTrackings, listTerrainUtilizations, loadGeneralDataProject,
 } from "@/data/generalData";
+import { listProjectStates } from "@/data/projectStatesRead";
 
 /** How long a reference list counts as fresh. */
-export const REFERENCE_STALE = 30 * 60 * 1000;
+export const REFERENCE_STALE = REFERENCE.staleTime;
 
 /** The project row (`gblRecordSelectedProject`). */
 export const generalDataProjectQueryOptions = (projectId: string) => queryOptions({
@@ -25,26 +27,26 @@ export const generalDataProjectQueryOptions = (projectId: string) => queryOption
 export const generalDataCountriesQueryOptions = () => queryOptions({
   queryKey: qk.generalDataCountries,
   queryFn: listGeneralDataCountries,
-  staleTime: REFERENCE_STALE,
+  ...REFERENCE,
 });
 
 export const generalDataProjectStatesQueryOptions = () => queryOptions({
   queryKey: qk.generalDataProjectStates,
   queryFn: listProjectStates,
-  staleTime: REFERENCE_STALE,
+  ...REFERENCE,
 });
 
 /** One country's areas — the Area dropdown and the "has areas" half of the Area rule. */
 export const generalDataAreasQueryOptions = (countryId: string) => queryOptions({
   queryKey: qk.generalDataAreas(countryId),
   queryFn: () => listCountryAreas(countryId),
-  staleTime: REFERENCE_STALE,
+  ...REFERENCE,
 });
 
 export const generalDataUtilizationsQueryOptions = (countryId: string) => queryOptions({
   queryKey: qk.generalDataUtilizations(countryId),
   queryFn: () => listTerrainUtilizations(countryId || null),
-  staleTime: REFERENCE_STALE,
+  ...REFERENCE,
 });
 
 export const shareholdersQueryOptions = (projectId: string) => queryOptions({

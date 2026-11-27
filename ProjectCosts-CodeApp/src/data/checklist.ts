@@ -7,7 +7,7 @@
  * Three tables were registered for this screen with `pac code add-data-source` (65 → 68):
  * `vsb_projectchecklist`, `vsb_projectstatetrackingnote` and `vsb_projectchecklisttrackingnote`.
  *
- * Reused, never copied (rule 17): the project states (`listProjectStates`, `data/generalData.ts`),
+ * Reused, never copied (rule 17): the project states (`listProjectStates`, `data/projectStatesRead.ts`),
  * the gate rows, the check-list approval rows, the country/technology scope and the Entra people
  * (`listGateApprovals`, `listChecklistApprovals`, `findScopeCountryTechId`, `getEntraPeople`,
  * `data/adminGatesApprovals.ts`).
@@ -21,14 +21,14 @@ import { Vsb_projectdefaultchecklistsesService } from "@/generated/services/Vsb_
 import { Vsb_projectdefaultapprovalsesService } from "@/generated/services/Vsb_projectdefaultapprovalsesService";
 import { Vsb_projectstatetrackingnotesService } from "@/generated/services/Vsb_projectstatetrackingnotesService";
 import { Vsb_projectchecklisttrackingnotesService } from "@/generated/services/Vsb_projectchecklisttrackingnotesService";
-import { PROJECT_COL } from "@/features/pm/general-data/rules";
+import { PROJECT_COL } from "@/features/pm/general-data/projectColumns";
 import {
   CHECKLIST_COL, NOTE_COL, TRACKING_COL,
   type ChecklistApprovalSetting, type ChecklistProject, type ChecklistRow, type CopyProbeRow, type DefaultChecklistTemplate,
   type GateSetting, type HistoryQueryDescriptor, type ProjectStateRef, type TrackingRow,
 } from "@/features/pm/checklist/rules";
 import { fetchAll, fetchPage } from "./client";
-import { listProjectStates } from "./generalData";
+import { listProjectStates } from "./projectStatesRead";
 import { findScopeCountryTechId, getEntraPeople, listChecklistApprovals, listGateApprovals } from "./adminGatesApprovals";
 import type { Persona } from "./adminGatesApprovals";
 import { ACTIVE, and, chunk, eq, guid, idIn, lookupEq } from "./odata";

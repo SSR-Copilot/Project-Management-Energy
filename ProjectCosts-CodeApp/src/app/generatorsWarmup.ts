@@ -53,6 +53,22 @@ export function isGeneratorsIntentTarget(target: EventTarget | null): boolean {
   return typeof element?.closest === "function" && Boolean(element.closest(`[data-testid="${GENERATORS_NAV_TEST_ID}"]`));
 }
 
+/**
+ * T-C03: the ONE document-level delegation the navigation rail's intent triggers share (this warm-up, and `intentPrefetch.ts`'s hover and
+ * focus prefetch). Capture-phase listeners on the document, so one registration serves every rail entry however often the rail re-renders.
+ * Returns the cleanup.
+ */
+export function listenOnDocument(types: readonly string[], handler: (event: Event) => void): () => void {
+  for (const type of types) document.addEventListener(type, handler, true);
+  return () => { for (const type of types) document.removeEventListener(type, handler, true); };
+}
+
+/** T-C03: the rail entry (`LeftNav` puts the route on it as `data-nav-path`) an event's target is, or is inside; `null` elsewhere. */
+export function railEntryOf(target: EventTarget | null): Element | null {
+  const element = target as { closest?: (selector: string) => Element | null } | null;
+  return typeof element?.closest === "function" ? element.closest("[data-nav-path]") : null;
+}
+
 export function useGeneratorsWarmup(projectId: string | undefined, pathname: string): void {
   const qc = useQueryClient();
   useEffect(() => {
@@ -75,12 +91,10 @@ export function useGeneratorsWarmup(projectId: string | undefined, pathname: str
     // Lazy: the person shows intent (hover or focus on the Generators rail entry), or the screen stays open for a long time.
     const idle = setTimeout(start, GENERATORS_WARMUP_IDLE_MS);
     const onIntent = (event: Event) => { if (isGeneratorsIntentTarget(event.target)) start(); };
-    document.addEventListener("pointerover", onIntent, true);
-    document.addEventListener("focusin", onIntent, true);
+    const stopListening = listenOnDocument(["pointerover", "focusin"], onIntent);
     return () => {
       clearTimeout(idle);
-      document.removeEventListener("pointerover", onIntent, true);
-      document.removeEventListener("focusin", onIntent, true);
+      stopListening();
     };
   }, [qc, projectId, pathname]);
 }

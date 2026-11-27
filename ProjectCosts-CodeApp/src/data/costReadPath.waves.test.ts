@@ -265,3 +265,50 @@ describe("OPEX-only book with the screen's sub-account catalogue", () => {
     }
   });
 });
+
+/**
+ * T-C05 (NET-04): the id-chunk reads of the cost book go through the 16-wide read lane. Up to 16 chunks the waves and the request
+ * counts are the old ones; above it the chunks queue (one more wave) instead of all starting together.
+ */
+describe("CAPEX tab: the payment chunks and the read lane", () => {
+  const contractsOf = (n: number) => Array.from({ length: n }, (_, i) => ({
+    vsb_capexprojectcontractid: `${(0xc0000000 + i).toString(16)}-0000-0000-0000-000000000000`, _vsb_account_value: SUBACC, vsb_name: `C${i}`, _vsb_linkedcluster_value: "s1",
+  }));
+  const withContracts = async (n: number) => {
+    const original = ANSWERS["list CAPEX project contracts"];
+    ANSWERS["list CAPEX project contracts"] = contractsOf(n);
+    try { return await wave.run(() => loadCostBook(P, 0)); } finally { ANSWERS["list CAPEX project contracts"] = original!; }
+  };
+  const paymentReads = (calls: readonly WaveCall[]) => calls.filter((c) => c.label === "list CAPEX costs for the cost book");
+
+  it("UT-COSTWAVE-READLANE-001 640 contracts = 16 payment chunks: all 16 start in the same wave, waves and requests are the old ones (3 waves, 4 + 16 requests)", async () => {
+    const { calls, waves, value } = await withContracts(640);
+    expect(paymentReads(calls)).toHaveLength(16);
+    expect(new Set(paymentReads(calls).map((c) => c.wave))).toEqual(new Set([2]));
+    expect(waves).toBe(3);
+    expect(calls).toHaveLength(4 + 16);
+    expect(value.lines).toHaveLength(640);
+  });
+
+  it("UT-COSTWAVE-READLANE-002 680 contracts = 17 payment chunks: 16 start together, the 17th waits for a slot (one more wave), every chunk is read once", async () => {
+    const { calls, waves, value } = await withContracts(680);
+    const reads = paymentReads(calls);
+    expect(reads).toHaveLength(17);
+    expect(reads.filter((c) => c.wave === 2)).toHaveLength(16);
+    expect(reads.filter((c) => c.wave === 3)).toHaveLength(1);
+    expect(waves).toBe(4);
+    expect(value.lines).toHaveLength(680);
+  });
+
+  it("UT-COSTWAVE-READLANE-003 with READ_LANE off the same 680 contracts start all 17 payment reads together (the old wave count)", async () => {
+    const flags = await import("./readLaneFlags");
+    flags.setReadLaneFlagsForTests({ enabled: false });
+    try {
+      const { calls, waves } = await withContracts(680);
+      expect(paymentReads(calls).filter((c) => c.wave === 2)).toHaveLength(17);
+      expect(waves).toBe(3);
+    } finally {
+      flags.resetReadLaneFlags();
+    }
+  });
+});

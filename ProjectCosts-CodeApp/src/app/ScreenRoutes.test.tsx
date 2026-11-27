@@ -27,7 +27,7 @@ vi.mock("@/app/SessionContext", () => ({
 vi.mock("@/app/useCurrentUser", () => ({ useAdminAccess: () => true, useCurrentUser: () => ({ data: undefined }) }));
 vi.mock("@/data/generalData", () => ({
   loadGeneralDataProject: async () => null, listGeneralDataCountries: async () => [], listCountryAreas: async () => [],
-  listProjectStates: async () => [], listTerrainUtilizations: async () => [], listShareholders: async () => [],
+  listTerrainUtilizations: async () => [], listShareholders: async () => [],
   listStateTrackings: async () => [], searchGermanMunicipalities: async () => [], searchFrenchMunicipalities: async () => [],
   lookupGermanTradeTaxRate: async () => null, MUNICIPALITY_SEARCH_TOP: 5000,
 }));
@@ -62,13 +62,17 @@ vi.mock("@/data/planning", () => ({
   loadPlanningProject: async () => null, loadProjectPlanning: async () => null, listPermits: async () => [],
   listAquisitionTypes: async () => [], listAquisitionStatuses: async () => [], listCustomChoiceValues: async () => [],
 }));
+// BND-06 (T-E01): the shared project-states read is its own module now.
+vi.mock("@/data/projectStatesRead", () => ({ listProjectStates: async () => [] }));
 vi.mock("@/data/gridOperator", () => ({ loadGridOperator: async () => null }));
 vi.mock("@/data/revenues", () => ({
   loadRevenueProject: async () => null, listRevenueContracts: async () => [], listBalancingPrices: async () => [],
   listIndividualVolumes: async () => [], listIndividualVolumeIds: async () => [], hasNegativePriceProduction: async () => false,
-  loadFirstRevenueSubaccount: async () => null, findCurrency: async () => null, listRevenueCountryInflation: async () => [],
+  listRevenueCountryInflation: async () => [],
   listOverlappingContracts: async () => [], listRevenueAssumptionRows: async () => [],
 }));
+// BND-04 (T-E02): the two small Milestones/Revenue lookups are their own module now.
+vi.mock("@/data/revenueLookups", () => ({ loadFirstRevenueSubaccount: async () => null, findCurrency: async () => null }));
 vi.mock("@/data/finance", () => ({
   loadFinanceProject: async () => null, listFinancingCategories: async () => [], listFinancingInputs: async () => [],
   listRepaymentAmounts: async () => [], listStepUpMargins: async () => [], loadTotalDevexCapex: async () => 0,

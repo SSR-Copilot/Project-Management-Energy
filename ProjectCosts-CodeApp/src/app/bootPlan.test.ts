@@ -1,5 +1,7 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { bootTarget, needsLaunchParams, splitHash } from "./bootPlan";
+import { ADMIN_BOOT_PATHS, bootTarget, needsLaunchParams, splitHash } from "./bootPlan";
 
 const ID = "9f5aade5-2b7c-ef11-ac20-000d3a466ab7";
 const input = (hash: string, launchParams: Record<string, string> = {}, windowSearch = "") =>
@@ -60,7 +62,8 @@ describe("boot plan: which screen the URL opens (D119)", () => {
 
   it("UT-BOOT-010 every other route prefetches nothing", () => {
     // OPT-03 (B5b): `#/costs/capex?…` and `#/project/team?…` now have targets (UT-BOOT-OPT-001..); these have no project or no plan.
-    for (const hash of ["#/costs/capex", "#/project/team", "#/admin/cost", "#/nowhere", "#/costs", "#/project/unknown?projectId=" + ID]) {
+    // T-C03 (BND-17): `#/admin/<screen>` is now an `admin` target (UT-BOOT-ADMIN-001); `/admin` alone and an unknown admin path are not.
+    for (const hash of ["#/costs/capex", "#/project/team", "#/admin", "#/admin/nowhere", "#/nowhere", "#/costs", "#/project/unknown?projectId=" + ID]) {
       expect(bootTarget(input(hash))).toEqual({ kind: "none" });
     }
   });
@@ -89,5 +92,32 @@ describe("boot plan: which screen the URL opens (D119)", () => {
       // A PM route ignores launch parameters (UT-BOOT-009).
       expect(bootTarget(input(`#/project/${slug}`, { projectId: ID }))).toEqual({ kind: "none" });
     }
+  });
+});
+
+describe("boot plan: the category and the admin routes (T-C01, T-C03)", () => {
+  it("UT-BOOT-COST-030 a CAPEX or Add Cost link carries the ?category= it names as a non-negative integer; anything else carries none", () => {
+    expect(bootTarget(input(`#/costs/capex?projectId=${ID}&category=2`))).toEqual({ kind: "cost", projectId: ID, path: "/costs/capex", category: 2 });
+    expect(bootTarget(input(`#/costs/add-from-table?category=0&projectId=${ID}`))).toEqual({ kind: "cost", projectId: ID, path: "/costs/add-from-table", category: 0 });
+    for (const raw of ["", "x", "-1", "1.5", "100", " "]) {
+      expect(bootTarget(input(`#/costs/capex?projectId=${ID}&category=${raw}`))).toEqual({ kind: "cost", projectId: ID, path: "/costs/capex" });
+    }
+    // The other Cost screens have no category tab.
+    expect(bootTarget(input(`#/costs/land-lease?projectId=${ID}&category=2`))).toEqual({ kind: "cost", projectId: ID, path: "/costs/land-lease" });
+    // The bare root (Landing) names none.
+    expect(bootTarget(input("", { projectId: ID }))).toEqual({ kind: "cost", projectId: ID, path: "/costs/capex" });
+  });
+
+  it("UT-BOOT-ADMIN-001 each Administration route is an `admin` target (its chunk only); the bare /admin and an unknown screen are not", () => {
+    for (const path of ADMIN_BOOT_PATHS) expect(bootTarget(input(`#${path}`))).toEqual({ kind: "admin", path });
+    expect(bootTarget(input("#/admin"))).toEqual({ kind: "none" });
+    expect(bootTarget(input("#/admin/nowhere"))).toEqual({ kind: "none" });
+  });
+
+  it("UT-BOOT-ADMIN-002 the admin paths are the router's own: routes.tsx declares exactly these screens, each through a named loader", () => {
+    const source = readFileSync(fileURLToPath(new URL("./routes.tsx", import.meta.url)), "utf8");
+    const declared = [...source.matchAll(/<Route path="([a-z-]+)" element=\{<Admin[A-Za-z]+Screen \/>\} \/>/g)].map((m) => `/admin/${m[1]}`);
+    expect(declared.sort()).toEqual([...ADMIN_BOOT_PATHS].sort());
+    expect(source).not.toMatch(/lazy\(\(\) => import\("@\/features\/admin/);
   });
 });

@@ -15,7 +15,6 @@
 import { Vsb_projectsService } from "@/generated/services/Vsb_projectsService";
 import { Vsb_countriesService } from "@/generated/services/Vsb_countriesService";
 import { Vsb_countryareasService } from "@/generated/services/Vsb_countryareasService";
-import { Vsb_projectstatesService } from "@/generated/services/Vsb_projectstatesService";
 import { Vsb_customchoicevaluesService } from "@/generated/services/Vsb_customchoicevaluesService";
 import { Vsb_shareholderentitiiesService } from "@/generated/services/Vsb_shareholderentitiiesService";
 import { Vsb_projectstatetrackingsService } from "@/generated/services/Vsb_projectstatetrackingsService";
@@ -23,7 +22,7 @@ import { Vsb_assumptionslocaltaxgermaniesService } from "@/generated/services/Vs
 import { Vsb_assumptionslocaltaxfrancesService } from "@/generated/services/Vsb_assumptionslocaltaxfrancesService";
 import {
   PROJECT_COL, SHAREHOLDER_COL, TRACKING_COL,
-  type CountryRef, type ProjectRow, type ProjectStateRef, type ShareholdingEntity, type TrackingRow,
+  type CountryRef, type ProjectRow, type ShareholdingEntity, type TrackingRow,
 } from "@/features/pm/general-data/rules";
 import { fetchAll, fetchPage } from "./client";
 import { and, contains, eq, guid, isNull, lookupEq, or, startsWith } from "./odata";
@@ -149,44 +148,6 @@ export async function listCountryAreas(countryId: string): Promise<AreaOption[]>
   return rows
     .map((r) => ({ id: r.vsb_countryareaid, name: r.vsb_name ?? "", countryId: r._vsb_areascountry_value ?? null }))
     .sort((a, b) => a.name.localeCompare(b.name));
-}
-
-/**
- * A `'Project States'` row as the ONE shared read returns it (D159). The first five fields are what General Data, the
- * Check List, Revenues and Milestones always used. `active` (statecode 0), `orderRaw` (null when the row has no `Order`) and
- * `businessUnitId` are what Project Overview, the Cost screens and the Admin gate screen each used to read through their own
- * query: they now take their own view of this one list (`data/projectStates.ts`) instead of reading the table again.
- */
-export interface SharedProjectState extends ProjectStateRef {
-  active: boolean;
-  orderRaw: number | null;
-  businessUnitId: string | null;
-}
-
-/** `'Project States'` — the panel labels and the tracking rebuild (Y:223-235, Y:5253), and (D159) every other screen's states. */
-export async function listProjectStates(): Promise<SharedProjectState[]> {
-  const rows = await fetchAll(
-    "list project states",
-    (o) => Vsb_projectstatesService.getAll(o),
-    {
-      select: [
-        "vsb_projectstateid", "vsb_name", "vsb_order", "vsb_isvisibleonchecklist", "vsb_clusterdescription",
-        "statecode", "_owningbusinessunit_value",
-      ],
-    },
-  );
-  return rows
-    .map((r) => ({
-      id: r.vsb_projectstateid,
-      name: r.vsb_name ?? "",
-      order: typeof r.vsb_order === "number" ? r.vsb_order : 0,
-      isVisibleOnChecklist: r.vsb_isvisibleonchecklist === true,
-      clusterDescription: r.vsb_clusterdescription ?? null,
-      active: r.statecode === 0,
-      orderRaw: typeof r.vsb_order === "number" ? r.vsb_order : null,
-      businessUnitId: r._owningbusinessunit_value ?? null,
-    }))
-    .sort((a, b) => a.order - b.order);
 }
 
 /** A `Custom Choice Values` terrain-utilization option. */

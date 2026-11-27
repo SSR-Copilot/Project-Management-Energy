@@ -18,7 +18,8 @@ import { qk } from "@/data/keys";
 import { ACCOUNTS_TABLE, hasContractsPooled, loadCapexAccountRows } from "@/data/adminCapexAccounts";
 import { invalidateAfterCapexAccountsWrite } from "@/data/adminInvalidation";
 import { invalidateCapexChart } from "@/data/capexChart";
-import { FRESH_ON_ENTRY } from "@/data/adminQueryPresets";
+import { ADMIN_OPT } from "@/data/adminFlags";
+import { FRESH_ON_ENTRY, NO_FOCUS_REFETCH } from "@/data/adminQueryPresets";
 import { useTablePrivileges, type TablePrivileges } from "@/platform/privileges";
 import { buildCapexTree, type ContractCheck } from "./rules";
 
@@ -52,6 +53,8 @@ export function useHasContracts(ids: readonly string[]): ContractChecks {
       queryKey: qk.adminCapexHasContracts(id),
       queryFn: () => hasContractsPooled(id),
       staleTime: 30_000,
+      // SAD-06 (`ADMIN_HAS_CONTRACTS_NO_FOCUS`): an advisory check (Delete re-checks on the server), re-run on mount, not on every return to the tab.
+      ...(ADMIN_OPT.ADMIN_HAS_CONTRACTS_NO_FOCUS ? NO_FOCUS_REFETCH : {}),
     })),
   });
   const checks = new Map<string, ContractCheck>();

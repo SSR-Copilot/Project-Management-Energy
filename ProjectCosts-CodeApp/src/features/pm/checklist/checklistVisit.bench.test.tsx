@@ -11,8 +11,14 @@
  * It is logical, therefore deterministic (the same on any machine and at any `LAT`): a modelled duration is `rounds × RTT`, and is
  * only that. It is NOT a Dataverse measurement: server time, throttling, Entra latency and the server-side flows are not modelled.
  * Hops per loader follow the code (`gates` = rows then one Entra lookup, `approvals` = rows then Entra, `templates` = scope then
- * templates, the session project = the project read then three parallel reads, `data/project.ts:131-189`). The session project
- * query (`qk.project`) is not part of this screen but IS reloaded by a write, so a probe stands in for it.
+ * templates). The session project query is not part of this screen but IS reloaded by a write, so a probe stands in for it. On a
+ * Project Management route the real session query is `qk.projectPm` (`app/SessionContext.tsx`, scope "pm": the project row only,
+ * ONE request, `data/project.ts`), a child key of `qk.project`, so the write's `qk.project(id)` invalidation reaches it. T-A08
+ * (26 Nov 2026): the probe used to stand in for the Cost app's `qk.project` "full" load (4 requests in 2 hops), which added 3
+ * requests to every scenario that reloads the session project (S4: 37 requests instead of the real 34); the rounds were not affected.
+ * Scenarios: S1 visit, S2 first visit (copy), S3 Complete, S4 Move, S5 Refresh, S6 typing, S7 Request Approval (S7a formal, S7b
+ * Only Notifications with a stubbed transition), S8 Cancel Approval Request. The approval flows are stubbed at K sequential hops
+ * each (gate flow 5, cancellation flow 3: connector levels, Stage 2 SPA-03); the flows' server time is NOT modelled.
  *
  * CPU: React commits and their render time per comment keystroke, from a `<Profiler>` (jsdom + the dev build: RELATIVE only).
  * `CHKBENCH_OUT=<file>` writes the results as JSON; nothing is written otherwise.
@@ -35,6 +41,7 @@ import { CHOICE_PROCESS, ES } from "@/data/dataverseNames";
 import { qk } from "@/data/keys";
 import { CHECKLIST_PERF_ALL_OFF, setChecklistPerfFlags } from "@/data/checklistPerfFlags";
 import type { WritePlan } from "@/data/writePlan";
+import type { GateSetting } from "./rules";
 import type { PlanClient } from "@/data/executePlan";
 import { dataSourcesInfo } from "../../../../.power/schemas/appschemas/dataSourcesInfo";
 
@@ -59,6 +66,8 @@ const T = vi.hoisted(() => {
   return { s, hit, reset, sleep };
 });
 const H = vi.hoisted(() => ({ client: null as unknown as PlanClient }));
+/** T-A08: connector levels of the stubbed approval flows (the gate flow 5, the cancellation flow 3). */
+const FLOW_HOPS = vi.hoisted(() => ({ gate: 5, cancel: 3 }));
 
 const uuid = (n: number) => `00000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
 const ACS = CHOICE_PROCESS.approvalClusterState;
@@ -74,9 +83,10 @@ const PROJECT = {
     legallyBindingPermits: null, fid: null, construction: null, cod: null,
   },
 };
-const tracking = (i: number, state: number) => ({
+const tracking = (i: number, state: number, flow: { flowRunId?: string; flowApprovalId?: string } = {}) => ({
   id: uuid(200 + i), name: NAMES[i]!, clusterStateId: STATES[i]!.id, clusterStateName: NAMES[i]!, approvalClusterState: state,
-  clusterStepState: null, approvalComment: i === 0 ? "Ready" : null, approvalDueDate: null, flowRunId: null, flowApprovalId: null,
+  clusterStepState: null, approvalComment: i === 0 ? "Ready" : null, approvalDueDate: null,
+  flowRunId: (flow.flowRunId ?? null) as string | null, flowApprovalId: (flow.flowApprovalId ?? null) as string | null,
 });
 const task = (clusterIndex: number, i: number) => ({
   id: uuid(1000 + i), title: `Task ${i}`, clusterStateId: STATES[clusterIndex]!.id, gateRelevance: false, holdingDescription: null,
@@ -90,6 +100,7 @@ const db = {
   rows: {} as Record<string, ReturnType<typeof task>[]>,
   count: {} as Record<string, number>,
   templates: 0,
+  gates: [] as GateSetting[],
 };
 
 vi.mock("@/app/SessionContext", () => ({
@@ -105,13 +116,22 @@ vi.mock("@/data/executePlan", async (importOriginal) => {
   };
 });
 vi.mock("@/data/flows", () => ({
-  requestGateApproval: vi.fn(), requestChecklistApproval: vi.fn(), cancelGateApproval: vi.fn(), cancelChecklistApproval: vi.fn(),
+  // T-A08 (S7, S8): the gate and the cancellation flow are K sequential hops each (logical rounds only; no server time).
+  requestGateApproval: async () => { await T.hit("flow gate", Array.from({ length: FLOW_HOPS.gate }, () => 1)); return {}; },
+  cancelGateApproval: async () => { await T.hit("flow cancel", Array.from({ length: FLOW_HOPS.cancel }, () => 1)); },
+  requestChecklistApproval: vi.fn(), cancelChecklistApproval: vi.fn(),
 }));
 vi.mock("@/data/checklist", () => ({
   loadChecklistProject: async () => { await T.hit("read project"); return PROJECT; },
   listChecklistProjectStates: async () => { await T.hit("read states"); return STATES; },
   listChecklistTrackings: async () => { await T.hit("read trackings"); return db.trackings.map((t) => ({ ...t })); },
-  listChecklistGates: async () => { await T.hit("read gates", [1, 1]); return []; },
+  listChecklistGates: async () => { await T.hit("read gates", [1, 1]); return db.gates.map((g) => ({ ...g })); },
+  // T-A08 (S7b): the transition poll's read; the stub answers "completed" at once, so the poll costs its one sleep and one request.
+  readClusterTracking: async (_p: string, state: string) => {
+    await T.hit("read tracking");
+    const t = db.trackings.find((x) => x.clusterStateId === state);
+    return t ? { ...t, approvalClusterState: ACS.completed } : null;
+  },
   listClusterChecklist: async (_p: string, state: string) => { await T.hit("read rows"); return (db.rows[state] ?? []).map((r) => ({ ...r })); },
   listChecklistApprovalSettings: async () => { await T.hit("read approvals", [1, 1]); return []; },
   countClusterChecklistRows: async (_p: string, state: string) => { await T.hit("read count"); return db.count[state] ?? 0; },
@@ -161,11 +181,11 @@ function makeClient(): PlanClient {
   } as unknown as PlanClient;
 }
 
-/** Stands in for the session's own project query, which a checklist write reloads (`qk.project`, 4 requests in 2 hops). */
+/** Stands in for the session's own project query, which a checklist write reloads: on a PM route `qk.projectPm`, ONE request (T-A08). */
 function SessionProjectProbe(): ReactNode {
   // Seeded before the mount with an infinite `staleTime`: in the app the session loads BEFORE the screen mounts, so only the
   // RELOAD after a write is part of a visit's cost.
-  useQuery({ queryKey: qk.project(PROJECT_ID), staleTime: Infinity, queryFn: async () => { await T.hit("session project", [1, 3]); return {}; } });
+  useQuery({ queryKey: qk.projectPm(PROJECT_ID), staleTime: Infinity, queryFn: async () => { await T.hit("session project"); return {}; } });
   return null;
 }
 
@@ -173,12 +193,20 @@ const COMPLETE = "but_Checklist_DisplayProject_Body_Content_ListRow_Complete";
 const NEXT = "pcf_Checklist_DisplayProject_Body_Content_Buttons_NextCluster";
 const SAVE = "pcf_CheckList_RightPanel_ChangeCluster_Form_Buttons_Save";
 const REFRESH = "but_Project_States_CheckList_Refresh";
+const REQUEST = "pcf_CheckList_RightPanel_ChangeCluster_Form_Buttons_RequestApproval";
+const CANCEL_APPROVAL = "pcf_CheckList_RightPanel_ChangeCluster_Form_Buttons_CancelApproval";
+const MODE = CHOICE_PROCESS.approvalMode;
+/** An active gate on the Draft cluster (the screen's selected cluster), in the given approval mode. */
+const draftGate = (approvalMode: number): GateSetting => ({
+  id: uuid(500), clusterStateId: STATES[0]!.id, approvalMode, gateActive: true, portfolioManagerId: null, portfolioManagerMail: null,
+  defaultApprovals: null, defaultContributors: null, defaultNotifications: null,
+});
 const busyOverlay = () => document.querySelector("[role='dialog'][aria-busy='true']");
 
 const commits = { n: 0, ms: 0 };
 function mount() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false, staleTime: 30_000 }, mutations: { retry: false } } }); // staleTime as `app/Providers.tsx`
-  qc.setQueryData(qk.project(PROJECT_ID), {});
+  qc.setQueryData(qk.projectPm(PROJECT_ID), {});
   return render(
     <QueryClientProvider client={qc}>
       <FluentProvider theme={vsbTheme}>
@@ -235,6 +263,32 @@ const same = (runs: Result[]) => {
     throw new Error(["repeats differ: " + keys.join(" | "), ...runs.map((r) => JSON.stringify(r.extra))].join("\n"));
   }
 };
+/**
+ * T-A08, the baseline of 26 Nov 2026 (probe = `qk.projectPm`, one request; the approval flows stubbed at 5 and 3 hops), pinned so a
+ * change to the screen's request pattern fails here instead of drifting. Machine-independent logical counts (the same on any
+ * machine); `requests` for every row, the depths where they are stable (S5's depth flips 2/3 under load: requests only).
+ * Before T-A08 the probe cost 4 requests (OFF / ON): S2 (10 templates) 29 / 22, S2 (40) 59 / 52, S3 11 / 3, S4 43 / 37; the ON
+ * column changed only for S4 (37 -> 34), the OFF column wherever the session project is reloaded. Rounds are unchanged.
+ */
+const PINNED: Record<string, { rounds?: number; requests: number; usable?: number; ui?: number }> = {
+  "OFF|S1": { rounds: 6, requests: 10, usable: 6 }, "ON|S1": { rounds: 4, requests: 9, usable: 4 },
+  "OFF|S2-10": { rounds: 11, requests: 26 }, "ON|S2-10": { rounds: 6, requests: 22 },
+  "OFF|S2-40": { rounds: 14, requests: 56 }, "ON|S2-40": { rounds: 8, requests: 52 },
+  "OFF|S3": { rounds: 4, requests: 8, ui: 4 }, "ON|S3": { rounds: 3, requests: 3, ui: 3 },
+  "OFF|S4": { rounds: 16, requests: 37 }, "ON|S4": { rounds: 11, requests: 34 },
+  "OFF|S5": { requests: 10 }, "ON|S5": { requests: 9 },
+  "OFF|S7a": { rounds: 12, requests: 18, ui: 12 }, "ON|S7a": { rounds: 12, requests: 18, ui: 12 },
+  "OFF|S7b": { rounds: 13, requests: 19, ui: 13 }, "ON|S7b": { rounds: 13, requests: 19, ui: 13 },
+  "OFF|S8": { rounds: 9, requests: 13, ui: 9 }, "ON|S8": { rounds: 9, requests: 13, ui: 9 },
+};
+const pin = (variant: string, id: string, r: Result) => {
+  const want = PINNED[`${variant}|${id}`];
+  expect(want, `no pinned baseline for ${variant}|${id}`).toBeDefined();
+  expect({
+    ...(want!.rounds !== undefined ? { rounds: r.rounds } : {}), requests: r.requests,
+    ...(want!.usable !== undefined ? { usable: r.usableRounds } : {}), ...(want!.ui !== undefined ? { ui: r.uiRounds } : {}),
+  }).toEqual(want);
+};
 const histogram = () => {
   const h: Record<string, number> = {};
   for (const r of T.s.log) h[r.label] = (h[r.label] ?? 0) + 1;
@@ -255,6 +309,7 @@ beforeEach(() => {
   db.rows = { [STATES[0]!.id]: Array.from({ length: 40 }, (_, i) => task(0, i)) };
   db.count = { [STATES[0]!.id]: 40 };
   db.templates = 10;
+  db.gates = [];
   commits.n = 0; commits.ms = 0;
 });
 afterEach(() => { cleanup(); setChecklistPerfFlags(null); });
@@ -273,6 +328,7 @@ for (const v of VARIANTS) {
         runs.push(summarise("S1 usual visit (mount)", v.name, { usableRounds, extra: { ...histogram() } }));
       }
       same(runs);
+      pin(v.name, "S1", runs[0]!);
       results.push(runs[0]!);
     });
 
@@ -287,6 +343,7 @@ for (const v of VARIANTS) {
         runs.push(summarise(`S2 first visit, ${n} templates`, v.name, { extra: { ...histogram() } }));
       }
       same(runs);
+      pin(v.name, `S2-${n}`, runs[0]!);
       results.push(runs[0]!);
     });
 
@@ -307,6 +364,7 @@ for (const v of VARIANTS) {
         runs.push(summarise("S3 Complete a task", v.name, { uiRounds, extra: { ...histogram() } }));
       }
       same(runs);
+      pin(v.name, "S3", runs[0]!);
       results.push(runs[0]!);
     });
 
@@ -329,6 +387,7 @@ for (const v of VARIANTS) {
         runs.push(summarise("S4 Move to next cluster", v.name, { extra: { ...histogram() } }));
       }
       same(runs);
+      pin(v.name, "S4", runs[0]!);
       results.push(runs[0]!);
     });
 
@@ -347,6 +406,61 @@ for (const v of VARIANTS) {
       // INFORMATIONAL: the depth of a Refresh flips between 2 and 3 under CPU load even with every switch off (its visit effects start in
       // the same commit as the reload), so only the request count is held to be stable; no improvement is claimed for it.
       expect(new Set(runs.map((r) => r.requests)).size).toBe(1);
+      pin(v.name, "S5", runs[0]!);
+      results.push(runs[0]!);
+    });
+
+    // T-A08: the approval flows. Both start from a usable screen with an active gate on the Draft cluster; the stubbed flow is K hops.
+    it.each([
+      ["S7a", "formal approval, 5-hop gate flow", MODE.formalApproval],
+      ["S7b", "Only Notifications, 5-hop gate flow + stubbed transition", MODE.onlyNotifications],
+    ])("UT-CHKPERF-067 %s Request Approval (%s): Request Approval to a settled screen", async (id, what, mode) => {
+      const runs: Result[] = [];
+      for (let k = 0; k < 3; k += 1) {
+        cleanup(); T.reset();
+        db.gates = [draftGate(mode)];
+        mount();
+        await usable();
+        await settle();
+        T.reset();
+        fireEvent.click(screen.getByTestId(NEXT));
+        const request = await screen.findByTestId(REQUEST) as HTMLButtonElement;
+        await waitFor(() => expect(request.disabled).toBe(false));
+        fireEvent.click(request);
+        await waitFor(() => expect(busyOverlay()).not.toBeNull(), { timeout: 5000, interval: 1 });
+        await waitFor(() => expect(busyOverlay()).toBeNull(), { timeout: 20_000, interval: 1 });
+        const uiRounds = T.s.maxDone;
+        await settle();
+        runs.push(summarise(`${id} Request Approval (${what})`, v.name, { uiRounds, extra: { ...histogram() } }));
+      }
+      same(runs);
+      pin(v.name, id, runs[0]!);
+      expect(runs[0]!.order).toContain("flow gate#5");
+      results.push(runs[0]!);
+    });
+
+    it("UT-CHKPERF-068 S8 Cancel Approval Request (3-hop cancellation flow): Cancel to a settled screen", async () => {
+      const runs: Result[] = [];
+      for (let k = 0; k < 3; k += 1) {
+        cleanup(); T.reset();
+        db.gates = [draftGate(MODE.formalApproval)];
+        db.trackings = STATES.map((_, i) => tracking(i, i === 0 ? ACS.inProgress : ACS.notStarted, i === 0 ? { flowRunId: "run-1", flowApprovalId: "ap-1" } : {}));
+        mount();
+        await usable();
+        await settle();
+        T.reset();
+        const cancel = screen.getByTestId(CANCEL_APPROVAL) as HTMLButtonElement;
+        await waitFor(() => expect(cancel.disabled).toBe(false));
+        fireEvent.click(cancel);
+        await waitFor(() => expect(busyOverlay()).not.toBeNull(), { timeout: 5000, interval: 1 });
+        await waitFor(() => expect(busyOverlay()).toBeNull(), { timeout: 20_000, interval: 1 });
+        const uiRounds = T.s.maxDone;
+        await settle();
+        runs.push(summarise("S8 Cancel Approval Request (3-hop flow)", v.name, { uiRounds, extra: { ...histogram() } }));
+      }
+      same(runs);
+      pin(v.name, "S8", runs[0]!);
+      expect(runs[0]!.order).toContain("flow cancel#3");
       results.push(runs[0]!);
     });
 

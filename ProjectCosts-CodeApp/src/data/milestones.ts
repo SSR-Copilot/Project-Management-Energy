@@ -7,8 +7,8 @@
  * guard), `vsb_estimationpriceinflation` (FID re-pricing), `vsb_fabricsyncjob` and
  * `vsb_fabricjobtype` (the "Currently recalculating" notice).
  *
- * Reused, not repeated: the project states come from `data/generalData.ts` (`listProjectStates`)
- * and the assumption row from `data/costBook.ts` (`loadMilestoneAssumptionValues`).
+ * Reused, not repeated: the project states come from `data/projectStatesRead.ts` (`listProjectStates`)
+ * and the assumption row from `data/milestoneDurations.ts` (`loadMilestoneAssumptionValues`).
  *
  * `Assumptions Revenues SQL` is a Fabric SQL source (`[dbo].[AssumptionsRevenue]` on
  * `Lakehouse_Gold`), registered as `AssumptionsRevenueService` (D54). It is read only, for the
@@ -24,7 +24,7 @@ import { Vsb_fabricjobtypesService } from "@/generated/services/Vsb_fabricjobtyp
 import { Vsb_fabricsyncjobsService } from "@/generated/services/Vsb_fabricsyncjobsService";
 import { AssumptionsRevenueService } from "@/generated/services/AssumptionsRevenueService";
 import { technologyLabel, technologyValue } from "@/domain/technology";
-import { PROJECT_COL } from "@/features/pm/general-data/rules";
+import { PROJECT_COL } from "@/features/pm/general-data/projectColumns";
 import {
   FABRIC_JOB_STATUS, FABRIC_JOB_TYPE_MILESTONES, GENERATOR_TYPE_COL, HEDGE_TYPE_INDIVIDUAL_VOLUMES,
   isInRevenueSlice,

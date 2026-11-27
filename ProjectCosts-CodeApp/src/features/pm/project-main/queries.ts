@@ -10,13 +10,14 @@
  */
 import { queryOptions } from "@tanstack/react-query";
 import { bootDvopt } from "@/data/bootDvoptFlags";
-import { COUNTRIES_STALE_MS, activeOnly, listCountries as listAllCountries } from "@/data/countries";
+import { activeOnly, listCountries as listAllCountries } from "@/data/countries";
 import { qk } from "@/data/keys";
 import {
   listCountries, loadProjectPage, loadProjectStateOrder, type Lookup,
 } from "@/data/projects";
 import { projectStateLookup } from "@/data/projectStateLookup";
 import { EMPTY_APPLIED_CAPACITY, resolveAppliedCapacity, type ProjectFilter, type SortState } from "./rules";
+import { REFERENCE } from "@/data/queryPolicy";
 
 /** How long a fetched page counts as fresh — for the page on screen AND the prefetched next one. */
 export const PROJECT_PAGE_STALE_MS = 30 * 1000;
@@ -85,7 +86,7 @@ export const countriesQueryOptions = () => {
   return queryOptions({
     queryKey: qk.adminCountries,
     queryFn: listAllCountries,
-    staleTime: COUNTRIES_STALE_MS,
+    ...REFERENCE,
     select: (rows): Lookup[] => activeOnly(rows).map((c) => ({ id: c.id, name: c.name })),
   }) as unknown as typeof own;
 };

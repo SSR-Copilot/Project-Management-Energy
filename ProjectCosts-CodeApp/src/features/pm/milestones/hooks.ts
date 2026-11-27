@@ -1,8 +1,8 @@
 /**
  * Project General Milestones Screen — the data layer (connected 19 Oct 2026, D26).
  *
- * The reads live in `data/milestones.ts`; the project states reuse `data/generalData.ts`
- * (`listProjectStates`) and the assumption row reuses `data/costBook.ts`
+ * The reads live in `data/milestones.ts`; the project states reuse `data/projectStatesRead.ts`
+ * (`listProjectStates`) and the assumption row reuses `data/milestoneDurations.ts`
  * (`loadMilestoneAssumptionValues`). The save is `planSaveMilestones` (`rules.ts`), run in order by
  * `usePlanWrite`: Patch Projects → (FID moved) each `GeneratorTypeInProjects` cost → a second
  * Patch Projects with `'Plant WTG Cost [EUR]'` — the canvas order (Y:352-474).
@@ -31,15 +31,16 @@ import { ES, ES_ADMIN, ES_PLANT } from "@/data/dataverseNames";
 import { qk } from "@/data/keys";
 import type { ScreenData } from "@/data/notConnected";
 import { usePlanWrite } from "@/data/usePlanWrite";
-import { listProjectStates } from "@/data/generalData";
-import { loadMilestoneAssumptionValues } from "@/data/costBook";
+import { listProjectStates } from "@/data/projectStatesRead";
+import { loadMilestoneAssumptionValues } from "@/data/milestoneDurations";
 import {
   countIndividualVolumeContracts, countProjectRevenues, isMilestoneRecalculationRunning,
   listProjectGeneratorsForRepricing, listRevenueAssumptions, loadMilestoneProject, loadPriceInflation,
 } from "@/data/milestones";
-import { findCurrency, loadFirstRevenueSubaccount } from "@/data/revenues";
+import { findCurrency, loadFirstRevenueSubaccount } from "@/data/revenueLookups";
 import { projectSaveErrorText } from "@/features/pm/general-data/rules";
 import { generalDataCountriesQueryOptions } from "@/features/pm/general-data/queries";
+import { REFERENCE } from "@/data/queryPolicy";
 import {
   accumulatedIndex, buildDefaultRevenue, milestoneLabels, revenueSeedWouldRun,
   type MilestoneAssumptionRow, type MilestoneDates, type MilestoneProject, type ProjectGenerator,
@@ -62,7 +63,6 @@ export const TABLES: readonly string[] = [
   ES.fabricJobTypes,
 ];
 
-const REFERENCE_STALE = 30 * 60 * 1000;
 const out = <T>(q: { data?: T; isLoading: boolean; error: unknown }, empty: T): ScreenData<T> =>
   ({ data: q.data ?? empty, isLoading: q.isLoading, error: q.error ?? undefined, connected: true });
 
@@ -103,7 +103,7 @@ export function useMilestoneProject(projectId: string | undefined): ScreenData<M
 
 /** `locRecordMilestoneNames` — the cluster captions (rule 3), from the shared `Project States` read. */
 export function useMilestoneLabels(): ScreenData<string[]> {
-  const q = useQuery({ queryKey: qk.generalDataProjectStates, queryFn: listProjectStates, staleTime: REFERENCE_STALE });
+  const q = useQuery({ queryKey: qk.generalDataProjectStates, queryFn: listProjectStates, ...REFERENCE });
   return out({ ...q, data: q.data ? milestoneLabels(q.data) : undefined }, NO_LABELS);
 }
 
@@ -115,7 +115,7 @@ export function useMilestoneAssumption(
     queryKey: qk.milestoneAssumptionRow(countryId ?? "", technology ?? -1),
     queryFn: async () => (await loadMilestoneAssumptionValues(countryId ?? undefined, technology ?? undefined)) ?? null,
     enabled: Boolean(countryId) && technology !== null && technology !== undefined,
-    staleTime: REFERENCE_STALE,
+    ...REFERENCE,
   });
   return out(q, null);
 }
@@ -245,7 +245,7 @@ export async function loadRevenueSeed(
  * waiting for Fabric SQL (save performance, 5 Nov 2026). Only while the canvas seed would run:
  * Draft / Cluster 1 AND no contract yet (one cheap count, the gate the save re-checks fresh), so a
  * project that already has a contract never reads Fabric. The inputs are reference data, kept as
- * long as the assumption row (`REFERENCE_STALE`); a failed or expired read is simply done again at
+ * long as the assumption row (`REFERENCE`); a failed or expired read is simply done again at
  * save time. Returns the loader `loadRevenueSeed` takes.
  */
 export function useRevenueSeedInputsLoader(project: MilestoneProject | null | undefined) {
@@ -262,14 +262,14 @@ export function useRevenueSeedInputsLoader(project: MilestoneProject | null | un
     queryKey: qk.milestoneRevenueSeedInputs(country),
     queryFn: () => loadRevenueSeedInputs(country),
     enabled: wouldRun && count.data === 0,
-    staleTime: REFERENCE_STALE,
+    ...REFERENCE,
     retry: false,
   });
   return useCallback(
     (countryName: string) => qc.fetchQuery({
       queryKey: qk.milestoneRevenueSeedInputs(countryName),
       queryFn: () => loadRevenueSeedInputs(countryName),
-      staleTime: REFERENCE_STALE,
+      ...REFERENCE,
       retry: false,
     }),
     [qc],

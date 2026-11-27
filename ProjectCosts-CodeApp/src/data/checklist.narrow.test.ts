@@ -30,7 +30,7 @@ vi.mock("./adminGatesApprovals", () => ({
   listChecklistApprovals: async () => [],
   listGateApprovals: async () => [],
 }));
-vi.mock("./generalData", () => ({ listProjectStates: async () => [] }));
+vi.mock("./projectStatesRead", () => ({ listProjectStates: async () => [] }));
 
 import { CHOICE_PROCESS } from "@/data/dataverseNames";
 import { clusterTransitionDone, staleTaskRequestRefusal, trackingFor } from "@/features/pm/checklist/rules";

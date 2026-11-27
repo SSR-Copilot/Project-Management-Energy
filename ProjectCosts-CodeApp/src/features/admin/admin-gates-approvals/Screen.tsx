@@ -29,7 +29,7 @@
  * user without it can open the editor and read it, but every control that writes is disabled
  * and every write handler refuses with `NO_PERMISSION_MESSAGE`.
  */
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { makeStyles, Text, tokens } from "@fluentui/react-components";
 import {
   ConfirmDialog, CountryTechnologyPicker, LoadingOverlay, NoticeBar, QueryStates, useNotify,
@@ -44,6 +44,8 @@ import { useToggleSet } from "@/features/shared/useToggleSet";
 import { useCountries } from "@/data/countries";
 import { GATE_COUNTRY_RULE, GATE_DEFAULT, pickerCountries } from "@/domain/countryPicker";
 import { GATE_TECHNOLOGIES } from "@/domain/technology";
+import { SMALL_FIXES } from "@/data/smallFixesFlags";
+import { trace } from "@/platform/telemetry";
 import { userErrorText } from "@/platform/userMessage";
 import { palette, space } from "@/theme/tokens";
 import { ApprovalsPanel } from "./ApprovalsPanel";
@@ -321,6 +323,15 @@ export default function ProjectGatesSettingsScreen() {
   // ANY failed query is the error state (a failed refetch included), with the first failing
   // query's error in countries → states → dataset order (CONVENTIONS rule 19).
   const health = useQueryHealth(queries, { fatalWhen: "any-error" });
+  // RND-09 / T-D04: the load failure is traced ONCE per distinct error, from an effect. `QueryStates` calls the text function below
+  // while it renders, and `userErrorText` traces unless told not to, so every re-render of the failed state used to add an entry,
+  // a `[VSB] ERROR` line and an Application Insights event. Same message and detail as that call wrote. Rollback: `GATES_TRACE_ONCE`.
+  const traceOnce = SMALL_FIXES.GATES_TRACE_ONCE;
+  const failed = health.phase === "fatal";
+  const fatalError = failed ? health.fatalError : undefined;
+  useEffect(() => {
+    if (traceOnce && failed) trace("error", "Could not load the gate approvals", fatalError);
+  }, [traceOnce, failed, fatalError]);
 
   // NEW — no canvas equivalent: the empty, loading and load-error texts (rule 19).
   const empty = !ctx
@@ -407,7 +418,7 @@ export default function ProjectGatesSettingsScreen() {
           loadingLabel="Loading gate approvals…"
           fatal={{
             title: "Gate approvals could not be loaded",
-            text: (error) => userErrorText(error, "load the gate approvals"),
+            text: (error) => userErrorText(error, "load the gate approvals", traceOnce ? { trace: false } : {}),
             retryLabel: "Try again",
           }}
           empty={empty}

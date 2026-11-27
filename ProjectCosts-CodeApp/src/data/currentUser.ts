@@ -27,7 +27,8 @@ import { Vsb_countriesService } from "@/generated/services/Vsb_countriesService"
 import { startupFlags } from "@/app/startupFlags";
 import { bootDvopt } from "./bootDvoptFlags";
 import { fetchAll } from "./client";
-import { and, chunk, eq, guid, or } from "./odata";
+import { and, eq, guid, or } from "./odata";
+import { readChunked } from "./readChunks";
 
 export interface CurrentUser {
   /** `systemuser.fullname` — the canvas' `User().FullName`. */
@@ -280,8 +281,9 @@ async function loadBadgeScope(
   ).catch(() => []);
 
   // `or` over a chunk of team ids rather than one request per team.
-  const teamRoles = await Promise.all(
-    chunk(teams.map((t) => t.teamid).filter(Boolean)).map((ids) =>
+  const teamRoles = await readChunked(
+    teams.map((t) => t.teamid).filter(Boolean),
+    (ids) =>
       fetchAll(
         "read the roles of the signed-in user's teams",
         (o) => RolesService.getAll(o),
@@ -290,7 +292,6 @@ async function loadBadgeScope(
           filter: badgeRolesFilter(or(...ids.map((t) => `teamroles_association/any(o:o/teamid eq ${guid(t)})`))),
         },
       ).catch(() => []),
-    ),
   );
 
   const countries = await (countryRead ?? readCountryBusinessUnits());

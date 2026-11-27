@@ -45,7 +45,7 @@ import {
 import type {
   BulkTableInfo, BulkUpsertTransport, DeepInsertGroup, ExistingIdsReader, UpsertTarget,
 } from "./bulkTypes";
-import { CAPEX_CONTRACTS, CAPEX_COSTS } from "./addCostSheetBulk";
+import { CAPEX_CONTRACTS, CAPEX_COSTS } from "./bulkTables";
 
 /**
  * How the bulk writes of a save are cut into requests and how many may be in flight. ONE set, so
