@@ -318,13 +318,29 @@ export function canSaveContract(
   return typed !== "" && Number.isFinite(Number(typed)) && Number(typed) >= 0;
 }
 
+/** The Total Costs box as a number, or `undefined` while it is blank or unreadable. */
+function typedTotal(costValue: string): number | undefined {
+  if (costValue.trim() === "") return undefined;
+  const typed = Number(costValue);
+  return Number.isFinite(typed) ? typed : undefined;
+}
+
 /**
  * The payments actually written to Dataverse.
  *
  * For an equal distribution, and for an individual/ABSOLUTE one, `proposed` already holds
  * money. For an individual/PERCENT one, `proposed`'s `amount` field holds a PERCENTAGE and has
- * no meaning as money until it is converted against the contract's total — the same coalesced
- * total the Total Costs box shows (`totalCostForPercent`).
+ * no meaning as money until it is converted against the contract's total.
+ *
+ * THE TYPED TOTAL WINS. The canvas Save converts every % box with
+ * `locTotalCost: Value(txt_AddContract_RightPanel_TotalCost_1.Value)` and
+ * `Round(Round(Value(Current.JanUI), 1) * locTotalCost / 100, 0)` (`Capex Costs Screen.pa.yaml:17574`,
+ * `:17687`), so a total changed on Edit re-prices every month. The stored total is only the
+ * fallback for a blank box (which the Save gate refuses anyway, `canSaveContract`).
+ * `totalCostForPercent` stays the rule for what the box OPENS with; it is the wrong order at save
+ * time: using it here converted an edited contract's months against the OLD stored total, so a
+ * change from 100,000 to 200,000 wrote the new total and left every month unchanged (QA 25 Nov 2026,
+ * regression pack DEVEX CAPEX 028–030).
  */
 export function resolvedPayments(
   line: CostLine,
@@ -332,7 +348,7 @@ export function resolvedPayments(
   proposed: readonly Payment[],
 ): Payment[] {
   if (line.distribution !== "individual" || line.distributionScheme !== "percent") return [...proposed];
-  const totalForPct = totalCostForPercent(line.totalCost, 0, costValue) ?? 0;
+  const totalForPct = typedTotal(costValue) ?? line.totalCost ?? 0;
   const converted = individualDistribution(
     proposed.map((p) => ({ year: p.year, month: p.month, value: p.amount, costId: p.id })),
     "percent",
@@ -444,20 +460,26 @@ export function individualSaveError(
 
 /**
  * The `Total Cost` the contract stores (D90, CAPEX-121): `Coalesce(Value(txt_AddContract_RightPanel_TotalCost_1.Value), locAllYearsCost)`
- * (`Capex Costs Screen.pa.yaml:17574`, `:17687`), where `locAllYearsCost = Round(Sum(colNewEditPanelCost, TotalSave), 1)`.
- * A typed total wins; an INDIVIDUAL contract without one (Absolute Values has no total box) stores the sum of its months;
- * an equal one without one stores nothing.
+ * (`Capex Costs Screen.pa.yaml:17574`, `:17687`).
+ *
+ * A typed total wins; an equal contract without one stores nothing. An INDIVIDUAL / ABSOLUTE VALUES contract always
+ * stores the sum of its months: it has no Total Costs box on screen, and the canvas Save first sets
+ * `locAllYearsCost: Round(Sum(colNewEditPanelCost, TotalSave), 1)` for exactly that branch, which is also what its
+ * hidden box is bound to (`txt_…_TotalCost_1.Value = locAllYearsCost`, `:11008`). The screen keeps the box's text in
+ * state whether or not the box is shown, and on Edit that state opens with the STORED total (`initialCostValue`), so
+ * treating it as "typed" stored the opening figure over the edited months — 110/111/112 edited to 123/222/321 kept
+ * a total of 333 (QA 25 Nov 2026, regression pack DEVEX CAPEX 042).
  */
 export function contractTotalToStore(
-  distribution: CostLine["distribution"],
+  line: Pick<CostLine, "distribution" | "distributionScheme">,
   costValue: string,
   proposedMoney: readonly { amount: number }[],
 ): number | undefined {
-  if (costValue.trim() !== "") {
-    const typed = Number(costValue);
-    return Number.isFinite(typed) ? typed : undefined;
+  const absolute = line.distribution === "individual" && line.distributionScheme === "absolute";
+  if (!absolute) {
+    if (costValue.trim() !== "") return typedTotal(costValue);
+    if (line.distribution !== "individual") return undefined;
   }
-  if (distribution !== "individual") return undefined;
   const sum = proposedMoney.reduce((a, p) => a + (Number.isFinite(p.amount) ? p.amount : 0), 0);
   return Math.round(sum * 10) / 10;
 }
@@ -1123,16 +1145,31 @@ export function milestoneRelinkResetNeeded(args: {
 }
 
 /**
+ * How a cluster's END month counts when the Save looks for money in other clusters.
+ *
+ * `gblClusterDurations` gives every cluster `EndMonth`/`EndYear` = the month its SUCCESSOR starts (`App.pa.yaml:205`),
+ * so the two windows share that month, and the canvas resolves the overlap differently per distribution type:
+ *
+ *   Individual Distribution  `Date(C.Year, m, 1) >= s && Date(C.Year, m, 1) < e`, `e = Date(EndYear, EndMonth, 1)`
+ *                            — HALF-OPEN: the handover month belongs to the NEXT cluster only
+ *                            (`Capex Costs Screen.pa.yaml:839-…` and inlined in both Save buttons, `:17574`, `:17687`).
+ *   Equal Distribution       `Or(y < ey, And(y = ey, m <= em))` — INCLUSIVE: the handover month counts in both
+ *                            (`:788-838` and the equal branch of the same Save buttons).
+ *
+ * SOURCE DEFECT (kept): the canvas is inconsistent with itself here. Reproduced per branch rather than unified, so an
+ * Individual cost that starts in its linked cluster's first month saves silently, as the canvas does (QA 25 Nov 2026,
+ * regression pack DEVEX CAPEX 033 / 044: the inclusive form asked "costs in Cluster 4, 5" for a January 2034 cost
+ * linked to Cluster 5, where 5-Construction is 1 Jan 2034), while an Equal one starting there still asks (019).
+ */
+export type ClusterRangeEnd = "inclusive" | "exclusive";
+
+export const clusterRangeEnd = (distribution: CostLine["distribution"]): ClusterRangeEnd =>
+  distribution === "individual" ? "exclusive" : "inclusive";
+
+/**
  * `colOtherClusterHavingCost` — the clusters whose window contains a month that carries money
  * (`btn_Capex_Cost_Add_New_*_Distribution_Cost_Calculate_Cluster_Range_Out_Of_LinkedCost`,
- * `CapexScreenCode.txt:645-760`).
- *
- * The canvas builds it slightly differently per distribution type — the equal-distribution
- * button scans `colCapexCostDataToPatch` with an inclusive end, the individual one scans
- * `colNewEditPanelCost` with a half-open end — and this follows the INCLUSIVE form, which is
- * the one the skeleton ported and the one that matches `clusterDurations`' own inclusive
- * `[start, end]` months. The difference only shows on a cost booked in the exact month one
- * cluster hands over to the next.
+ * `CapexScreenCode.txt:645-760`). `end` is `clusterRangeEnd(distribution)`; see it for the two canvas forms.
  *
  * A zero month is not "cost entered": the canvas tests `Coalesce(C.<Month>Save, 0) > 0`.
  */
@@ -1141,13 +1178,14 @@ export function clustersHavingCost<
 >(
   clusters: readonly C[],
   rows: readonly { year: number; month: number; cost: number | null }[],
+  end: ClusterRangeEnd = "inclusive",
 ): C[] {
   const live = rows.filter((r) => (r.cost ?? 0) !== 0);
   const idx = (y: number, m: number) => y * 12 + m;
-  return clusters.filter((c) =>
-    live.some((r) =>
-      idx(r.year, r.month) >= idx(c.startYear, c.startMonth)
-      && idx(r.year, r.month) <= idx(c.endYear, c.endMonth)));
+  const inWindow = (at: number, c: C) =>
+    at >= idx(c.startYear, c.startMonth)
+    && (end === "inclusive" ? at <= idx(c.endYear, c.endMonth) : at < idx(c.endYear, c.endMonth));
+  return clusters.filter((c) => live.some((r) => inWindow(idx(r.year, r.month), c)));
 }
 
 /**
@@ -1172,8 +1210,10 @@ export function needsClusterLinkageConfirmation(args: {
   clusterLinkageChanged: boolean;
   costPaidByChanged: boolean;
   milestoneRelinkResetNeeded: boolean;
+  /** `clusterRangeEnd(distribution)`; inclusive when absent. */
+  rangeEnd?: ClusterRangeEnd;
 }): boolean {
-  const others = clustersHavingCost(args.clusters, args.rows)
+  const others = clustersHavingCost(args.clusters, args.rows, args.rangeEnd ?? "inclusive")
     .filter((c) => c.order !== args.selectedClusterOrder);
   return (others.length > 0 && args.clusterLinkageChanged)
     || args.costPaidByChanged

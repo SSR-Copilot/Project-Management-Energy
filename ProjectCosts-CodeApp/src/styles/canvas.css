@@ -467,6 +467,12 @@
 }
 .capex-canvas-panel .canvas-radio-group label { gap: 11px; }
 .capex-canvas-panel .canvas-radio-group input { margin: 0 0 0 3px; }
+/* The year gallery (`gal_IndividualCost_Items_1`, `Height: =Parent.Height-Self.Y`, `:12538-12540`) fills its column
+   and scrolls on its own while the form on the left stays put; the body itself does not scroll (Screen `panelColumns`,
+   as the OPEX panel). Scrolling the whole body dragged the Description and radios out of view on a long year list
+   (user, 27 Nov 2026). A narrow window stacks the columns and scrolls the body instead. */
+.capex-canvas-panel .canvas-panel-body { overflow: hidden; display: flex; flex-direction: column; }
+@media (max-width: 899px) { .capex-canvas-panel .canvas-panel-body { overflow: auto; } }
 .canvas-contract-comment { margin-top: 20px; }
 .canvas-contract-comment textarea { resize: none; }
 /* Cost Settings DEVEX/CAPEX Add Cost panel (`con_AdminCost_RightPanel_Form_AddStandardCost`): every caption is a
